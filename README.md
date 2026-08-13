@@ -90,7 +90,13 @@ turn into stub notes that look like model output.
 | `3s3wyt6beb2x` — a bare **application inference profile id** (a team's cost-attribution handle) | expanded to `arn:aws:bedrock:{region}:{account}:application-inference-profile/{id}`; needs `AWS_ACCOUNT_ID` |
 | `arn:aws:bedrock:…` | verbatim |
 | `global.anthropic.claude-sonnet-4-6` — cross-region profile | verbatim |
-| `claude-opus-5` — foundation id | `anthropic.` prefix added, then remapped where required |
+| `claude-opus-5` — foundation id | routed through a cross-region profile: `global.anthropic.claude-opus-5` |
+
+**On Bedrock, `LLM_MODEL` has no default and must be set.** An account without provisioned
+throughput cannot invoke a foundation model on-demand at all — Bedrock returns *"Invocation of model
+ID … with on-demand throughput isn't supported. Retry with the ID or ARN of an inference profile"* —
+so falling back to a default would only turn a missing setting into a confusing API error one layer
+later. It fails immediately instead, listing what does work.
 
 `npm run check:model` prints `input → resolved` for each candidate and reports which your account
 actually accepts — worth running before blaming credentials for a 404.
@@ -138,7 +144,7 @@ real, all verified by forcing the failure rather than reading the code:
 
 ```bash
 npm run test:gate         # 23 checks — the citation gate blocks, logs, and downgrades status
-npm run test:harness      # 103 checks — budgets stop runs, retries bound, no run vanishes, audio inspected
+npm run test:harness      # 105 checks — budgets stop runs, retries bound, no run vanishes, audio inspected
 npm run test:readability  # 46 checks — the display layer never changes what was said
 npm run check:ship        # the pass/fail ship checklist
 npm run verify            # all of the above, in order

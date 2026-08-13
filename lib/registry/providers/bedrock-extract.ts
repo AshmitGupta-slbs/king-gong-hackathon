@@ -216,6 +216,29 @@ export function bedrockExtractor(): ExtractProvider {
         );
       }
 
+      /**
+       * Bedrock requires LLM_MODEL to be set explicitly — no default.
+       *
+       * The registry's default is `claude-opus-5`, which is right for the first-party API and cannot
+       * work here: an account without provisioned throughput cannot invoke a foundation model
+       * on-demand at all, and Bedrock says so with a 400 telling you to use an inference profile.
+       * Falling back to a value we know the platform rejects just converts a missing setting into a
+       * confusing API error one layer later, which is what happened on the first deploy.
+       */
+      if (!process.env.LLM_MODEL?.trim()) {
+        throw new Error(
+          'LLM_MODEL is not set, and Bedrock has no usable default.\n' +
+            'Set it to one of:\n' +
+            '  • your application-inference-profile id (e.g. 3s3wyt6beb2x) — also needs ' +
+            'AWS_ACCOUNT_ID so it can be expanded to an ARN;\n' +
+            '  • the full profile ARN (arn:aws:bedrock:…:application-inference-profile/…) — needs ' +
+            'nothing else;\n' +
+            '  • a cross-region profile such as global.anthropic.claude-sonnet-4-6.\n' +
+            'A bare foundation id like claude-opus-5 is NOT usable on an account without ' +
+            'provisioned throughput — Bedrock rejects on-demand invocation of it.',
+        );
+      }
+
       const client = bedrockClient(region);
 
       // Resolved by shape — a bare application-inference-profile id becomes a full ARN here.
@@ -264,6 +287,22 @@ export function bedrockExtractor(): ExtractProvider {
               `  • Try a region that serves this model (us-east-1 / us-west-2) and enable Anthropic ` +
               `model access there in the Bedrock console.\n` +
               `  • Or pick a model the region does serve: LLM_MODEL=claude-sonnet-5.\n` +
+              `Original: ${msg}`,
+          );
+        }
+        /**
+         * The account cannot invoke this model on-demand and needs an inference profile. Distinct
+         * from a 404 and from an auth failure: the id is real and the credentials are fine, but this
+         * *kind* of id is not invocable here. The API's own wording is the fix, so it is passed on
+         * with the concrete value to set rather than paraphrased.
+         */
+        if (/on-demand throughput isn.?t supported|inference profile that contains this model/i.test(msg)) {
+          throw new Error(
+            `Bedrock will not invoke "${model}" on-demand: this account has no provisioned ` +
+              `throughput for it, so a foundation id cannot be used directly.\n` +
+              `Set LLM_MODEL to an inference profile instead:\n` +
+              `  • your application-inference-profile id (plus AWS_ACCOUNT_ID), or its full ARN;\n` +
+              `  • or a cross-region profile — global.anthropic.claude-sonnet-4-6.\n` +
               `Original: ${msg}`,
           );
         }

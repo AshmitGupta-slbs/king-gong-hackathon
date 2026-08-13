@@ -182,7 +182,7 @@ and check the IAM principal can call bedrock:InvokeModel.</pre>
         <tr><td><code>3s3wyt6beb2x</code> — a bare <strong>application inference profile id</strong>, the handle a team is given for per-project cost attribution</td><td>Expanded to <code>arn:aws:bedrock:{region}:{account}:application-inference-profile/{id}</code>. Needs <code>AWS_ACCOUNT_ID</code></td></tr>
         <tr><td><code>arn:aws:bedrock:…</code></td><td>Verbatim</td></tr>
         <tr><td><code>global.</code> / <code>us.</code> / <code>eu.</code> / <code>apac.</code> — a cross-region profile</td><td>Verbatim</td></tr>
-        <tr><td><code>claude-opus-5</code> — a foundation id</td><td><code>anthropic.</code> prefix added, then remapped where a newer model demands a cross-region profile</td></tr>
+        <tr><td><code>claude-opus-5</code> — a foundation id</td><td>routed through a cross-region profile: <code>global.anthropic.claude-opus-5</code></td></tr>
       </tbody>
     </table>
   </div>
@@ -196,6 +196,14 @@ and check the IAM principal can call bedrock:InvokeModel.</pre>
   </div>
 
   <p><code>npm run check:model</code> now prints <code>input → resolved</code> per candidate before probing it, so a mangled id is visible rather than inferred, and separates "not offered in this region" from "offered but not enabled for you".</p>
+
+  <div class="card mustard">
+    <span class="card-eyebrow">THE NEXT DEPLOY FOUND THE NEXT LAYER</span>
+    <div class="card-title">A foundation id is not invocable at all on an account without provisioned throughput</div>
+    <p>With the shapes handled correctly, the deployed app returned a different 400 — and a far more useful one: <em>"Invocation of model ID anthropic.claude-opus-5 with on-demand throughput isn't supported. Retry your request with the ID or ARN of an inference profile that contains this model."</em></p>
+    <p>That is the same failure the reference's remap table exists for, on a model its table does not list. The table was enumerating a rule rather than expressing it, so the rule is now expressed: <strong>every</strong> <code>anthropic.claude-*</code> id is routed through <code>global.</code>, which <em>is</em> an inference profile. Non-Claude foundation ids still pass through untouched, so the reference's own behaviour is preserved.</p>
+    <p>And <strong>Bedrock now has no default model</strong>. The registry default (<code>claude-opus-5</code>) is right for the first-party API and unusable here, so falling back to it only converted a missing setting into a confusing API error one layer later — which is exactly what happened. A missing <code>LLM_MODEL</code> on Bedrock now fails immediately, listing the three things that do work.</p>
+  </div>
 
   <p>One further consequence of following the reference: it drives Bedrock with <strong>tool calling</strong> and never sends <code>output_config</code> or <code>thinking</code>, so structured outputs are unproven on this exact endpoint. Extraction therefore asks for structured output first and, <em>only</em> if those parameters are rejected, retries once as a single forced tool call whose input schema is the same Zod schema. Same contract, same gate, no JSON repair — and a 404, an auth failure or a refusal still propagates rather than being masked by a second attempt.</p>
 

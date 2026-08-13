@@ -29,14 +29,38 @@
  */
 
 /**
- * Foundation ids that must be remapped to a cross-region profile. Copied verbatim from the
- * reference; the upstream comment records why: "newer Anthropic models reject bare `anthropic.…`
- * with a 400 asking for a `global.…` / `us.…` profile".
+ * Explicit foundation-id remaps, copied from the reference. The upstream comment records why:
+ * "newer Anthropic models reject bare `anthropic.…` with a 400 asking for a `global.…` / `us.…`
+ * profile".
+ *
+ * Kept as an exact-match table so a future one-off mapping has somewhere to live, but note that
+ * `foundationId()` below now generalises the same rule to every `anthropic.claude-*` id — both of
+ * these entries are simply `global.` + the input.
  */
 const FOUNDATION_REMAP: Record<string, string> = {
   'anthropic.claude-opus-4-6-v1': 'global.anthropic.claude-opus-4-6-v1',
   'anthropic.claude-sonnet-4-6': 'global.anthropic.claude-sonnet-4-6',
 };
+
+/**
+ * A foundation id, routed through a cross-region inference profile.
+ *
+ * The generalisation beyond the reference's two-entry table was forced by a live 400:
+ *
+ *   Invocation of model ID anthropic.claude-opus-5 with on-demand throughput isn't supported.
+ *   Retry your request with the ID or ARN of an inference profile that contains this model.
+ *
+ * Which is the same failure the upstream comment describes, on a model its table does not list. A
+ * `global.` / `us.` prefixed id IS an inference profile, so the fix the API asks for is exactly the
+ * mapping the table was already performing — it was just enumerated rather than expressed. Anything
+ * that is not an `anthropic.claude-*` id is left alone, so the reference's
+ * "unknown foundation id passes through unchanged" behaviour is preserved.
+ */
+function foundationId(m: string): string {
+  const explicit = FOUNDATION_REMAP[m];
+  if (explicit) return explicit;
+  return /^anthropic\.claude-/i.test(m) ? `global.${m}` : m;
+}
 
 /**
  * Characters whose absence marks a value as a BARE application-inference-profile id: foundation ids
@@ -102,10 +126,7 @@ export function bedrockModelId(model: string, region = process.env.AWS_REGION ??
     // `. : /`, so it would be misread as a profile id. Upstream never hits this because its Bedrock
     // path is always given a profile id, but our own default is `claude-opus-5`, so it does. Treat a
     // leading `claude-` as a foundation id and let the prefix rule below apply.
-    if (/^claude-/i.test(m)) {
-      const prefixed = `anthropic.${m}`;
-      return FOUNDATION_REMAP[prefixed] ?? prefixed;
-    }
+    if (/^claude-/i.test(m)) return foundationId(`anthropic.${m}`);
     const cached = resolved.get(m);
     if (cached) return cached;
     if (!region) {
@@ -124,8 +145,8 @@ export function bedrockModelId(model: string, region = process.env.AWS_REGION ??
   // 2 — cross-region inference profile.
   if (/^(global|us|eu|apac)\./i.test(m)) return m;
 
-  // 3 — foundation id, remapped only where the reference remaps it.
-  return FOUNDATION_REMAP[m] ?? m;
+  // 3 — foundation id, routed through a cross-region profile.
+  return foundationId(m);
 }
 
 /** Test seam: the ARN cache is process-wide, so tests that vary region/account must clear it. */
