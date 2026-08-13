@@ -153,6 +153,34 @@ def wer(ref: list[str], hyp: list[str]) -> tuple[float, int, int, int]:
 
 # ---------------------------------------------------------------- audio
 
+def sniff_format(data: bytes) -> tuple[str, str] | None:
+    """Identify audio by CONTENT, not extension -> (true extension, mime). None if unrecognised.
+
+    Necessary because files lie. A real recording handed to this probe was named `recording.mp3`
+    and was in fact `RIFF … WAVE, Microsoft PCM, 16 bit, stereo 8000 Hz`. macOS trusts the
+    extension, picks the MP3 parser and fails with `Couldn't open input file ('dta?')`, and any
+    Content-Type derived from the name is a lie told to the server.
+    """
+    if len(data) < 12:
+        return None
+    if data[:4] == b"RIFF" and data[8:12] == b"WAVE":
+        return ".wav", "audio/wav"
+    if data[:4] == b"fLaC":
+        return ".flac", "audio/flac"
+    if data[:4] == b"OggS":
+        return ".ogg", "audio/ogg"
+    if data[:4] == b"FORM" and data[8:12] in (b"AIFF", b"AIFC"):
+        return ".aiff", "audio/aiff"
+    if data[4:8] == b"ftyp":
+        return ".m4a", "audio/mp4"
+    if data[:3] == b"ID3":
+        return ".mp3", "audio/mpeg"
+    # Bare MPEG frame sync: 11 set bits.
+    if data[0] == 0xFF and (data[1] & 0xE0) == 0xE0:
+        return ".mp3", "audio/mpeg"
+    return None
+
+
 def load_audio(path: Path) -> bytes:
     """Any audio file -> 16kHz mono PCM16, decoding with macOS `afconvert` when needed.
 
@@ -163,26 +191,41 @@ def load_audio(path: Path) -> bytes:
     Note macOS can DECODE mp3 but not encode it: `afconvert -f MPG3` fails with `fmt?` on every
     input and sample rate tried. So this converts one way only.
     """
-    if path.suffix.lower() == ".wav":
+    raw = path.read_bytes()
+    sniffed = sniff_format(raw)
+    if sniffed and sniffed[0] != path.suffix.lower():
+        print(f"{YELLOW}{path.name} is really a {sniffed[0]} file, not {path.suffix or '(none)'}"
+              f"{RESET} {DIM}— going by content{RESET}", file=sys.stderr)
+
+    true_ext = sniffed[0] if sniffed else path.suffix.lower()
+
+    if true_ext == ".wav":
         try:
             with wave.open(str(path), "rb") as w:
                 if (w.getframerate() == SAMPLE_RATE and w.getsampwidth() == BYTES_PER_SAMPLE
                         and w.getnchannels() == 1):
                     return read_wav(path)  # already exactly what we need
         except wave.Error:
-            pass  # not a PCM wav (could be mp3-in-wav); fall through to afconvert
+            pass  # compressed payload in a WAV container; let afconvert handle it
 
     if sys.platform != "darwin":
         sys.exit(f"{path.name} needs decoding to 16kHz mono PCM16 and `afconvert` is macOS-only.")
-    tmp = Path(tempfile.mkdtemp(prefix="hear-decode-")) / "decoded.wav"
+
+    work = Path(tempfile.mkdtemp(prefix="hear-decode-"))
+    # afconvert dispatches on the EXTENSION, so a mislabelled file has to be given its real one or
+    # it fails with 'dta?'. Copy rather than rename so the user's file is never touched.
+    src = work / f"input{true_ext}"
+    src.write_bytes(raw)
+    out = work / "decoded.wav"
     proc = subprocess.run(
-        ["afconvert", "-f", "WAVE", "-d", f"LEI16@{SAMPLE_RATE}", "-c", "1", str(path), str(tmp)],
+        ["afconvert", "-f", "WAVE", "-d", f"LEI16@{SAMPLE_RATE}", "-c", "1", str(src), str(out)],
         capture_output=True, text=True,
     )
-    if proc.returncode != 0 or not tmp.exists():
-        sys.exit(f"could not decode {path.name}:\n  {(proc.stderr or proc.stdout).strip()[:300]}")
-    print(f"{DIM}decoded {path.name} → 16kHz mono PCM16{RESET}", file=sys.stderr)
-    return read_wav(tmp)
+    if proc.returncode != 0 or not out.exists():
+        sys.exit(f"could not decode {path.name} (detected {true_ext or 'unknown'}):\n"
+                 f"  {(proc.stderr or proc.stdout).strip()[:300]}")
+    print(f"{DIM}decoded {path.name} ({true_ext}) → 16kHz mono PCM16{RESET}", file=sys.stderr)
+    return read_wav(out)
 
 
 def read_wav(path: Path) -> bytes:
@@ -586,7 +629,16 @@ async def run_live(pcm: bytes, args: argparse.Namespace) -> Collector:
             open_timeout=20,
         )
     except Exception as exc:  # noqa: BLE001 — surface the handshake failure verbatim
-        sys.exit(f"{RED}WebSocket handshake failed:{RESET} {type(exc).__name__}: {exc}")
+        detail = f"{type(exc).__name__}: {exc}"
+        # A rejected upgrade carries no JSON body, so the status code is all there is to go on.
+        if "429" in str(exc):
+            detail += (f"\n{DIM}  429 at the handshake is almost always the daily cap — the same "
+                       f"quota the REST\n  endpoints report as `daily_cap_exceeded`, which resets "
+                       f"at 00:00 UTC. Nothing to do\n  with your audio. Set PYAI_API_KEY to another "
+                       f"key, or wait for the reset.{RESET}")
+        elif "401" in str(exc) or "403" in str(exc):
+            detail += f"\n{DIM}  Key rejected — check PYAI_API_KEY or .pyai-key.json.{RESET}"
+        sys.exit(f"{RED}WebSocket handshake failed:{RESET} {detail}")
 
     t0 = time.monotonic()
     col = Collector(t0, args.raw, args.silence_floor)

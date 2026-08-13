@@ -74,6 +74,15 @@ def multipart(fields: dict[str, str], filename: str, data: bytes,
 
 def request(method: str, path: str, key: str, body: bytes | None = None,
             ctype: str | None = None) -> tuple[int, dict]:
+    """-> (status, parsed body). Status 0 means the connection died before a reply could be read.
+
+    That last case is not hypothetical and it is why this returns rather than raises: the API can
+    reject a big upload *before* reading all of it, then close the socket. urllib keeps writing into
+    the closed socket and dies with BrokenPipeError, discarding the real HTTP status. Measured on a
+    4.42 MB MP3 against an over-quota key — curl reported `429 daily_cap_exceeded` after sending
+    1,048,097 of 4,419,244 bytes; urllib produced only a broken pipe and a 40-line traceback.
+    Callers should preflight with a cheap GET so the actual reason is knowable.
+    """
     headers = {"Authorization": f"Bearer {key}"}
     if ctype:
         headers["Content-Type"] = ctype
@@ -87,6 +96,13 @@ def request(method: str, path: str, key: str, body: bytes | None = None,
             return e.code, json.loads(raw or b"{}")
         except ValueError:
             return e.code, {"raw": raw[:300].decode("utf-8", "replace")}
+    except (BrokenPipeError, ConnectionResetError) as e:
+        return 0, {"error": {"code": "connection_closed_during_upload", "message": str(e)}}
+    except urllib.error.URLError as e:
+        reason = getattr(e, "reason", e)
+        code = ("connection_closed_during_upload"
+                if isinstance(reason, (BrokenPipeError, ConnectionResetError)) else "network_error")
+        return 0, {"error": {"code": code, "message": str(reason)}}
 
 
 def main() -> None:

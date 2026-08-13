@@ -161,12 +161,16 @@ returned segment lands inside the gap.
 
 - **25s of digital silence (exact zeroes): CLEAN.** `speakers: 2`, exactly 2 segments, both real
   speech, nothing in the gap. `audio_seconds` still billed the full 30.8s.
-- **The RMS-0.035 room-tone version — the one that actually fooled the stream — is unresolved.**
-  Every attempt returned `504 upstream request timeout` or `500 Unexpected server error`, and a
-  digital-silence control run failed the same way minutes after succeeding, so this is upstream
-  instability rather than a noise-specific defect. `GET /v1/models` stayed 200 and streaming kept
-  working throughout, so the flakiness is specific to `POST /v1/transcription/jobs` **uploads**.
-  Re-run `--noise 0.035` when the endpoint is healthy; **do not treat batch as proven safe yet.**
+- **RMS-0.035 room tone — the level that actually fooled the stream: CLEAN.** Now resolved (it
+  was blocked for hours on upstream 500/504s on the uploads path, then on a capped key). 20s of
+  noise at the exact level that produced fabricated finals on the mic returns **2 segments, both
+  real speech, nothing in the gap**.
+
+  **So the fabrication defect is specific to the streaming path, and the batch path — the one this
+  app ingests with — does not have it.** That materially narrows the threat to the citation gate:
+  dead air on an uploaded recording cannot manufacture a quotable segment. An input-level gate on
+  batch ingest is therefore *not* needed, which is why none was built. Anything that later moves
+  ingest onto `hear:stream` reopens this and would need one.
 
 `audio_url` submission worked reliably while multipart upload was 500ing, which is a useful
 fallback to know about: `pyai-jobs.ts` uses multipart.
@@ -460,6 +464,51 @@ probes above) behind the registry's `tts` capability, with `pyai-speak` register
 in one config line if the service recovers. The generated WAVs are committed, so **nobody cloning
 the repo needs `say`, PyAI Speak, or any TTS at all** — the zero-setup demo is unaffected. What we
 lose is Speak minute-burn; Hear minutes, which are the far larger burn, are unaffected.
+
+## ⚠ Bedrock: `anthropic.claude-opus-5` is the CORRECT id — a 404 means region, not the string
+
+Not a PyAI finding, but it cost a wrong fix's worth of time on the deployed app, so it lives
+here with everything else that was measured rather than assumed.
+
+Symptom on Railway, from `GET /api/usage` → `runs[]` after AWS credentials were set:
+
+```
+"status": "failed",
+"error": "404 {\"type\":\"not_found_error\",
+          \"message\":\"The model 'anthropic.claude-opus-5' does not exist\"}"
+```
+
+The obvious reading — "the model id is wrong, add a region prefix" — is wrong, and acting on
+it would have broken a working call. Checked against the Claude API reference:
+
+- `lib/registry/providers/bedrock-extract.ts:73` constructs **`AnthropicBedrockMantle`**, the
+  Messages-API Bedrock endpoint. Mantle model ids take exactly an `anthropic.` prefix, which
+  is what `bedrockModelId()` (`:37-40`) already produces.
+- The **`us.` / `eu.` inference-profile prefixes** and ARN-versioned ids
+  (`anthropic.claude-3-5-sonnet-20241022-v2:0`) belong to the **legacy** bedrock-runtime
+  `InvokeModel`/`Converse` path — a different client and a different request shape. This app
+  does not use it. The header comment at `bedrock-extract.ts:8-11` is correct; leave it.
+
+So a 404 on a well-formed id means **the region cannot serve that model**, or Anthropic model
+access is not enabled there (`bedrock-extract.ts:23-25` already records the access
+requirement). Two levers, neither of them code:
+
+1. `AWS_REGION` → a region that serves Claude Opus 5 on Bedrock (`us-east-1` / `us-west-2`),
+   with model access enabled for that region in the Bedrock console. An India region such as
+   `ap-south-1` is the likely trap here.
+2. `OPENGONG_MODEL` → already read at `lib/registry/index.ts:65`, so
+   `OPENGONG_MODEL=claude-sonnet-5` picks a different Bedrock model in the same region with no
+   code change at all.
+
+**The code change worth making is the error surface, not the id:** catch the 404 and rethrow
+naming the model, the region, and both levers. As shipped, this arrives in the run log as a
+raw SDK 404 with no hint that region or model access is the variable — which is exactly why it
+read as an id bug.
+
+Related, and separately confirmed: `extracted_by` is **sticky per call**. `gate.ts:343` writes
+it into the persisted extraction JSON, so a call processed while the stub was active keeps
+reporting `stub-heuristic` regardless of later credential changes. Only re-processing
+overwrites it — re-upload rather than debugging the badge.
 
 ## Environment notes
 
