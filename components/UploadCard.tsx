@@ -13,9 +13,10 @@
  * with nearly every line on one speaker. "Auto" reads the file instead — and says what it found
  * before you submit, so the choice is informed rather than merely available.
  */
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useRef, useState } from 'react';
-import { Info, Loader2 } from 'lucide-react';
+import { Info, KeyRound, Loader2 } from 'lucide-react';
 import { resolveSeparation } from '@/lib/separation';
 import { readNdjson } from '@/lib/ndjson';
 import type { StageEvent } from '@/lib/harness/progress';
@@ -77,10 +78,12 @@ const MODES = [
   },
 ] as const;
 
-export function UploadCard() {
+export function UploadCard({ companies = [] }: { companies?: { id: string; name: string }[] }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** Actionable guidance for a failure the user can do something about (e.g. an exhausted key). */
+  const [remedy, setRemedy] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const [detected, setDetected] = useState<string | null>(null);
   const [mode, setMode] = useState<string>('auto');
@@ -145,6 +148,7 @@ export function UploadCard() {
 
     setBusy(true);
     setError(null);
+    setRemedy(null);
     setNote(null);
     setExpectedMs(null);
     setStartedAt(Date.now());
@@ -186,6 +190,8 @@ export function UploadCard() {
           `Run ended as "${data.run_status}"${data.error ? `: ${data.error}` : ''}. ` +
             `The run was still recorded.`,
         );
+        // `PyaiError.remedy` was written long ago and never rendered anywhere. This is its consumer.
+        setRemedy(data.remedy ?? null);
         setStages(null);
         return;
       }
@@ -215,6 +221,42 @@ export function UploadCard() {
   return (
     <form onSubmit={submit} className="flex flex-col gap-4">
       <Field label="Call title" name="title" placeholder="Acme Corp — discovery" />
+
+      {/*
+        Optional by design. Setup is where accounts are really managed; this picker exists so a
+        call can be attached to one without leaving the upload, and an unattached upload is a
+        perfectly valid outcome rather than a validation error.
+      */}
+      <label className="flex flex-col gap-1.5">
+        <FieldLabel>Account</FieldLabel>
+        <select name="companyId" defaultValue="" className={cx(inputStyles, 'appearance-none')}>
+          <option value="">No account — analyse without context</option>
+          {companies.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name}
+            </option>
+          ))}
+        </select>
+        <span className="text-caption leading-relaxed text-fg-dim">
+          {companies.length > 0 ? (
+            <>
+              What you noted about this account in{' '}
+              <Link href="/setup" className="text-brand hover:underline">
+                Setup
+              </Link>{' '}
+              is given to the model as background — never as evidence.
+            </>
+          ) : (
+            <>
+              No accounts yet.{' '}
+              <Link href="/setup" className="text-brand hover:underline">
+                Add one in Setup
+              </Link>{' '}
+              to ground the notes in what you already know.
+            </>
+          )}
+        </span>
+      </label>
 
       <label className="flex flex-col gap-1.5">
         <FieldLabel>Audio file</FieldLabel>
@@ -286,13 +328,22 @@ export function UploadCard() {
       </Button>
 
       {note && <p className="text-caption text-fg-dim">{note}</p>}
+      {remedy && (
+        <p className="flex items-start gap-2 rounded-control border border-warn-border bg-warn-wash px-2.5 py-2 text-caption leading-relaxed text-warn">
+          <KeyRound size={13} className="mt-0.5 shrink-0" aria-hidden />
+          <span>{remedy}</span>
+        </p>
+      )}
       {error && (
         <p className="rounded-control border border-bad-border bg-bad-wash px-2.5 py-2 text-caption leading-relaxed text-bad">
           {error}
         </p>
       )}
       <p className="text-caption leading-snug text-fg-dim">
-        A PyAI sandbox key mints itself on first run — no signup, no card.
+        {/* Only true when no key is configured — with PYAI_API_KEY set (the deployed case) nothing
+            is minted, and claiming otherwise sent people looking for a key that was never created. */}
+        With no key configured, a free PyAI sandbox key mints itself on first run — no signup, no
+        card. Set PYAI_API_KEY to use your own.
       </p>
     </form>
   );

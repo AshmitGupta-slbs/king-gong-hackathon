@@ -1,3 +1,4 @@
+import { z } from 'zod';
 /**
  * The CRM contract.
  *
@@ -43,13 +44,22 @@ export type Account = {
   location: string;
 };
 
-export type DealStage =
-  | 'Discovery'
-  | 'Evaluation'
-  | 'Negotiation'
-  | 'Closed Won'
-  | 'Closed Lost'
-  | 'Stalled';
+/**
+ * A zod enum rather than a bare union: `stage` now arrives from a user-submitted form, and it feeds
+ * a badge-tone lookup and (later) a kanban grouping, so an unrecognised value must fail at the
+ * boundary instead of rendering as an unstyled column. `DealStageSchema.options` is also the single
+ * list the /setup dropdown is built from, so the UI cannot drift from what the API accepts.
+ */
+export const DealStageSchema = z.enum([
+  'Discovery',
+  'Evaluation',
+  'Negotiation',
+  'Closed Won',
+  'Closed Lost',
+  'Stalled',
+]);
+
+export type DealStage = z.infer<typeof DealStageSchema>;
 
 export type Deal = {
   id: string;

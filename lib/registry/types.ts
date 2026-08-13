@@ -58,6 +58,14 @@ export type ExtractRequest = {
    * actual problem instead of repeating the same call (bounded aimed retry).
    */
   priorFailure?: string;
+  /**
+   * Pre-rendered account context the user entered for this company — background the model may use
+   * to interpret the call, never a source it may cite.
+   *
+   * A plain string on purpose: the CRM types must not cross into the registry, whose whole job is
+   * that nothing outside `providers/` sees a vendor shape. Rendering happens in lib/companies.ts.
+   */
+  accountContext?: string;
 };
 
 export type ExtractResult = {

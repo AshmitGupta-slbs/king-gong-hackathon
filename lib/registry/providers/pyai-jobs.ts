@@ -12,7 +12,7 @@
  *   • large results are offloaded to result_url instead of being inlined
  */
 import type { TranscriptSegment } from '@/lib/types';
-import { pyaiGet, pyaiPostMultipart, PyaiError } from '@/lib/pyai';
+import { PyaiError, pyaiGet, pyaiPostMultipart, pyaiPreflight } from '@/lib/pyai';
 import { audioUploadIdentity } from '@/lib/wav';
 import type { STTProvider, STTRequest, STTResult } from '../types';
 
@@ -42,6 +42,8 @@ type PyaiJob = {
 };
 
 const POLL_INTERVAL_MS = 1_200;
+/** The size at which the server starts rejecting mid-body instead of answering cleanly. */
+const PREFLIGHT_BYTES = 1_000_000;
 const POLL_TIMEOUT_MS = 180_000;
 
 /** seg_000, seg_001, ... Zero-padded so lexical order matches temporal order. */
@@ -142,6 +144,21 @@ export function pyaiJobsSTT(): STTProvider {
        * directly so there is nothing to transcode either way.
        */
       const id = audioUploadIdentity(req.audio, req.filename);
+
+      /**
+       * Ask before shouting.
+       *
+       * An over-quota key rejects a multipart upload MID-BODY at roughly 1MB and closes the socket,
+       * so the client sees a broken pipe rather than the 429 that actually happened — a 40-line
+       * network error where the answer was "you are out of quota" (measured, docs/api-truth.md).
+       * One cheap GET first turns that into the real message. Only for uploads big enough to hit
+       * the failure, because the preflight itself costs a request against the same daily cap.
+       */
+      if (req.audio.byteLength > PREFLIGHT_BYTES) {
+        const pre = await pyaiPreflight();
+        if (!pre.ok) throw pre.error;
+      }
+
       const submitted = await pyaiPostMultipart<PyaiJob>('/transcription/jobs', fields, {
         field: 'audio',
         filename: id.filename,

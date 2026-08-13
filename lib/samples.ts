@@ -11,6 +11,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { getCall, insertCall, replaceSegments, saveExtraction } from './db';
+import { seedCompanies } from './crm/db';
 import type { ExtractionResult, TranscriptSegment } from './types';
 
 const DIR = join(process.cwd(), 'samples');
@@ -41,6 +42,10 @@ function readJson<T>(name: string): T | null {
 
 /** Idempotent: safe to call on every boot. Returns the ids that are now present. */
 export function loadSamples(force = false): { loaded: string[]; skipped: string[]; missingExtraction: string[] } {
+  // The account records these calls belong to. Idempotent and skip-if-present, so a user's
+  // edits in /setup are never overwritten by a reseed.
+  seedCompanies();
+
   const loaded: string[] = [];
   const skipped: string[] = [];
   const missingExtraction: string[] = [];

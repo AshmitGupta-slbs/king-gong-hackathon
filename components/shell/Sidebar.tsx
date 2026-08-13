@@ -12,7 +12,7 @@
  */
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { AudioLines, Upload } from 'lucide-react';
+import { AudioLines, Building2, Upload } from 'lucide-react';
 import { cx } from '@/components/ui/cx';
 
 const NAV = [
@@ -23,6 +23,7 @@ const NAV = [
     icon: Upload,
     match: () => false,
   },
+  { href: '/setup', label: 'Setup', icon: Building2, match: (p: string) => p.startsWith('/setup') },
 ] as const;
 
 export function Sidebar() {

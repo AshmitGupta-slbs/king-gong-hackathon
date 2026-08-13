@@ -15,6 +15,11 @@ import { UsageStats } from '@/components/UsageBar';
 export function TopBar() {
   const pathname = usePathname();
   const onCall = pathname.startsWith('/calls/');
+  /**
+   * The leaf label used to be the literal string "Calls" for anything that was not a call page, so
+   * a new route would silently claim to be the call list.
+   */
+  const section = pathname.startsWith('/setup') ? 'Setup' : 'Calls';
 
   return (
     <header className="sticky top-0 z-30 flex h-[var(--header-h)] shrink-0 items-center gap-4 border-b border-border-subtle bg-surface/95 px-4 backdrop-blur lg:px-6">
@@ -31,7 +36,7 @@ export function TopBar() {
             <span className="truncate px-1 font-medium text-fg">Call detail</span>
           </>
         ) : (
-          <span className="px-1 font-medium text-fg">Calls</span>
+          <span className="px-1 font-medium text-fg">{section}</span>
         )}
       </nav>
 
