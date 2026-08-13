@@ -79,7 +79,12 @@
     <p>The job is accepted, transcription succeeds, and only diarization fails: <code>{"status":"failed","error":"diarize: HTTP 500"}</code>. Ruled out by direct experiment — MP3 vs WAV, <code>numerals</code>, multipart field order, our own encoder. The identical bytes succeed minutes later. <strong>It is time, not payload.</strong></p>
     <p>Two things follow. First, do not debug your audio when you see this, and do not A/B test it sequentially — the windows are long enough that whichever variant lands in a good window looks like the fix, which produced two false conclusions before interleaving settled it. Second, <code>channel:true</code> never touches that stage, so <strong>stereo upload is a working path while mono is failing</strong>.</p>
     <p><code>lib/harness/retry.ts</code> caps at 2 attempts and cannot outlast a multi-minute window, which is deliberate — the budget governor exists to stop runs, not to hammer a broken upstream. The run ends <code>failed</code> with the upstream error preserved. The mitigation that actually matters is that the five committed sample calls need no API call at all.</p>
+    <p><strong>The asymmetry is confirmed on real audio, not just the samples.</strong> A genuine two-party dialer recording — stereo, 8 kHz — auto-selected <code>channel</code> mode and completed first try: 43 segments, two speakers, talk time 59.5 / 40.5. So while the mono path is unreliable, the stereo path is working today, and it is the mode the five samples use.</p>
   </div>
+
+  <p>One quality note if you demo an overlapping-speech call: <code>channel</code> mode transcribes each track independently, so simultaneous speech interleaves into short fragments — <em>"i don't" / "running" / "wanna give"</em>. That is <strong>more</strong> faithful than a diarizer guessing turn boundaries, not less, but it reads choppy, and it looks that way by design rather than because something broke.</p>
+
+  <p><strong>And read the container from the bytes, not the filename.</strong> That real recording was named <code>recording.mp3</code> and was actually RIFF/WAVE. Anything that picks a parser or declares a <code>Content-Type</code> from the extension is wrong on exactly the files people really have — <code>lib/wav.ts</code> sniffs the magic bytes and corrects the filename to match, because this codebase previously declared <code>audio/wav</code> for every upload unconditionally.</p>
 
   <h2 id="streaming">Streaming: there are two protocols, and the default is the legacy one</h2>
 

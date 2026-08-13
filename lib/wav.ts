@@ -8,6 +8,63 @@
 
 export type Pcm = { pcm16: Uint8Array; sampleRate: number; channels: number };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// FORMAT SNIFFING — trust the bytes, never the filename
+//
+// A real recording exported from a dialer arrived named `recording.mp3` and was actually
+// RIFF/WAVE, 16-bit stereo 8 kHz. Extensions are metadata a human or an exporter guessed at; the
+// container is a fact sitting in the first few bytes. Anything that picks a parser or declares a
+// Content-Type from the extension is wrong on exactly the files people really have.
+//
+// We upload the bytes untranscoded either way — PyAI's jobs endpoint accepts compressed audio
+// directly — so this only decides what we *claim* the payload is. Claiming `audio/wav` for an MP3
+// (which is what this code used to do for every upload, unconditionally) is a lie that happens to
+// work only while the server sniffs for itself.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const ascii = (b: Uint8Array, o: number, n: number) =>
+  String.fromCharCode(...Array.from(b.slice(o, o + n)));
+
+/** Container detected from magic bytes, or null when we genuinely cannot tell. */
+export function sniffAudioFormat(bytes: Uint8Array): { mime: string; ext: string } | null {
+  if (bytes.length < 12) return null;
+
+  if (ascii(bytes, 0, 4) === 'RIFF' && ascii(bytes, 8, 4) === 'WAVE') {
+    return { mime: 'audio/wav', ext: 'wav' };
+  }
+  // ID3-tagged MP3, or a bare MPEG audio frame (0xFF Ex/Fx).
+  if (ascii(bytes, 0, 3) === 'ID3') return { mime: 'audio/mpeg', ext: 'mp3' };
+  if (bytes[0] === 0xff && (bytes[1] & 0xe0) === 0xe0) return { mime: 'audio/mpeg', ext: 'mp3' };
+
+  // M4A / MP4 audio. The ftyp brand varies (M4A_, mp42, isom); all are served as MP4 audio.
+  if (ascii(bytes, 4, 4) === 'ftyp') return { mime: 'audio/mp4', ext: 'm4a' };
+  if (ascii(bytes, 0, 4) === 'OggS') return { mime: 'audio/ogg', ext: 'ogg' };
+  if (ascii(bytes, 0, 4) === 'fLaC') return { mime: 'audio/flac', ext: 'flac' };
+  if (ascii(bytes, 0, 4) === 'FORM' && ascii(bytes, 8, 4) === 'AIFF') {
+    return { mime: 'audio/aiff', ext: 'aiff' };
+  }
+  return null;
+}
+
+/**
+ * What to send for these bytes: the sniffed type, and a filename whose extension agrees with it.
+ *
+ * When sniffing fails we keep the caller's filename and fall back to `audio/wav` — the previous
+ * unconditional behaviour — rather than blocking an upload over a container we don't recognise.
+ */
+export function audioUploadIdentity(
+  bytes: Uint8Array,
+  filename: string,
+): { mime: string; filename: string; corrected: boolean } {
+  const sniffed = sniffAudioFormat(bytes);
+  if (!sniffed) return { mime: 'audio/wav', filename, corrected: false };
+
+  const stem = filename.replace(/\.[^./\\]+$/, '') || 'upload';
+  const claimed = /\.([^./\\]+)$/.exec(filename)?.[1]?.toLowerCase();
+  const corrected = claimed !== sniffed.ext;
+  return { mime: sniffed.mime, filename: `${stem}.${sniffed.ext}`, corrected };
+}
+
 /** Read a RIFF/WAVE file, walking the chunk list rather than assuming a 44-byte header. */
 export function parseWav(bytes: Uint8Array): Pcm {
   const v = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
