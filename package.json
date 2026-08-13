@@ -22,6 +22,7 @@
     "check:ship": "tsx scripts/check-ship.ts",
     "check:model": "tsx scripts/check-model.ts",
     "check:key": "tsx scripts/check-key.ts",
+    "check:store": "tsx scripts/check-store.ts",
     "verify": "tsx scripts/test-gate.ts && tsx scripts/test-harness.ts && tsx scripts/test-readability.ts && tsx scripts/check-ship.ts",
     "test:readability": "tsx scripts/test-readability.ts",
     "reindex:samples": "tsx scripts/reindex-samples.ts"
@@ -33,6 +34,7 @@
     "@aws-sdk/credential-providers": "^3.1109.0",
     "@smithy/signature-v4": "^3.1.2",
     "lucide-react": "^1.31.0",
+    "mongodb": "^7.5.0",
     "next": "16.3.0",
     "react": "19.2.8",
     "react-dom": "19.2.8",

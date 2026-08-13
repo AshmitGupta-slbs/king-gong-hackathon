@@ -14,12 +14,16 @@ import { Badge } from '@/components/ui/Badge';
 
 export const dynamic = 'force-dynamic';
 
-export default function SetupPage() {
+export default async function SetupPage() {
   // Seeds the demo accounts on a cold database, exactly as the home page does for calls.
-  loadSamples();
-  const companies = listCompanies();
+  await loadSamples();
+  const companies = await listCompanies();
   // Keyed by company so the client component can render each account's ledger without a fetch.
-  const learnings = Object.fromEntries(companies.map((c) => [c.id, learningsForCompany(c.id, 20)]));
+  const learnings = Object.fromEntries(
+    await Promise.all(
+      companies.map(async (c) => [c.id, await learningsForCompany(c.id, 20)] as const),
+    ),
+  );
   const crm = describeCrm();
 
   return (

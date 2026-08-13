@@ -175,6 +175,12 @@ const SECRET_PATTERNS: [RegExp, string][] = [
   [/pyai_live_[A-Za-z0-9._-]{12,}/, 'a live PyAI key'],
   [/sk-ant-[A-Za-z0-9._-]{12,}/, 'an Anthropic API key'],
   [/\bAKIA[0-9A-Z]{16}\b/, 'an AWS access key id'],
+  // Added with the Mongo backend: a connection string carries its own username and password, so
+  // committing one leaks a whole database rather than just a key. It matches only URIs that
+  // actually carry credentials, so `mongodb+srv://cluster.example.net` in prose is fine — but note
+  // .env.example is the ONLY file skipped below, so a credentialed example anywhere else (README,
+  // DEPLOY.md) will correctly fail this check.
+  [/mongodb(\+srv)?:\/\/[^\s:@/]+:[^\s:@/]+@/, 'a MongoDB connection string with credentials'],
 ];
 const SKIP_DIRS = new Set(['node_modules', '.next', '.git', 'data', 'public']);
 

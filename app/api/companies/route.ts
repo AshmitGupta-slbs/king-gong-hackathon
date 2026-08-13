@@ -36,7 +36,7 @@ const CompanyInput = z.object({
 const orNull = (v: string | undefined) => (v && v.length > 0 ? v : null);
 
 export async function GET() {
-  return NextResponse.json({ companies: listCompanies() });
+  return NextResponse.json({ companies: await listCompanies() });
 }
 
 export async function POST(req: Request) {
@@ -53,14 +53,14 @@ export async function POST(req: Request) {
      */
     const promoteId = Number(form.get('promoteLearning') ?? '');
     if (Number.isInteger(promoteId) && promoteId > 0) {
-      const learning = getLearning(promoteId);
+      const learning = await getLearning(promoteId);
       if (!learning) return NextResponse.json({ error: 'No such learning.' }, { status: 404 });
-      const company = getCompany(learning.company_id);
+      const company = await getCompany(learning.company_id);
       if (!company) return NextResponse.json({ error: 'No such company.' }, { status: 404 });
 
       const merged = [company.notes?.trim(), learning.text.trim()].filter(Boolean).join('\n');
-      const updated = updateCompany(company.id, { notes: merged });
-      markLearningPromoted(learning.id);
+      const updated = await updateCompany(company.id, { notes: merged });
+      await markLearningPromoted(learning.id);
       return NextResponse.json({ company: updated });
     }
     const parsed = CompanyInput.safeParse({
@@ -82,8 +82,8 @@ export async function POST(req: Request) {
     const input = parsed.data;
 
     // An id that already exists is an edit; an id that does not is a client-chosen key.
-    if (input.id && getCompany(input.id)) {
-      const updated = updateCompany(input.id, {
+    if (input.id && (await getCompany(input.id))) {
+      const updated = await updateCompany(input.id, {
         name: input.name,
         industry: orNull(input.industry),
         size_band: orNull(input.size_band),
@@ -105,7 +105,7 @@ export async function POST(req: Request) {
       created_at: Date.now(),
       detail: null,
     };
-    upsertCompany(company);
+    await upsertCompany(company);
     return NextResponse.json({ company }, { status: 201 });
   } catch (err) {
     return NextResponse.json(

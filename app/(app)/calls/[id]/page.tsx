@@ -11,15 +11,15 @@ export default async function CallPage({ params }: PageProps<'/calls/[id]'>) {
   const { id } = await params;
 
   // Deep-linking straight to a sample call has to work on a cold database.
-  if (!getCall(id)) loadSamples();
+  if (!(await getCall(id))) await loadSamples();
 
-  const call = getCall(id);
+  const call = await getCall(id);
   if (!call) notFound();
 
   const bundle: CallBundle = {
     call,
-    segments: getSegments(id),
-    extraction: getExtraction(id),
+    segments: await getSegments(id),
+    extraction: await getExtraction(id),
   };
 
   /**
@@ -27,7 +27,7 @@ export default async function CallPage({ params }: PageProps<'/calls/[id]'>) {
    * only exists server-side, and a real adapter would be making authenticated calls here. It is
    * null whenever the call has no CRM record, and every consumer degrades rather than crashing.
    */
-  const crm = getCrm().forCall(id);
+  const crm = await getCrm().forCall(id);
 
   return <CallWorkspace bundle={bundle} crm={crm} />;
 }

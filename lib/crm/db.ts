@@ -30,17 +30,17 @@ const companyIdFor = (callId: string) => `co-${callId}`;
  * anchored in something actually said on the call, and dates are fixed strings rather than anything
  * derived from `Date.now()`, so the demo reads identically tomorrow.
  */
-export function seedCompanies(): { seeded: string[]; skipped: string[] } {
+export async function seedCompanies(): Promise<{ seeded: string[]; skipped: string[] }> {
   const seeded: string[] = [];
   const skipped: string[] = [];
 
   for (const callId of SEEDED_CALL_IDS) {
     const id = companyIdFor(callId);
-    if (getCompany(id)) {
+    if (await getCompany(id)) {
       skipped.push(id);
       continue;
     }
-    const ctx = fixtureCrm.forCall(callId);
+    const ctx = await fixtureCrm.forCall(callId);
     if (!ctx) continue;
 
     const company: Company = {
@@ -71,7 +71,7 @@ export function seedCompanies(): { seeded: string[]; skipped: string[] } {
         next_meeting: ctx.next_meeting,
       },
     };
-    upsertCompany(company);
+    await upsertCompany(company);
     seeded.push(id);
   }
   return { seeded, skipped };
@@ -98,10 +98,10 @@ const seedNotes: Record<string, string> = {
 
 export const dbCrm: CrmProvider = {
   name: 'db-crm',
-  forCall(callId: string): CallContext | null {
+  async forCall(callId: string): Promise<CallContext | null> {
     // An explicit link wins; otherwise fall back to the seeded company for a sample call, so
     // deep-linking a bundled call still shows its account without a link row existing.
-    const linked = companyForCall(callId) ?? getCompany(companyIdFor(callId));
+    const linked = (await companyForCall(callId)) ?? (await getCompany(companyIdFor(callId)));
     return linked ? companyToCallContext(linked) : null;
   },
 };

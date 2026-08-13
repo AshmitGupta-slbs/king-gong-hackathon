@@ -7,13 +7,13 @@ export const runtime = 'nodejs';
 
 export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
-  const call = getCall(id);
+  const call = await getCall(id);
   if (!call) return NextResponse.json({ error: 'No such call' }, { status: 404 });
 
   const bundle: CallBundle = {
     call,
-    segments: getSegments(id),
-    extraction: getExtraction(id),
+    segments: await getSegments(id),
+    extraction: await getExtraction(id),
   };
   return NextResponse.json(bundle);
 }

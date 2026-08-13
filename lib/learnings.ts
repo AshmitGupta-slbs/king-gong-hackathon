@@ -21,72 +21,18 @@
  *    that call's rows and nothing else, so the account's history stays honest about when it learned
  *    what.
  */
-import { db } from './db';
+import { store } from './db';
 import type { ExtractionResult } from './types';
+import type { Learning, LearningKind } from './learning-types';
 
-export type LearningKind = 'objection' | 'next_step' | 'intent' | 'competitor';
+export type { Learning, LearningKind };
 
-export type Learning = {
-  id: number;
-  company_id: string;
-  call_id: string;
-  created_at: number;
-  kind: LearningKind;
-  text: string;
-  /** The proof, inherited from the gated claim. Null only for claims the gate left uncited. */
-  segment_id: string | null;
-  start_ms: number | null;
-  speaker: string | null;
-  quote: string | null;
-  support: number | null;
-  verdict: string | null;
-  /** Which extractor produced the claim — a stub-derived learning must be distinguishable. */
-  extracted_by: string | null;
-  /** Has a human copied this into the account's own notes? */
-  promoted: boolean;
-};
+export const learningsForCompany = (companyId: string, limit = 100) =>
+  store().learningsForCompany(companyId, limit);
 
-/** `node:sqlite` returns null-prototype rows that RSCs refuse to serialize. Rebuild explicitly. */
-function toLearning(r: Record<string, unknown>): Learning {
-  return {
-    id: r.id as number,
-    company_id: r.company_id as string,
-    call_id: r.call_id as string,
-    created_at: r.created_at as number,
-    kind: r.kind as LearningKind,
-    text: r.text as string,
-    segment_id: (r.segment_id as string | null) ?? null,
-    start_ms: (r.start_ms as number | null) ?? null,
-    speaker: (r.speaker as string | null) ?? null,
-    quote: (r.quote as string | null) ?? null,
-    support: (r.support as number | null) ?? null,
-    verdict: (r.verdict as string | null) ?? null,
-    extracted_by: (r.extracted_by as string | null) ?? null,
-    promoted: Boolean(r.promoted),
-  };
-}
+export const markLearningPromoted = (id: number | string) => store().markLearningPromoted(id);
 
-export function learningsForCompany(companyId: string, limit = 100): Learning[] {
-  return (
-    db()
-      .prepare(
-        `SELECT * FROM company_learnings WHERE company_id = ?
-         ORDER BY created_at DESC, id DESC LIMIT ?`,
-      )
-      .all(companyId, limit) as Record<string, unknown>[]
-  ).map(toLearning);
-}
-
-export function markLearningPromoted(id: number): void {
-  db().prepare(`UPDATE company_learnings SET promoted = 1 WHERE id = ?`).run(id);
-}
-
-export function getLearning(id: number): Learning | null {
-  const r = db().prepare(`SELECT * FROM company_learnings WHERE id = ?`).get(id) as
-    | Record<string, unknown>
-    | undefined;
-  return r ? toLearning(r) : null;
-}
+export const getLearning = (id: number | string) => store().getLearning(id);
 
 /**
  * Record what one call established about an account.
@@ -94,21 +40,13 @@ export function getLearning(id: number): Learning | null {
  * Re-analysing the same call replaces only that call's rows — otherwise a second run would double
  * every learning and the account would look like it heard the same objection twice.
  */
-export function recordLearnings(
+export async function recordLearnings(
   companyId: string,
   callId: string,
   ex: ExtractionResult,
-): number {
-  const d = db();
-  d.prepare(`DELETE FROM company_learnings WHERE call_id = ?`).run(callId);
-
-  const ins = d.prepare(
-    `INSERT INTO company_learnings
-       (company_id,call_id,created_at,kind,text,segment_id,start_ms,speaker,quote,support,verdict,extracted_by)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
-  );
+): Promise<number> {
   const now = Date.now();
-  let n = 0;
+  const rows: Omit<Learning, 'id'>[] = [];
 
   const add = (
     kind: LearningKind,
@@ -117,21 +55,21 @@ export function recordLearnings(
     support: number | null,
     verdict: string | null,
   ) => {
-    ins.run(
-      companyId,
-      callId,
-      now,
+    rows.push({
+      company_id: companyId,
+      call_id: callId,
+      created_at: now,
       kind,
       text,
-      ev?.segment_id ?? null,
-      ev?.start_ms ?? null,
-      ev?.speaker ?? null,
-      ev?.text ?? null,
+      segment_id: ev?.segment_id ?? null,
+      start_ms: ev?.start_ms ?? null,
+      speaker: ev?.speaker ?? null,
+      quote: ev?.text ?? null,
       support,
       verdict,
-      ex.extracted_by ?? null,
-    );
-    n++;
+      extracted_by: ex.extracted_by ?? null,
+      promoted: false,
+    });
   };
 
   /**
@@ -146,11 +84,12 @@ export function recordLearnings(
   add('intent', `Read on this call: ${ex.intent.label}`, ex.intent.evidence[0], ex.intent.support, ex.intent.verdict);
 
   for (const m of ex.key_moments) {
-    if (m.type === 'competitor_mention') {
-      add('competitor', m.note, m.evidence, null, 'verified');
-    }
+    if (m.type === 'competitor_mention') add('competitor', m.note, m.evidence, null, 'verified');
   }
-  return n;
+
+  // Replacing by call id is what makes a re-analysis idempotent: only THIS call's rows are
+  // rewritten, so the account cannot end up looking like it heard the same objection twice.
+  return store().replaceLearningsForCall(callId, rows);
 }
 
 // ── where the account currently stands ───────────────────────────────────────
@@ -172,8 +111,8 @@ export type AccountState = {
  * A stored summary would be a fourth thing to keep in sync with the ledger and would go stale the
  * moment a call was re-analysed. The ledger is the source of truth; this is a view of it.
  */
-export function accountState(companyId: string): AccountState {
-  const all = learningsForCompany(companyId, 500);
+export async function accountState(companyId: string): Promise<AccountState> {
+  const all = await learningsForCompany(companyId, 500);
   const verified = all.filter((l) => l.verdict !== 'unverified');
 
   const objections = verified.filter((l) => l.kind === 'objection');
@@ -205,8 +144,8 @@ export function accountState(companyId: string): AccountState {
  * call. Only verified learnings are included — shipping an unconfirmed claim back in as background
  * would launder it into a fact.
  */
-export function renderLearnedContext(companyId: string): string | null {
-  const s = accountState(companyId);
+export async function renderLearnedContext(companyId: string): Promise<string | null> {
+  const s = await accountState(companyId);
   if (s.callsAnalysed === 0) return null;
 
   const lines: string[] = [];

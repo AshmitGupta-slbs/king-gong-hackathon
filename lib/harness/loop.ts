@@ -102,7 +102,7 @@ export async function processCall(input: ProcessInput): Promise<ProcessOutcome> 
     const on = safeStage(input.onStage);
 
     // FAILURE INVARIANT: the record exists before any work does, so a crash is still a record.
-    openRun(runId, callId, 'ingest+extract+gate');
+    await openRun(runId, callId, 'ingest+extract+gate');
     // The first moment the run is addressable: the row now exists, so a client can be told about it.
     on({ t: 'run', callId, runId });
 
@@ -143,7 +143,7 @@ export async function processCall(input: ProcessInput): Promise<ProcessOutcome> 
       sttAttempts = sttRun.attempts;
       segments = sttRun.value.segments;
 
-      insertCall({
+      await insertCall({
         id: callId,
         title: input.title,
         audio_path: input.audioPath,
@@ -152,9 +152,9 @@ export async function processCall(input: ProcessInput): Promise<ProcessOutcome> 
         created_at: Date.now(),
         share_id: callId,
       });
-      replaceSegments(callId, segments);
-      recordUsage(callId, stt.name, sttRun.value.usage);
-      if (input.companyId) linkCallToCompany(callId, input.companyId);
+      await replaceSegments(callId, segments);
+      await recordUsage(callId, stt.name, sttRun.value.usage);
+      if (input.companyId) await linkCallToCompany(callId, input.companyId);
       /**
        * Emitted AFTER insertCall, deliberately: from this instant `/calls/<id>` is a real page, so
        * a client that later sees a failure can still offer to open the partial call rather than
@@ -174,13 +174,15 @@ export async function processCall(input: ProcessInput): Promise<ProcessOutcome> 
        * Rendered ONCE and reused across retries, so every attempt sees identical context and the
        * snapshot we persist is exactly what the model was given.
        */
-      const company = input.companyId ? getCompany(input.companyId) : companyForCall(callId);
+      const company = input.companyId
+        ? await getCompany(input.companyId)
+        : await companyForCall(callId);
       const accountContext = renderAccountContext(company) ?? undefined;
       /**
        * Read BEFORE this call's own learnings are written, so a call is never grounded in
        * conclusions drawn from itself.
        */
-      const learnedContext = renderLearnedForCompany(company) ?? undefined;
+      const learnedContext = (await renderLearnedForCompany(company)) ?? undefined;
       const transcriptChars = segments.reduce((n, s) => n + s.text.length + 24, 0);
 
       const tExtract = Date.now();
@@ -198,7 +200,7 @@ export async function processCall(input: ProcessInput): Promise<ProcessOutcome> 
             learnedContext,
           });
           budget.record(usage);
-          recordUsage(callId, extractor.name, usage);
+          await recordUsage(callId, extractor.name, usage);
           /**
            * The gate is synchronous and finishes in single-digit milliseconds, so it is reported as
            * an instant result rather than something to wait on. What matters is WHAT it rejected.
@@ -259,17 +261,17 @@ export async function processCall(input: ProcessInput): Promise<ProcessOutcome> 
         companyName: company?.name,
         transcriptSubject: subjectFromTranscript(segments),
       });
-      renameCall(callId, title);
+      await renameCall(callId, title);
 
       /**
        * What this call established about the account. Derived only from claims that already passed
        * the citation gate, so each one keeps the evidence it was gated on and stays clickable back
        * to the line that proves it. Written to its own ledger, never into the user's notes.
        */
-      if (company) recordLearnings(company.id, callId, extraction);
+      if (company) await recordLearnings(company.id, callId, extraction);
 
-      saveExtraction(callId, extraction);
-      recordRejections(callId, runId, extraction.rejections);
+      await saveExtraction(callId, extraction);
+      await recordRejections(callId, runId, extraction.rejections);
       status = extraction.run_status;
     } catch (err) {
       if (err instanceof DeadlineError) {
@@ -290,8 +292,15 @@ export async function processCall(input: ProcessInput): Promise<ProcessOutcome> 
         }
       }
     } finally {
-      // Exactly one terminal status, always written.
-      closeRun(runId, status, {
+      /**
+       * Exactly one terminal status, always written — and now awaited.
+       *
+       * A `finally` that starts an async write without awaiting it would let the function return
+       * while the row was still 'running', which is precisely the state the failure invariant
+       * exists to prevent. Awaiting here is safe: an await in `finally` does not swallow the
+       * in-flight exception, it only delays it.
+       */
+      await closeRun(runId, status, {
         attempts: sttAttempts + extractAttempts,
         error,
         notes: JSON.stringify(budget.snapshot()),

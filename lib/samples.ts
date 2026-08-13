@@ -41,24 +41,26 @@ function readJson<T>(name: string): T | null {
 }
 
 /** Idempotent: safe to call on every boot. Returns the ids that are now present. */
-export function loadSamples(force = false): { loaded: string[]; skipped: string[]; missingExtraction: string[] } {
+export async function loadSamples(
+  force = false,
+): Promise<{ loaded: string[]; skipped: string[]; missingExtraction: string[] }> {
   // The account records these calls belong to. Idempotent and skip-if-present, so a user's
   // edits in /setup are never overwritten by a reseed.
-  seedCompanies();
+  await seedCompanies();
 
   const loaded: string[] = [];
   const skipped: string[] = [];
   const missingExtraction: string[] = [];
 
   for (const s of sampleManifest()) {
-    if (!force && getCall(s.id)) {
+    if (!force && (await getCall(s.id))) {
       skipped.push(s.id);
       continue;
     }
     const stt = readJson<{ segments: TranscriptSegment[]; audio_seconds: number }>(`${s.id}.stt.json`);
     if (!stt) continue;
 
-    insertCall({
+    await insertCall({
       id: s.id,
       title: s.title,
       audio_path: s.audio_path,
@@ -67,10 +69,10 @@ export function loadSamples(force = false): { loaded: string[]; skipped: string[
       created_at: Date.now(),
       share_id: s.id,
     });
-    replaceSegments(s.id, stt.segments);
+    await replaceSegments(s.id, stt.segments);
 
     const ex = readJson<ExtractionResult>(`${s.id}.result.json`);
-    if (ex) saveExtraction(s.id, ex);
+    if (ex) await saveExtraction(s.id, ex);
     else missingExtraction.push(s.id);
 
     loaded.push(s.id);

@@ -24,7 +24,7 @@ export async function POST(req: Request) {
   const { callId } = (await req.json().catch(() => ({}))) as { callId?: string };
   if (!callId) return NextResponse.json({ error: 'callId required' }, { status: 400 });
 
-  const segments = getSegments(callId);
+  const segments = await getSegments(callId);
   if (segments.length === 0) {
     return NextResponse.json({ error: 'No such call, or it has no transcript' }, { status: 404 });
   }
@@ -72,7 +72,7 @@ export async function POST(req: Request) {
   const { result, rejections } = runCitationGate(draft, segments, 'injected-demo');
 
   // Same table the production path writes to, so the "claims blocked" counter moves for real.
-  recordRejections(callId, `demo-${Date.now()}`, rejections);
+  await recordRejections(callId, `demo-${Date.now()}`, rejections);
 
   return NextResponse.json({
     note:

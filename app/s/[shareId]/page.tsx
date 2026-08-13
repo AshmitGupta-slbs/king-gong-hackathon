@@ -24,15 +24,15 @@ export const dynamic = 'force-dynamic';
 export default async function SharePage({ params }: PageProps<'/s/[shareId]'>) {
   const { shareId } = await params;
 
-  if (!getCallByShareId(shareId)) loadSamples();
+  if (!(await getCallByShareId(shareId))) await loadSamples();
 
-  const call = getCallByShareId(shareId);
+  const call = await getCallByShareId(shareId);
   if (!call) notFound();
 
   const bundle: CallBundle = {
     call,
-    segments: getSegments(call.id),
-    extraction: getExtraction(call.id),
+    segments: await getSegments(call.id),
+    extraction: await getExtraction(call.id),
   };
 
   /**
@@ -43,7 +43,7 @@ export default async function SharePage({ params }: PageProps<'/s/[shareId]'>) {
    * rest in the UI: everything handed to a client component is serialized into the page, so the
    * deal value would sit in the HTML of a forwarded link even if no component ever drew it.
    */
-  const participants = getCrm().forCall(call.id)?.participants ?? [];
+  const participants = (await getCrm().forCall(call.id))?.participants ?? [];
 
   return (
     <div className="flex h-dvh flex-col overflow-hidden">

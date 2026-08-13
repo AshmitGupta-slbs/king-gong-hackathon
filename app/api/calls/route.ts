@@ -48,7 +48,7 @@ class BadUpload extends Error {
 const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 export async function GET() {
-  return NextResponse.json({ calls: listCalls() });
+  return NextResponse.json({ calls: await listCalls() });
 }
 
 /**
@@ -177,7 +177,7 @@ function runStream(prepared: Prepared): ReadableStream<Uint8Array> {
       send({ t: 'open', pad: '-'.repeat(1024) });
       send({ t: 'stage', stage: 'upload', state: 'done', at: 0, ms: 0,
              detail: `${(prepared.bytes / 1e6).toFixed(1)} MB · ${prepared.separation.mode}` });
-      send({ t: 'expect', totalMs: medianRecentRunMs() });
+      send({ t: 'expect', totalMs: await medianRecentRunMs() });
 
       /**
        * Liveness. The extract call can sit silent for a minute, which is long enough for an
