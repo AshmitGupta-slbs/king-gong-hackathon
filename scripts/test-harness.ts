@@ -11,6 +11,7 @@
  * Note there is no fake provider anywhere here. Failures are induced through real code paths — a
  * fixture that does not exist, a budget cap of one cent — so what passes is the shipping loop.
  */
+import { bedrockModelId, __clearBedrockModelIdCache } from '@/lib/bedrock-model-id';
 import { db, closeRun, getSegments, listRuns, openRun, reconcileOrphanRuns } from '@/lib/db';
 import { BudgetGovernor, DeadlineError, estimateTokens } from '@/lib/harness/budget';
 import { processCall } from '@/lib/harness/loop';
@@ -333,6 +334,73 @@ async function main() {
     check('the deadline names the cap it hit', broke.error?.includes('maxInputTokens') ?? false, broke.error);
     const brokeRun = listRuns(200).find((r) => r.id === broke.runId);
     check('the deadlined run is recorded too', brokeRun?.status === 'deadline');
+  }
+
+  head('Bedrock model ids — resolved by shape, ported from the reference implementation');
+  {
+    // Mirrors agent-service/tests/test_bedrock_model_id.py. The bare-id case is the one that was
+    // broken: LLM_MODEL=3s3wyt6beb2x was being mangled into anthropic.3s3wyt6beb2x, producing a 404
+    // that reads exactly like "this region does not serve that model".
+    const prevAccount = process.env.AWS_ACCOUNT_ID;
+    process.env.AWS_ACCOUNT_ID = '123456789012';
+    __clearBedrockModelIdCache();
+
+    check(
+      'a bare application-inference-profile id expands to a full ARN',
+      bedrockModelId('3s3wyt6beb2x', 'us-east-1') ===
+        'arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/3s3wyt6beb2x',
+      bedrockModelId('3s3wyt6beb2x', 'us-east-1'),
+    );
+
+    const arn = 'arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/abc';
+    check('a full ARN passes through untouched', bedrockModelId(arn, 'us-east-1') === arn);
+
+    check('cross-region profiles pass through',
+      bedrockModelId('global.anthropic.claude-sonnet-4-6', 'us-east-1') === 'global.anthropic.claude-sonnet-4-6' &&
+      bedrockModelId('us.anthropic.claude-sonnet-4-6', 'us-east-1') === 'us.anthropic.claude-sonnet-4-6');
+
+    check('the two remapped foundation ids become cross-region profiles',
+      bedrockModelId('anthropic.claude-sonnet-4-6', 'us-east-1') === 'global.anthropic.claude-sonnet-4-6',
+      bedrockModelId('anthropic.claude-sonnet-4-6', 'us-east-1'));
+
+    check('an unknown foundation id passes through unchanged',
+      bedrockModelId('anthropic.some-other', 'us-east-1') === 'anthropic.some-other');
+
+    check('an empty model stays empty', bedrockModelId('', 'us-east-1') === '');
+
+    // OUR addition, absent from the reference: a bare `claude-*` name also contains none of . : /
+    // so it would be misread as a profile id and expanded into a nonsense ARN. This repo's default
+    // is claude-opus-5, so the case is reachable here even though it never is upstream.
+    check('a bare claude-* name is treated as a foundation id, not a profile id',
+      bedrockModelId('claude-opus-5', 'us-east-1') === 'anthropic.claude-opus-5',
+      bedrockModelId('claude-opus-5', 'us-east-1'));
+    check('and a claude-* name that maps to a cross-region profile still remaps',
+      bedrockModelId('claude-sonnet-4-6', 'us-east-1') === 'global.anthropic.claude-sonnet-4-6',
+      bedrockModelId('claude-sonnet-4-6', 'us-east-1'));
+
+    // Failing loudly is a deliberate divergence: the reference sends the unexpanded id through with
+    // a warning, which produces a 404 that looks like a region problem.
+    delete process.env.AWS_ACCOUNT_ID;
+    __clearBedrockModelIdCache();
+    let threwOnMissingAccount = false;
+    let namesTheVar = false;
+    try {
+      bedrockModelId('3s3wyt6beb2x', 'us-east-1');
+    } catch (e) {
+      threwOnMissingAccount = true;
+      namesTheVar = (e instanceof Error ? e.message : '').includes('AWS_ACCOUNT_ID');
+    }
+    check('a bare id with no AWS_ACCOUNT_ID throws rather than sending a broken id', threwOnMissingAccount);
+    check('and the error names the variable to set', namesTheVar);
+
+    // A missing account must NOT block the shapes that need no expansion.
+    check('an ARN still resolves with no account id set', bedrockModelId(arn, 'us-east-1') === arn);
+    check('a foundation id still resolves with no account id set',
+      bedrockModelId('claude-opus-5', 'us-east-1') === 'anthropic.claude-opus-5');
+
+    if (prevAccount === undefined) delete process.env.AWS_ACCOUNT_ID;
+    else process.env.AWS_ACCOUNT_ID = prevAccount;
+    __clearBedrockModelIdCache();
   }
 
   head('Upload identity — the container is read from the bytes, never the filename');

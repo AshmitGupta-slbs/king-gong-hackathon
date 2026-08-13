@@ -146,7 +146,7 @@ export const REGISTRY_CONFIG = {
   <ol class="steps">
     <li data-step="1">
       <span class="step-title">Use the Mantle client, not the legacy path</span>
-      <p>Three AWS surfaces are easy to confuse and the model-id format is what separates them. Legacy <code>InvokeModel</code>/<code>Converse</code> uses ARN-versioned ids and a different request shape. <strong>Claude Platform on AWS</strong> (<code>AnthropicAws</code>, a different product) uses bare first-party ids. We use <code>AnthropicBedrockMantle</code> — <strong>Claude in Amazon Bedrock</strong> — which serves the same Messages API shape as first-party but whose ids carry an <code>anthropic.</code> provider prefix: <code>anthropic.claude-opus-5</code>.</p>
+      <p>We use <code>AnthropicBedrock</code> — the Bedrock Runtime Messages API — matching the reference implementation this deployment shares with its sibling services. Authentication is pure AWS SigV4 from the credential chain: no gateway, no <code>baseURL</code> override, no API key, and <code>ANTHROPIC_API_KEY</code> is never consulted on this path.</p>
     </li>
     <li data-step="2">
       <span class="step-title">Structured outputs are supported</span>
@@ -171,13 +171,33 @@ npm run extract:samples      # regenerates all five sets of notes</pre>
 Enable Anthropic model access in the Bedrock console for this region,
 and check the IAM principal can call bedrock:InvokeModel.</pre>
 
-  <div class="card accent">
-    <span class="card-eyebrow">WHAT THE FIRST REAL CREDENTIAL FOUND</span>
-    <div class="card-title">The prefix was right; the reason given for it was not</div>
-    <p>The first live call returned <code>404 not_found_error: The model 'anthropic.claude-opus-5' does not exist</code>. That reads like a naming bug and it is not: the request was signed, accepted and answered, and the id format is the documented one for Bedrock. A well-formed id returning 404 means <strong>the region or the account cannot serve that model</strong> — so the levers are <code>AWS_REGION</code> and model access, not the string.</p>
-    <p>It was briefly "fixed" the wrong way here, by removing the prefix on the reasoning that a Messages-API surface must take first-party ids. That inference does not hold, and it is worth stating because it is tempting: Mantle serves the same Messages API shape as first-party <em>and</em> takes the <code>anthropic.</code> prefix — those are independent properties. Bare ids belong to Claude Platform on AWS, a different offering. Meanwhile the original prefix, though correct, had been written from recall and never executed; §08 carried this provider as <em>Blocked · never executed</em> throughout, and that label was doing real work.</p>
-    <p>The durable fix is a tool rather than a better comment. <code>npm run check:model</code> sends a one-token request per candidate id in <strong>both</strong> forms and reports which resolve, separating "not offered in this region" from "offered but not enabled for you". It also refuses to conclude anything about naming when every candidate is missing, because that result carries no information about the prefix.</p>
+  <h2 id="model-ids">Bedrock takes four shapes of model id, and they are not interchangeable</h2>
+
+  <p>This is where a day went. Getting it wrong produces a <code>404 not_found_error</code> that reads exactly like "this region does not serve that model", so the natural response is to change the region — which never helps.</p>
+
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>What <code>LLM_MODEL</code> holds</th><th>What is sent</th></tr></thead>
+      <tbody>
+        <tr><td><code>3s3wyt6beb2x</code> — a bare <strong>application inference profile id</strong>, the handle a team is given for per-project cost attribution</td><td>Expanded to <code>arn:aws:bedrock:{region}:{account}:application-inference-profile/{id}</code>. Needs <code>AWS_ACCOUNT_ID</code></td></tr>
+        <tr><td><code>arn:aws:bedrock:…</code></td><td>Verbatim</td></tr>
+        <tr><td><code>global.</code> / <code>us.</code> / <code>eu.</code> / <code>apac.</code> — a cross-region profile</td><td>Verbatim</td></tr>
+        <tr><td><code>claude-opus-5</code> — a foundation id</td><td><code>anthropic.</code> prefix added, then remapped where a newer model demands a cross-region profile</td></tr>
+      </tbody>
+    </table>
   </div>
+
+  <div class="card accent">
+    <span class="card-eyebrow">HOW THIS WAS ACTUALLY RESOLVED</span>
+    <div class="card-title">Two sessions argued the wrong question</div>
+    <p>The provider originally prefixed <em>every</em> id with <code>anthropic.</code>, which turned a profile id into <code>anthropic.3s3wyt6beb2x</code> — a shape Bedrock cannot interpret. Two sessions then spent a long exchange arguing from documentation over whether ids are bare or prefixed, each producing real citations, each partly right. <strong>Neither position was the answer:</strong> it depends on which of the four shapes you hold, and no amount of reading about "prefixed vs bare" could reach that.</p>
+    <p>What settled it was reading a working implementation — the sibling service's <code>_bedrock_invoke_model_id</code>, which normalises by shape and carries an executable spec. That is ported here 1:1, with its own tests mirrored, and it took minutes.</p>
+    <p>Two deliberate divergences from it: a bare id with no resolvable account <strong>throws</strong> rather than being sent unexpanded with a warning, because the reference's own tests show that path produces exactly the 404 that misleads; and a leading <code>claude-</code> is treated as a foundation id, which the reference never needs because its Bedrock path is always handed a profile id, while ours defaults to <code>claude-opus-5</code>.</p>
+  </div>
+
+  <p><code>npm run check:model</code> now prints <code>input → resolved</code> per candidate before probing it, so a mangled id is visible rather than inferred, and separates "not offered in this region" from "offered but not enabled for you".</p>
+
+  <p>One further consequence of following the reference: it drives Bedrock with <strong>tool calling</strong> and never sends <code>output_config</code> or <code>thinking</code>, so structured outputs are unproven on this exact endpoint. Extraction therefore asks for structured output first and, <em>only</em> if those parameters are rejected, retries once as a single forced tool call whose input schema is the same Zod schema. Same contract, same gate, no JSON repair — and a 404, an auth failure or a refusal still propagates rather than being masked by a second attempt.</p>
 
   <p>Still unverified end-to-end until a model call actually succeeds: whether <code>messages.parse()</code> behaves identically on Mantle, and whether <code>output_config.effort</code> is accepted there. Flagged rather than assumed — the habit that would have caught both of the mistakes above.</p>
 
@@ -237,6 +257,7 @@ and check the IAM principal can call bedrock:InvokeModel.</pre>
     <li><a href="#providers">The eight providers</a></li>
     <li><a href="#extraction">How extraction works</a></li>
     <li><a href="#bedrock">Wiring up Bedrock</a></li>
+    <li><a href="#model-ids">The four model-id shapes</a></li>
     <li><a href="#provenance">Provenance enforcement</a></li>
     <li><a href="#stub">The keyword stub</a></li>
   </ul>
