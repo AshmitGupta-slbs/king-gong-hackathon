@@ -3,9 +3,9 @@
 /**
  * The notes column — and the receipts.
  *
- * Every claim here carries citation chips that seek the audio to the line that proves it, and the
- * section that publishes what the gate REJECTED is a first-class panel rather than an error state.
- * Notes you cannot audit are a guess; publishing our own rejections is the argument.
+ * Every claim here carries the moments that prove it, and the section that publishes what the gate
+ * REJECTED is a first-class panel rather than an error state. Notes you cannot audit are a guess;
+ * publishing our own rejections is the argument.
  */
 import { CircleX, TriangleAlert } from 'lucide-react';
 import type { CitedClaim, Evidence, ExtractionResult, GateRejection } from '@/lib/types';
@@ -13,9 +13,14 @@ import { Badge } from '@/components/ui/Badge';
 import { Card } from '@/components/ui/Card';
 import { CiteChip, NoCiteChip } from '@/components/ui/CiteChip';
 import { cx } from '@/components/ui/cx';
+import { describeExtractor } from '@/lib/provenance';
+import { EvidenceTrail } from './EvidenceTrail';
 import { fmt, useTextFmt, type GateDemoResult } from './format-context';
 
-/** The receipts. Clicking one moves the audio to the line it cites. */
+/**
+ * Inline receipts, for the places where evidence is supporting context rather than the main event
+ * (intent, the follow-up email). Claims themselves use `EvidenceTrail`.
+ */
 export function CiteChips({
   evidence,
   onCite,
@@ -27,9 +32,11 @@ export function CiteChips({
   if (evidence.length === 0) return <NoCiteChip />;
   return (
     <span className="inline-flex flex-wrap gap-1">
-      {evidence.map((e) => (
+      {evidence.map((e, i) => (
         <CiteChip
-          key={e.segment_id}
+          // Keyed on more than segment_id: a claim may legitimately cite the same segment twice,
+          // and a duplicate React key silently drops the second chip.
+          key={`${e.segment_id}-${e.start_ms}-${i}`}
           onClick={() => onCite(e.segment_id)}
           title={`${e.speaker} at ${fmt(e.start_ms)} — ${display(e.text)}`}
         >
@@ -40,7 +47,15 @@ export function CiteChips({
   );
 }
 
-function ClaimRow({ c, onCite }: { c: CitedClaim; onCite: (id: string) => void }) {
+function ClaimRow({
+  c,
+  onCite,
+  onHoverSegments,
+}: {
+  c: CitedClaim;
+  onCite: (id: string) => void;
+  onHoverSegments?: (ids: string[] | null) => void;
+}) {
   const display = useTextFmt();
   const verified = c.verdict === 'verified';
   return (
@@ -55,28 +70,29 @@ function ClaimRow({ c, onCite }: { c: CitedClaim; onCite: (id: string) => void }
         />
         <div className="min-w-0 flex-1">
           <p className="text-body text-fg">{display(c.claim)}</p>
-          <div className="mt-2 flex flex-wrap items-center gap-1.5">
-            <CiteChips evidence={c.evidence} onCite={onCite} />
-            {!verified && (
+          {!verified && (
+            <div className="mt-2">
               <Badge
                 tone="warn"
                 hint={`content-overlap support ${c.support.toFixed(
                   2,
                 )} is below the threshold — the cited line exists but does not visibly back this claim`}
               >
-                unverified · {c.support.toFixed(2)}
+                unverified · support {c.support.toFixed(2)}
               </Badge>
-            )}
-          </div>
-          {/* Show the quoted line itself. The claim is a summary; this is the evidence. */}
-          {c.evidence.slice(0, 1).map((e) => (
-            <blockquote
-              key={e.segment_id}
-              className="mt-2 border-l-2 border-brand-border bg-brand-wash/60 py-1.5 pl-2.5 text-meta text-fg-muted"
-            >
-              {display(e.text)}
-            </blockquote>
-          ))}
+            </div>
+          )}
+          {/*
+           * The receipts. This replaces a chip row plus a single blockquote — which showed only
+           * `evidence[0]`, so a claim the gate had backed with three lines looked exactly like one
+           * backed by a single remark.
+           */}
+          <EvidenceTrail evidence={c.evidence} onCite={onCite} onHoverSegments={onHoverSegments} />
+          {c.evidence.length === 0 && (
+            <div className="mt-2">
+              <NoCiteChip />
+            </div>
+          )}
         </div>
       </div>
     </li>
@@ -87,13 +103,34 @@ export function Insights({
   ex,
   onCite,
   gateDemo,
+  onHoverSegments,
 }: {
   ex: ExtractionResult;
   onCite: (id: string) => void;
   gateDemo: GateDemoResult | null;
+  /** Hovering a claim lights up every line it cites, so multi-source is visible without expanding. */
+  onHoverSegments?: (ids: string[] | null) => void;
 }) {
+  const provenance = describeExtractor(ex.extracted_by);
+
   return (
     <div className="flex flex-col gap-4">
+      {/*
+       * Where THESE notes came from. The shell banner describes the configured extractor, which is
+       * a claim about future uploads; this is a claim about the text directly beneath it.
+       */}
+      {!provenance.isReal && (
+        <p className="flex items-start gap-2 rounded-control border border-warn-border bg-warn-wash px-3 py-2 text-caption leading-relaxed text-warn">
+          <TriangleAlert size={13} className="mt-0.5 shrink-0" aria-hidden />
+          <span>
+            <span className="font-semibold">These notes were not written by a model.</span>{' '}
+            <span className="text-fg-muted">
+              Source <span className="font-mono">{provenance.label}</span> — {provenance.detail}.
+            </span>
+          </span>
+        </p>
+      )}
+
       <Card title="Summary">
         <p className="text-body text-fg-muted">{ex.summary}</p>
         <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border-subtle pt-3">
@@ -109,7 +146,7 @@ export function Insights({
         {ex.objections.length ? (
           <ul>
             {ex.objections.map((c, i) => (
-              <ClaimRow key={i} c={c} onCite={onCite} />
+              <ClaimRow key={i} c={c} onCite={onCite} onHoverSegments={onHoverSegments} />
             ))}
           </ul>
         ) : (
@@ -121,7 +158,7 @@ export function Insights({
         {ex.next_steps.length ? (
           <ul>
             {ex.next_steps.map((c, i) => (
-              <ClaimRow key={i} c={c} onCite={onCite} />
+              <ClaimRow key={i} c={c} onCite={onCite} onHoverSegments={onHoverSegments} />
             ))}
           </ul>
         ) : (

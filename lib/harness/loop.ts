@@ -30,6 +30,7 @@ import {
 import { BudgetGovernor, DeadlineError, estimateTokens, type BudgetCaps } from './budget';
 import { runCitationGate } from './gate';
 import { withLock } from './parallel';
+import { safeStage, type OnStage } from './progress';
 import { retryAimed } from './retry';
 
 export type ProcessInput = {
@@ -45,6 +46,11 @@ export type ProcessInput = {
   budgetCaps?: Partial<BudgetCaps>;
   /** Override the STT provider for this run (e.g. 'fixture' to replay a committed transcript). */
   sttProvider?: string;
+  /**
+   * Optional narration for a progress UI. Purely additive — the run's behaviour, its outcome and
+   * its recorded status do not depend on whether anyone is listening.
+   */
+  onStage?: OnStage;
 };
 
 export type ProcessOutcome = {
@@ -71,8 +77,12 @@ export async function processCall(input: ProcessInput): Promise<ProcessOutcome> 
   const runId = randomUUID();
 
   return withLock(callId, async () => {
+    const on = safeStage(input.onStage);
+
     // FAILURE INVARIANT: the record exists before any work does, so a crash is still a record.
     openRun(runId, callId, 'ingest+extract+gate');
+    // The first moment the run is addressable: the row now exists, so a client can be told about it.
+    on({ t: 'run', callId, runId });
 
     const budget = new BudgetGovernor(input.budgetCaps ?? {});
     let segments: TranscriptSegment[] = [];
@@ -85,6 +95,8 @@ export async function processCall(input: ProcessInput): Promise<ProcessOutcome> 
     try {
       // ── 1. Transcribe (registry-provided; retried on transient provider errors) ────
       const stt = await getSTT(input.sttProvider);
+      on({ t: 'stage', stage: 'transcribe', state: 'start' });
+      const tTranscribe = Date.now();
       const sttRun = await retryAimed({
         attempts: REGISTRY_CONFIG.maxAttempts,
         run: () =>
@@ -99,6 +111,8 @@ export async function processCall(input: ProcessInput): Promise<ProcessOutcome> 
           typeof e === 'object' && e !== null && 'retryable' in e
             ? !(e as { retryable: boolean }).retryable
             : false,
+        onRetry: (attempt, reason) =>
+          on({ t: 'stage', stage: 'transcribe', state: 'retry', attempt, reason }),
       });
       sttAttempts = sttRun.attempts;
       segments = sttRun.value.segments;
@@ -114,14 +128,28 @@ export async function processCall(input: ProcessInput): Promise<ProcessOutcome> 
       });
       replaceSegments(callId, segments);
       recordUsage(callId, stt.name, sttRun.value.usage);
+      /**
+       * Emitted AFTER insertCall, deliberately: from this instant `/calls/<id>` is a real page, so
+       * a client that later sees a failure can still offer to open the partial call rather than
+       * handing back a dead id.
+       */
+      on({
+        t: 'stage',
+        stage: 'transcribe',
+        state: 'done',
+        ms: Date.now() - tTranscribe,
+        detail: `${segments.length} segments · ${Math.round(sttRun.value.audio_seconds)}s of audio`,
+      });
 
       // ── 2. Extract, then GATE, with the gate's own complaint aimed at the retry ────
       const extractor = await getExtractor();
       const transcriptChars = segments.reduce((n, s) => n + s.text.length + 24, 0);
 
+      const tExtract = Date.now();
       const exRun = await retryAimed({
         attempts: REGISTRY_CONFIG.maxAttempts,
         run: async (_n, priorFailure) => {
+          on({ t: 'stage', stage: 'extract', state: 'start', attempt: _n });
           // BUDGET GOVERNOR: checked before the model call, not after it.
           budget.preflight(estimateTokens(transcriptChars > 0 ? 'x'.repeat(transcriptChars) : ''));
           const { draft, usage } = await extractor.extract({
@@ -131,7 +159,22 @@ export async function processCall(input: ProcessInput): Promise<ProcessOutcome> 
           });
           budget.record(usage);
           recordUsage(callId, extractor.name, usage);
-          return runCitationGate(draft, segments, extractor.name);
+          /**
+           * The gate is synchronous and finishes in single-digit milliseconds, so it is reported as
+           * an instant result rather than something to wait on. What matters is WHAT it rejected.
+           */
+          const tGate = Date.now();
+          const gated = runCitationGate(draft, segments, extractor.name);
+          const dropped = gated.result.rejections.filter((r) => r.dropped).length;
+          const flagged = gated.result.rejections.length - dropped;
+          on({
+            t: 'stage',
+            stage: 'gate',
+            state: 'done',
+            ms: Date.now() - tGate,
+            detail: `${dropped} dropped · ${flagged} flagged`,
+          });
+          return gated;
         },
         // Spend another attempt only if the gate had to delete claims outright.
         validate: (outcome) => {
@@ -140,9 +183,19 @@ export async function processCall(input: ProcessInput): Promise<ProcessOutcome> 
             ? { ok: true }
             : { ok: false, reason: `Claims deleted for citing non-existent segments — ${drops.join('; ')}` };
         },
+        // The harness's whole thesis, made visible while it happens.
+        onRetry: (attempt, reason) =>
+          on({ t: 'stage', stage: 'extract', state: 'retry', attempt, reason }),
       });
       extractAttempts = exRun.attempts;
       extraction = exRun.value.result;
+      on({
+        t: 'stage',
+        stage: 'extract',
+        state: 'done',
+        ms: Date.now() - tExtract,
+        detail: extractor.name,
+      });
 
       saveExtraction(callId, extraction);
       recordRejections(callId, runId, extraction.rejections);

@@ -1,28 +1,48 @@
 'use client';
 
 /**
- * The product. Transcript on the left, notes on the right, and every claim in the notes carries
- * citation chips that seek the audio to the exact line that proves it.
+ * The product. Transcript on the left, notes on the right, and every claim in the notes shows the
+ * moments that prove it.
  *
  * The state stays in ONE client component on purpose: the audio element, the transcript DOM refs
- * and the insights panel have to share it for "click a claim → land on the proof" to work. What
- * moved into `components/workspace/*` is presentation only — twelve subcomponents in a single
- * 718-line file is why four copies of the citation-chip markup went unnoticed for so long.
+ * and the insights panel have to share it for "click a claim → land on the proof" to work.
+ * `components/workspace/*` is presentation only.
+ *
+ * On privacy: `crm` carries deal value and pipeline detail, and the public share route passes
+ * `participants` WITHOUT it. That is structural rather than a render-time `if` — anything handed to
+ * this component is serialized into the page, so a recipient must never receive the deal object at
+ * all, whether or not a component would have drawn it.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { FileText, Building2 } from 'lucide-react';
+import { analyseCall } from '@/lib/analytics';
 import { readableFor, renderedSpansFor } from '@/lib/readability';
+import type { CallContext, Participant } from '@/lib/crm/types';
 import type { CallBundle } from '@/lib/types';
+import { Tabs } from '@/components/ui/Tabs';
 import { CallHeader } from '@/components/workspace/CallHeader';
+import { ContextPanel } from '@/components/workspace/ContextPanel';
 import { Insights, EmptyNotes } from '@/components/workspace/Insights';
 import { Player } from '@/components/workspace/Player';
 import { TranscriptLine } from '@/components/workspace/TranscriptPane';
-import { SpanFmt, TextFmt, type GateDemoResult } from '@/components/workspace/format-context';
+import {
+  CallMetaContext,
+  SpanFmt,
+  TextFmt,
+  type GateDemoResult,
+} from '@/components/workspace/format-context';
 
 export function CallWorkspace({
   bundle,
+  crm = null,
+  participants,
   readOnly = false,
 }: {
   bundle: CallBundle;
+  /** Full account context. Never passed on the public share route. */
+  crm?: CallContext | null;
+  /** Speaker identities only — enough to name the transcript without exposing the deal. */
+  participants?: Participant[];
   readOnly?: boolean;
 }) {
   const { call, segments, extraction } = bundle;
@@ -35,6 +55,20 @@ export function CallWorkspace({
   const [follow, setFollow] = useState(true);
   const [gateDemo, setGateDemo] = useState<GateDemoResult | null>(null);
   const [gateBusy, setGateBusy] = useState(false);
+  /** Segments backing the claim currently under the cursor. */
+  const [cited, setCited] = useState<string[] | null>(null);
+  const [tab, setTab] = useState<'notes' | 'context'>('notes');
+
+  /**
+   * Memoised because it feeds the context value: the `?? []` fallback allocates a fresh array on
+   * every render, which would make `meta` a new object each time and re-render every transcript
+   * line on each `timeupdate` — several times a second while audio plays.
+   */
+  const people = useMemo(
+    () => participants ?? crm?.participants ?? [],
+    [participants, crm],
+  );
+  const analytics = useMemo(() => analyseCall(segments), [segments]);
 
   /** The line currently being spoken. Drives the transcript highlight. */
   const activeId = useMemo(() => {
@@ -113,99 +147,138 @@ export function CallWorkspace({
 
   const displayText = useMemo(() => readableFor(call.title), [call.title]);
   const displaySpans = useMemo(() => renderedSpansFor(call.title), [call.title]);
+  const meta = useMemo(
+    () => ({ durationMs: call.duration_ms, participants: people }),
+    [call.duration_ms, people],
+  );
 
   return (
     <TextFmt.Provider value={displayText}>
       <SpanFmt.Provider value={displaySpans}>
-        {/*
-         * On lg+ the workspace fills the shell exactly and each pane scrolls on its own, so the
-         * transcript and the notes stay side by side while you click between them. Below lg it
-         * flows normally and the page scrolls. No height is computed anywhere — the previous
-         * version used `top-[57px]` and `calc(100vh-260px)`, both encoding a header height from
-         * another file.
-         */}
-        <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-4 p-4 lg:h-full lg:gap-5 lg:p-6">
-          <div className="shrink-0">
-            <CallHeader
-              bundle={bundle}
-              onGateDemo={readOnly ? undefined : runGateDemo}
-              gateBusy={gateBusy}
-            />
-          </div>
+        <CallMetaContext.Provider value={meta}>
+          {/*
+           * On lg+ the workspace fills the shell exactly and each pane scrolls on its own, so the
+           * transcript and the notes stay side by side while you click between them. Below lg it
+           * flows normally and the page scrolls. No height is computed anywhere.
+           */}
+          <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-4 p-4 lg:h-full lg:gap-5 lg:p-6">
+            <div className="shrink-0">
+              <CallHeader
+                bundle={bundle}
+                crm={crm}
+                participants={people}
+                onGateDemo={readOnly ? undefined : runGateDemo}
+                gateBusy={gateBusy}
+              />
+            </div>
 
-          <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)] lg:gap-5">
-            {/* ── Transcript + player ─────────────────────────────────────── */}
-            <section className="flex min-h-0 flex-col overflow-hidden rounded-card border border-border-subtle bg-surface shadow-card">
-              <div className="shrink-0 border-b border-border-subtle p-3">
-                {/* Native controls are light-themed and cannot be restyled; the element stays for
-                    playback, the chrome is ours. */}
-                <audio
-                  ref={audioRef}
-                  src={call.audio_path}
-                  preload="metadata"
-                  className="hidden"
-                  onTimeUpdate={(e) => setTimeMs(e.currentTarget.currentTime * 1000)}
-                  onPlay={() => setPlaying(true)}
-                  onPause={() => setPlaying(false)}
-                  onEnded={() => setPlaying(false)}
-                />
-                <Player
-                  playing={playing}
-                  timeMs={timeMs}
-                  durationMs={call.duration_ms}
-                  markers={markers}
-                  onToggle={() => {
-                    const a = audioRef.current;
-                    if (!a) return;
-                    if (a.paused) void a.play().catch(() => {});
-                    else a.pause();
-                  }}
-                  onScrub={(ms) => {
-                    const a = audioRef.current;
-                    if (a) a.currentTime = ms / 1000;
-                    setTimeMs(ms);
-                  }}
-                  follow={follow}
-                  onFollowChange={setFollow}
-                />
-              </div>
-
-              {/*
-               * `relative` is load-bearing, not decoration: `centreInPane` positions with
-               * `el.offsetTop`, which is measured from the nearest POSITIONED ancestor. Without
-               * it the offsets resolve against the document and every citation scrolls to the
-               * wrong line — silently, since the pane still scrolls.
-               */}
-              <div
-                ref={scrollerRef}
-                className="relative max-h-[55vh] min-h-0 flex-1 overflow-y-auto p-2 lg:max-h-none"
-              >
-                {segments.map((s) => (
-                  <TranscriptLine
-                    key={s.id}
-                    seg={s}
-                    active={s.id === activeId}
-                    pulsed={s.id === pulsed}
-                    onClick={() => seekToSegment(s.id)}
-                    bindRef={(el) => {
-                      if (el) segRefs.current.set(s.id, el);
-                      else segRefs.current.delete(s.id);
-                    }}
+            <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)] lg:gap-5">
+              {/* ── Transcript + player ─────────────────────────────────────── */}
+              <section className="flex min-h-0 flex-col overflow-hidden rounded-card border border-border-subtle bg-surface shadow-card">
+                <div className="shrink-0 border-b border-border-subtle p-3">
+                  {/* Native controls are light-themed and cannot be restyled; the element stays for
+                      playback, the chrome is ours. */}
+                  <audio
+                    ref={audioRef}
+                    src={call.audio_path}
+                    preload="metadata"
+                    className="hidden"
+                    onTimeUpdate={(e) => setTimeMs(e.currentTarget.currentTime * 1000)}
+                    onPlay={() => setPlaying(true)}
+                    onPause={() => setPlaying(false)}
+                    onEnded={() => setPlaying(false)}
                   />
-                ))}
-              </div>
-            </section>
+                  <Player
+                    playing={playing}
+                    timeMs={timeMs}
+                    durationMs={call.duration_ms}
+                    markers={markers}
+                    onToggle={() => {
+                      const a = audioRef.current;
+                      if (!a) return;
+                      if (a.paused) void a.play().catch(() => {});
+                      else a.pause();
+                    }}
+                    onScrub={(ms) => {
+                      const a = audioRef.current;
+                      if (a) a.currentTime = ms / 1000;
+                      setTimeMs(ms);
+                    }}
+                    follow={follow}
+                    onFollowChange={setFollow}
+                  />
+                </div>
 
-            {/* ── Notes ───────────────────────────────────────────────────── */}
-            <section className="min-w-0 lg:min-h-0 lg:overflow-y-auto lg:pr-1">
-              {extraction ? (
-                <Insights ex={extraction} onCite={seekToSegment} gateDemo={gateDemo} />
-              ) : (
-                <EmptyNotes />
-              )}
-            </section>
+                {/*
+                 * `relative` is load-bearing, not decoration: `centreInPane` positions with
+                 * `el.offsetTop`, which is measured from the nearest POSITIONED ancestor. Without
+                 * it the offsets resolve against the document and every citation scrolls to the
+                 * wrong line — silently, since the pane still scrolls.
+                 */}
+                <div
+                  ref={scrollerRef}
+                  className="relative max-h-[55vh] min-h-0 flex-1 overflow-y-auto p-2 lg:max-h-none"
+                >
+                  {segments.map((s) => (
+                    <TranscriptLine
+                      key={s.id}
+                      seg={s}
+                      active={s.id === activeId}
+                      pulsed={s.id === pulsed}
+                      cited={cited?.includes(s.id) ?? false}
+                      onClick={() => seekToSegment(s.id)}
+                      bindRef={(el) => {
+                        if (el) segRefs.current.set(s.id, el);
+                        else segRefs.current.delete(s.id);
+                      }}
+                    />
+                  ))}
+                </div>
+              </section>
+
+              {/* ── Notes / Context ─────────────────────────────────────────── */}
+              <section className="flex min-w-0 flex-col lg:min-h-0">
+                {/* The share route gets no account context, so it gets no tab strip either. */}
+                {!readOnly && (
+                  <Tabs
+                    className="mb-4 shrink-0"
+                    active={tab}
+                    onChange={(id) => setTab(id as 'notes' | 'context')}
+                    tabs={[
+                      {
+                        id: 'notes',
+                        label: 'Notes',
+                        icon: <FileText size={14} aria-hidden />,
+                      },
+                      {
+                        id: 'context',
+                        label: 'Context',
+                        icon: <Building2 size={14} aria-hidden />,
+                      },
+                    ]}
+                  />
+                )}
+
+                <div className="min-h-0 flex-1 lg:overflow-y-auto lg:pr-1">
+                  {tab === 'notes' || readOnly ? (
+                    extraction ? (
+                      <Insights
+                        ex={extraction}
+                        onCite={seekToSegment}
+                        gateDemo={gateDemo}
+                        onHoverSegments={setCited}
+                      />
+                    ) : (
+                      <EmptyNotes />
+                    )
+                  ) : (
+                    <ContextPanel crm={crm} analytics={analytics} />
+                  )}
+                </div>
+              </section>
+            </div>
           </div>
-        </div>
+        </CallMetaContext.Provider>
       </SpanFmt.Provider>
     </TextFmt.Provider>
   );

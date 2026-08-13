@@ -8,7 +8,7 @@
     "speakers": 2,
     "separation": "channel",
     "run_status": "shipped",
-    "extracted_by": "stub-heuristic"
+    "extracted_by": "demo-fixture"
   },
   {
     "id": "heavy-objections",
@@ -18,8 +18,8 @@
     "segments": 10,
     "speakers": 2,
     "separation": "channel",
-    "run_status": "shipped",
-    "extracted_by": "stub-heuristic"
+    "run_status": "partial",
+    "extracted_by": "demo-fixture"
   },
   {
     "id": "competitor-named",
@@ -30,7 +30,7 @@
     "speakers": 2,
     "separation": "channel",
     "run_status": "shipped",
-    "extracted_by": "stub-heuristic"
+    "extracted_by": "demo-fixture"
   },
   {
     "id": "pricing-pushback",
@@ -41,7 +41,7 @@
     "speakers": 2,
     "separation": "channel",
     "run_status": "shipped",
-    "extracted_by": "stub-heuristic"
+    "extracted_by": "demo-fixture"
   },
   {
     "id": "no-decision",
@@ -51,7 +51,7 @@
     "segments": 10,
     "speakers": 2,
     "separation": "channel",
-    "run_status": "shipped",
-    "extracted_by": "stub-heuristic"
+    "run_status": "partial",
+    "extracted_by": "demo-fixture"
   }
 ]

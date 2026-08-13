@@ -11,6 +11,7 @@
  * If you ever find yourself importing a vendor SDK inside ingestion or extraction, stop and
  * route it through here instead.
  */
+import { describeExtractor, isRealModelExtractor } from '@/lib/provenance';
 import type { ExtractProvider, STTProvider, TTSProvider } from './types';
 
 /**
@@ -208,9 +209,7 @@ export const getTTS = (override?: string) =>
  * Providers whose output is genuinely model-generated. The UI banner and `check:ship` both read
  * this, so there is exactly one definition of "is this real output?".
  */
-export const REAL_MODEL_EXTRACTORS = ['claude', 'bedrock'] as const;
-export const isRealModelExtractor = (provider: string) =>
-  (REAL_MODEL_EXTRACTORS as readonly string[]).includes(provider);
+export { REAL_MODEL_EXTRACTORS, isRealModelExtractor } from '@/lib/provenance';
 
 /** Shown in the UI footer so a judge can see what actually ran. Honesty as a feature. */
 export function describeRegistry() {
@@ -218,9 +217,15 @@ export function describeRegistry() {
   return {
     stt: REGISTRY_CONFIG.stt,
     extract,
+    /**
+     * Describes the CONFIGURED extractor — i.e. what a new upload would be analysed by. It says
+     * nothing about the provenance of notes already on screen, which can differ (a committed
+     * sample may have been produced by something else entirely). That distinction is drawn in the
+     * UI rather than blurred here.
+     */
     extractDetail: isRealModelExtractor(extract)
       ? `${extract} · ${REGISTRY_CONFIG.extractModel} · effort=${REGISTRY_CONFIG.extractEffort}`
-      : `${extract} · deterministic keywords, NOT a model`,
+      : `${extract} · ${describeExtractor(extract).detail}`,
     extractIsRealModel: isRealModelExtractor(extract),
     tts: REGISTRY_CONFIG.tts,
     supportThreshold: REGISTRY_CONFIG.supportThreshold,

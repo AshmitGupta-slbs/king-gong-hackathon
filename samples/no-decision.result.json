@@ -1,30 +1,38 @@
 {
-  "summary": "[Heuristic stub — no model was involved] 10-segment call. 1 concern(s) detected by keyword, 1 action(s), 2 flagged moment(s). Intent classified as \"no decision\". Replace by running extraction against a real model before showing this to anyone.",
+  "summary": "Nothing has moved at Verity. The original driver — ramping new reps faster — is still a real problem but no longer a priority, because hiring was paused in August. Their enablement lead left in July and nobody picked the initiative up, so there is no internal champion. Tom would not give a date he did not believe in and asked to be revisited in January.",
   "intent": {
     "label": "no decision",
     "segment_ids": [
-      "seg_001"
+      "seg_003",
+      "seg_007"
     ],
     "verdict": "verified",
     "support": 0,
     "evidence": [
       {
-        "segment_id": "seg_001",
+        "segment_id": "seg_003",
         "speaker": "prospect",
-        "start_ms": 6000,
-        "end_ms": 10560,
-        "text": "they had and i should be straight with you not much has moved on our side"
+        "start_ms": 18160,
+        "end_ms": 25680,
+        "text": "it is still a problem but it is not the priority anymore we paused hiring in august so we are not ramping anybody right now"
+      },
+      {
+        "segment_id": "seg_007",
+        "speaker": "prospect",
+        "start_ms": 44560,
+        "end_ms": 51040,
+        "text": "not really our enablement lead left in july and nobody has picked that up so there is no one championing it"
       }
     ]
   },
   "objections": [
     {
-      "claim": "Prospect raised a concern: It is still a problem but it is not the priority anymore we paused hiring in…",
+      "claim": "Hiring was paused in August, so the original driver of ramping new reps faster is still a problem but no longer the priority.",
       "segment_ids": [
         "seg_003"
       ],
       "verdict": "verified",
-      "support": 0.6666666666666666,
+      "support": 0.5384615384615384,
       "evidence": [
         {
           "segment_id": "seg_003",
@@ -34,17 +42,59 @@
           "text": "it is still a problem but it is not the priority anymore we paused hiring in august so we are not ramping anybody right now"
         }
       ]
+    },
+    {
+      "claim": "There is no internal champion — the enablement lead left in July and nobody has picked it up.",
+      "segment_ids": [
+        "seg_007"
+      ],
+      "verdict": "verified",
+      "support": 0.875,
+      "evidence": [
+        {
+          "segment_id": "seg_007",
+          "speaker": "prospect",
+          "start_ms": 44560,
+          "end_ms": 51040,
+          "text": "not really our enablement lead left in july and nobody has picked that up so there is no one championing it"
+        }
+      ]
+    },
+    {
+      "claim": "The account is likely to churn to a competitor within two quarters.",
+      "segment_ids": [
+        "seg_005"
+      ],
+      "verdict": "unverified",
+      "support": 0.14285714285714285,
+      "evidence": [
+        {
+          "segment_id": "seg_005",
+          "speaker": "prospect",
+          "start_ms": 29520,
+          "end_ms": 37360,
+          "text": "maybe january depending on how the quarter lands i genuinely do not know and i do not want to give you a date that is not real"
+        }
+      ]
     }
   ],
   "next_steps": [
     {
-      "claim": "Agreed action: I respect that check back with me in january and if hiring restarts i will tell…",
+      "claim": "Check back in January — Tom committed to saying honestly whether hiring has restarted.",
       "segment_ids": [
+        "seg_005",
         "seg_009"
       ],
       "verdict": "verified",
-      "support": 0.7777777777777778,
+      "support": 0.6,
       "evidence": [
+        {
+          "segment_id": "seg_005",
+          "speaker": "prospect",
+          "start_ms": 29520,
+          "end_ms": 37360,
+          "text": "maybe january depending on how the quarter lands i genuinely do not know and i do not want to give you a date that is not real"
+        },
         {
           "segment_id": "seg_009",
           "speaker": "prospect",
@@ -56,14 +106,22 @@
     }
   ],
   "follow_up_email": {
-    "subject": "Following up on our call",
-    "body": "Thanks for the time today. Picking up on what you raised, I will follow up on the points we agreed and come back to you with the detail.",
+    "subject": "Parking this until January",
+    "body": "Hi Tom,\n\nAppreciated you being straight with me — a date neither of us believed in would not have helped either of us.\n\nParking this until January. If hiring restarts before then and it becomes live again, you know where I am.\n\nSam",
     "segment_ids": [
+      "seg_005",
       "seg_009"
     ],
     "verdict": "verified",
-    "support": 0.08333333333333333,
+    "support": 0.23809523809523808,
     "evidence": [
+      {
+        "segment_id": "seg_005",
+        "speaker": "prospect",
+        "start_ms": 29520,
+        "end_ms": 37360,
+        "text": "maybe january depending on how the quarter lands i genuinely do not know and i do not want to give you a date that is not real"
+      },
       {
         "segment_id": "seg_009",
         "speaker": "prospect",
@@ -77,7 +135,7 @@
     {
       "type": "objection",
       "segment_id": "seg_003",
-      "note": "It is still a problem but it is not the…",
+      "note": "Hiring paused — no longer the priority",
       "evidence": {
         "segment_id": "seg_003",
         "speaker": "prospect",
@@ -87,9 +145,21 @@
       }
     },
     {
+      "type": "objection",
+      "segment_id": "seg_007",
+      "note": "Champion left; nobody owns it",
+      "evidence": {
+        "segment_id": "seg_007",
+        "speaker": "prospect",
+        "start_ms": 44560,
+        "end_ms": 51040,
+        "text": "not really our enablement lead left in july and nobody has picked that up so there is no one championing it"
+      }
+    },
+    {
       "type": "next_step",
       "segment_id": "seg_009",
-      "note": "I respect that check back with me in january and…",
+      "note": "Revisit in January",
       "evidence": {
         "segment_id": "seg_009",
         "speaker": "prospect",
@@ -99,7 +169,15 @@
       }
     }
   ],
-  "run_status": "shipped",
-  "rejections": [],
-  "extracted_by": "stub-heuristic"
+  "run_status": "partial",
+  "rejections": [
+    {
+      "field": "objections[2]",
+      "claim": "The account is likely to churn to a competitor within two quarters.",
+      "reason": "unsupported_by_segment",
+      "detail": "Support 0.14 < 0.18. Shipped flagged, not dropped.",
+      "dropped": false
+    }
+  ],
+  "extracted_by": "demo-fixture"
 }

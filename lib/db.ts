@@ -208,6 +208,38 @@ export type RunRow = {
   notes: string | null;
 };
 
+/**
+ * How long recent successful runs actually took, as a median.
+ *
+ * This is the only honest thing a progress screen can say about "how much longer" — the extract
+ * call is a single opaque await with no token callback, so any percentage would be invented. A
+ * median over runs that really happened is a measurement, and it is presented in the past tense
+ * ("similar runs took about 48s") rather than as a prediction.
+ *
+ * Returns null below three samples: a confident number derived from one cold-start run would be
+ * exactly the sort of authoritative-sounding guess this codebase avoids elsewhere.
+ */
+export function medianRecentRunMs(sample = 15): number | null {
+  const rows = db()
+    .prepare(
+      `SELECT started_at, ended_at FROM runs
+       WHERE ended_at IS NOT NULL AND status IN ('shipped','partial')
+       ORDER BY started_at DESC LIMIT ?`,
+    )
+    .all(sample) as Record<string, unknown>[];
+
+  const durations = rows
+    .map((r) => (r.ended_at as number) - (r.started_at as number))
+    .filter((ms) => Number.isFinite(ms) && ms > 0)
+    .sort((a, b) => a - b);
+
+  if (durations.length < 3) return null;
+  const mid = Math.floor(durations.length / 2);
+  return durations.length % 2 === 0
+    ? Math.round((durations[mid - 1] + durations[mid]) / 2)
+    : durations[mid];
+}
+
 export function listRuns(limit = 50): RunRow[] {
   const rows = db()
     .prepare(`SELECT * FROM runs ORDER BY started_at DESC LIMIT ?`)
