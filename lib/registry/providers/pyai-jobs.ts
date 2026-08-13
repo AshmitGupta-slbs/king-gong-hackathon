@@ -58,34 +58,64 @@ const segId = (i: number) => `seg_${String(i).padStart(3, '0')}`;
  * wrong on some — which is why `Call.separation` is persisted and shown in the UI, so nobody
  * mistakes a heuristic for a fact.
  */
-function buildSpeakerMap(segs: PyaiSegment[], mode: 'channel' | 'diarize'): Map<string, string> {
+/**
+ * One key function, used by the map builder AND the lookup, so the two can never disagree.
+ *
+ * They did disagree: the diarize branch keyed a missing speaker as `'speaker_1'` while the lookup
+ * computed `` `channel_${s.channel}` `` — and diarize mode returns no `channel`, so the key became
+ * the literal string `"channel_undefined"`, missed the map, and the segment came out as
+ * `'unknown'`: a speaker the UI cannot render as either role and the extractor cannot reason
+ * about. Two expressions of "the same key" in two places is the bug; one function is the fix.
+ */
+const labelOf = (s: PyaiSegment) => s.speaker ?? (s.channel !== undefined ? `channel_${s.channel}` : 'speaker_1');
+
+/**
+ * Map provider speaker labels onto our two roles — diarize mode only.
+ *
+ * `diarize` has no ground truth, so we use a stated heuristic: whoever speaks first is the rep,
+ * because the rep opens the call. It is right on essentially every real sales call and wrong on
+ * some — which is why `Call.separation` is persisted and shown in the UI, so nobody mistakes a
+ * heuristic for a fact.
+ *
+ * `channel` mode does NOT go through here. See `roleFromChannel`.
+ */
+function buildSpeakerMap(segs: PyaiSegment[]): Map<string, string> {
   const map = new Map<string, string>();
-  if (mode === 'channel') {
-    for (const s of segs) {
-      const label = s.speaker ?? `channel_${s.channel}`;
-      if (s.channel === 0) map.set(label, 'rep');
-      else if (s.channel === 1) map.set(label, 'prospect');
-      else map.set(label, label);
-    }
-    return map;
-  }
   const order: string[] = [];
   for (const s of [...segs].sort((a, b) => a.start - b.start)) {
-    const label = s.speaker ?? 'speaker_1';
+    const label = labelOf(s);
     if (!order.includes(label)) order.push(label);
   }
   order.forEach((label, i) => map.set(label, i === 0 ? 'rep' : i === 1 ? 'prospect' : label));
   return map;
 }
 
-function mapSegments(segs: PyaiSegment[], mode: 'channel' | 'diarize'): TranscriptSegment[] {
-  const speakers = buildSpeakerMap(segs, mode);
+/**
+ * In channel mode the channel integer IS the ground truth, so read the role off it per segment.
+ *
+ * This replaces a label-keyed map, and the map was the defect — not merely a collision risk.
+ * `buildSpeakerMap` used to do `map.set(s.speaker, role)` once per segment in channel mode, so if
+ * PyAI ever returned the same speaker label on both channels (entirely possible: in channel mode
+ * separation is BY CHANNEL and the label is incidental) the last write won and **every segment
+ * collapsed onto whichever role was written last**. That is exactly the reported symptom — a
+ * stereo call arriving with nearly every line attributed to one speaker — and it would have
+ * survived fixing the mode selection, because it is a second, independent cause.
+ *
+ * Keying on a label the vendor chooses, when we hold the deterministic key, was the mistake.
+ * We generate our sample stereo with the rep on the left, so channel 0 is the rep — a convention
+ * we control, documented in scripts/make-samples.ts. Change it in both places or neither.
+ */
+const roleFromChannel = (s: PyaiSegment) =>
+  s.channel === 0 ? 'rep' : s.channel === 1 ? 'prospect' : labelOf(s);
+
+export function mapSegments(segs: PyaiSegment[], mode: 'channel' | 'diarize'): TranscriptSegment[] {
+  const speakers = mode === 'diarize' ? buildSpeakerMap(segs) : null;
   return [...segs]
     .sort((a, b) => a.start - b.start || a.end - b.end)
     .map((s, i) => ({
       // IDs are assigned HERE, once, at ingestion — never by a model, never regenerated.
       id: segId(i),
-      speaker: speakers.get(s.speaker ?? `channel_${s.channel}`) ?? s.speaker ?? 'unknown',
+      speaker: speakers ? (speakers.get(labelOf(s)) ?? labelOf(s)) : roleFromChannel(s),
       start_ms: Math.round(s.start * 1000),
       end_ms: Math.round(s.end * 1000),
       text: s.text.trim(), // verbatim: no casing or punctuation "fixes"

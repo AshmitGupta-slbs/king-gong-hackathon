@@ -30,6 +30,15 @@ export const SpeakerSchema = z.string().min(1);
  * invented by a language model. PyAI hands back an integer index and float seconds; the
  * ingest mapper is what turns that into this shape (see docs/api-truth.md).
  */
+/**
+ * How speakers were separated. `channel` reads the party off the stereo channel index (exact,
+ * model-free); `diarize` asks the model. `auto` is a *request* value only — the upload route
+ * resolves it from the audio and never stores or forwards it, so the provider and the DB only
+ * ever see a concrete mode. See lib/separation.ts.
+ */
+export const SeparationModeSchema = z.enum(['channel', 'diarize']);
+export const RequestedSeparationSchema = z.enum(['auto', 'channel', 'diarize']);
+
 export const TranscriptSegmentSchema = z.object({
   id: z.string().regex(/^seg_\d{3,}$/, 'segment ids look like seg_000'),
   speaker: SpeakerSchema,
@@ -224,7 +233,7 @@ export const CallSchema = z.object({
   audio_path: z.string(),
   duration_ms: z.number().int().nonnegative(),
   /** How speakers were separated — recorded so the UI can be honest about provenance. */
-  separation: z.enum(['channel', 'diarize', 'fixture']),
+  separation: z.enum([...SeparationModeSchema.options, 'fixture']),
   created_at: z.number().int(),
   share_id: z.string().nullable(),
 });

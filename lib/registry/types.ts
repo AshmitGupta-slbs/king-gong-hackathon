@@ -1,3 +1,4 @@
+import { z } from 'zod';
 /**
  * Capability interfaces.
  *
@@ -5,7 +6,7 @@
  * returning. Nothing outside lib/registry/providers/ ever sees a raw vendor payload — that is
  * what makes swapping a provider a one-file change instead of a rewrite.
  */
-import type { ExtractionDraft, TranscriptSegment } from '@/lib/types';
+import type { ExtractionDraft, SeparationModeSchema, TranscriptSegment } from '@/lib/types';
 
 /** Metered work a provider performed, so the harness can surface real minute/token burn. */
 export type UsageReport = {
@@ -24,7 +25,7 @@ export type UsageReport = {
  * `channel` — stereo, one party per channel. Exact, model-free separation. Use for our samples.
  * `diarize` — mono. Model-based speaker attribution. Use for real uploads.
  */
-export type SeparationMode = 'channel' | 'diarize';
+export type SeparationMode = z.infer<typeof SeparationModeSchema>;
 
 export type STTRequest = {
   audio: Uint8Array;

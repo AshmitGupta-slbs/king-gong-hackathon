@@ -10,7 +10,8 @@ import { randomUUID } from 'node:crypto';
 import { NextResponse } from 'next/server';
 import { listCalls } from '@/lib/db';
 import { processCall } from '@/lib/harness/loop';
-import type { SeparationMode } from '@/lib/registry/types';
+import { resolveSeparation } from '@/lib/separation';
+import { RequestedSeparationSchema } from '@/lib/types';
 
 export const runtime = 'nodejs';
 export const maxDuration = 300;
@@ -25,8 +26,16 @@ export async function POST(req: Request) {
     const file = form.get('audio');
     const url = String(form.get('url') ?? '').trim();
     const title = String(form.get('title') ?? '').trim() || 'Untitled call';
-    // Stereo (one party per channel) gets exact separation; mono needs the diarizer.
-    const mode = (String(form.get('mode') ?? 'diarize') as SeparationMode) ?? 'diarize';
+    // Validated, not cast. The previous `as SeparationMode` let any string through to
+    // pyai-jobs.ts's bare `else`, where everything that wasn't exactly 'channel' silently
+    // diarized — so a typo'd mode was indistinguishable from a deliberate one.
+    const requested = RequestedSeparationSchema.safeParse(form.get('mode') ?? 'auto');
+    if (!requested.success) {
+      return NextResponse.json(
+        { error: 'mode must be one of: auto, channel, diarize' },
+        { status: 400 },
+      );
+    }
 
     let bytes: Uint8Array;
     let filename: string;
@@ -72,19 +81,30 @@ export async function POST(req: Request) {
     const stored = `${callId}.wav`;
     writeFileSync(join(dir, stored), bytes);
 
+    /**
+     * Decide separation from the audio, not from a form default.
+     *
+     * This is the fix for a real bug: a stereo two-party recording was transcribed with
+     * `diarize: true` because the radio defaulted to mono and nothing read the file. Resolving
+     * HERE rather than inside the provider is deliberate — `loop.ts` persists `input.mode`
+     * verbatim, so handing it the resolved value makes `Call.separation` a fact about the audio
+     * instead of a record of what a form happened to post, with no change to the harness.
+     */
+    const separation = resolveSeparation(bytes, requested.data);
+
     const outcome = await processCall({
       callId,
       title,
       audio: bytes,
       filename,
       audioPath: `/api/audio/${stored}`,
-      mode,
+      mode: separation.mode,
       numerals: true,
     });
 
     // A failed or deadlined run is still a 200 with a status — the client needs the run record,
     // not an exception. Every run leaves a trace; that is the whole point of the invariant.
-    return NextResponse.json(outcome);
+    return NextResponse.json({ ...outcome, separation });
   } catch (err) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : String(err) },

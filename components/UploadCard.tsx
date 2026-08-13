@@ -3,19 +3,44 @@
 /**
  * Upload a file or paste an https link.
  *
- * The separation-mode choice is exposed rather than guessed, because it changes how trustworthy
+ * The separation-mode choice stays exposed rather than hidden, because it changes how trustworthy
  * the speaker labels are: stereo telephony recordings give exact one-party-per-channel separation,
  * while mono needs a diarization model. Hiding that would mean presenting a model's guess with the
  * same confidence as a fact, which is the habit this whole product argues against.
+ *
+ * What changed: the DEFAULT no longer guesses. It used to be "Mono", so a stereo two-party
+ * recording uploaded without touching this fieldset was transcribed by the diarizer and came back
+ * with nearly every line on one speaker. "Auto" reads the file instead — and says what it found
+ * before you submit, so the choice is informed rather than merely available.
  */
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
+import { resolveSeparation } from '@/lib/separation';
 
 export function UploadCard() {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
+  const [detected, setDetected] = useState<string | null>(null);
+
+  /**
+   * Preview the decision client-side with the SAME function the route uses, so what the user reads
+   * here is what actually happens. `lib/separation.ts` and `lib/wav.ts` have no dependencies, so
+   * this costs nothing to bundle. The server re-runs it on the full upload and is authoritative.
+   */
+  async function previewFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.currentTarget.files?.[0];
+    if (!file) return setDetected(null);
+    try {
+      // A few MB is plenty to classify turn-taking, and keeps a large file from stalling the UI.
+      const head = new Uint8Array(await file.slice(0, 8_000_000).arrayBuffer());
+      const d = resolveSeparation(head, 'auto');
+      setDetected(`${d.reason} (Auto will use ${d.mode}.)`);
+    } catch {
+      setDetected(null); // a preview that fails is not worth an error banner
+    }
+  }
 
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -65,6 +90,7 @@ export function UploadCard() {
           type="file"
           name="audio"
           accept="audio/wav,audio/mpeg,audio/mp4,audio/flac,audio/ogg,.wav,.mp3,.m4a,.flac,.ogg"
+          onChange={previewFile}
           className="rounded-md border border-border-strong bg-bg-inset px-2.5 py-1.5 text-[12px] text-fg-muted file:mr-2 file:rounded file:border-0 file:bg-border-strong file:px-2 file:py-1 file:text-[11px] file:text-fg"
         />
       </label>
@@ -83,10 +109,16 @@ export function UploadCard() {
           Speaker separation
         </legend>
         <label className="flex items-start gap-2 text-[12px] text-fg-muted">
-          <input type="radio" name="mode" value="diarize" defaultChecked className="mt-0.5 accent-[var(--accent)]" />
+          <input type="radio" name="mode" value="auto" defaultChecked className="mt-0.5 accent-[var(--accent)]" />
           <span>
-            <span className="text-fg">Mono</span> — diarization model splits the speakers. Use this
-            for most recordings.
+            <span className="text-fg">Auto</span> — read the file and pick. Stereo with one party
+            per channel gets exact, model-free separation; anything else uses the diarizer.
+          </span>
+        </label>
+        <label className="flex items-start gap-2 text-[12px] text-fg-muted">
+          <input type="radio" name="mode" value="diarize" className="mt-0.5 accent-[var(--accent)]" />
+          <span>
+            <span className="text-fg">Mono</span> — diarization model splits the speakers.
           </span>
         </label>
         <label className="flex items-start gap-2 text-[12px] text-fg-muted">
@@ -96,6 +128,11 @@ export function UploadCard() {
             involved. Left channel is treated as the rep.
           </span>
         </label>
+        {detected && (
+          <p className="mt-0.5 rounded-md border border-border bg-bg-inset px-2 py-1.5 text-[11px] leading-relaxed text-fg-muted">
+            {detected}
+          </p>
+        )}
       </fieldset>
 
       <button
