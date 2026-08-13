@@ -72,7 +72,7 @@ auto-detected from whatever you have:
 export ANTHROPIC_API_KEY=sk-ant-...          # first-party Anthropic
 # ── or Claude on AWS Bedrock ──
 export AWS_ACCESS_KEY_ID=...  AWS_SECRET_ACCESS_KEY=...  AWS_REGION=us-east-1
-export AWS_ACCOUNT_ID=...                    # only for a bare inference-profile id, below
+# AWS_ACCOUNT_ID is optional — derived via STS when blank
 ```
 
 With neither set, notes fall back to a keyword stub that is **loudly labelled in the UI** and is not
@@ -87,16 +87,17 @@ turn into stub notes that look like model output.
 
 | Value | Sent as |
 |---|---|
-| `3s3wyt6beb2x` — a bare **application inference profile id** (a team's cost-attribution handle) | expanded to `arn:aws:bedrock:{region}:{account}:application-inference-profile/{id}`; needs `AWS_ACCOUNT_ID` |
+| *unset* | `global.anthropic.claude-sonnet-4-6` — a cross-region inference profile that works with nothing else configured |
+| `3s3wyt6beb2x` — a bare **application inference profile id** (a team's cost-attribution handle) | expanded to `arn:aws:bedrock:{region}:{account}:application-inference-profile/{id}`. The account comes from `AWS_ACCOUNT_ID`, or from `sts:GetCallerIdentity` if that is blank |
 | `arn:aws:bedrock:…` | verbatim |
 | `global.anthropic.claude-sonnet-4-6` — cross-region profile | verbatim |
 | `claude-opus-5` — foundation id | routed through a cross-region profile: `global.anthropic.claude-opus-5` |
 
-**On Bedrock, `LLM_MODEL` has no default and must be set.** An account without provisioned
-throughput cannot invoke a foundation model on-demand at all — Bedrock returns *"Invocation of model
-ID … with on-demand throughput isn't supported. Retry with the ID or ARN of an inference profile"* —
-so falling back to a default would only turn a missing setting into a confusing API error one layer
-later. It fails immediately instead, listing what does work.
+**Both `LLM_MODEL` and `AWS_ACCOUNT_ID` are optional.** The default is already an inference profile,
+which matters because an account without provisioned throughput cannot invoke a *foundation* model
+on-demand at all — Bedrock returns *"Invocation of model ID … with on-demand throughput isn't
+supported. Retry with the ID or ARN of an inference profile"*. And when a bare profile id does need an
+account, it is derived once via `sts:GetCallerIdentity`, which requires no IAM permission of its own.
 
 `npm run check:model` prints `input → resolved` for each candidate and reports which your account
 actually accepts — worth running before blaming credentials for a 404.
@@ -144,7 +145,7 @@ real, all verified by forcing the failure rather than reading the code:
 
 ```bash
 npm run test:gate         # 23 checks — the citation gate blocks, logs, and downgrades status
-npm run test:harness      # 105 checks — budgets stop runs, retries bound, no run vanishes, audio inspected
+npm run test:harness      # 112 checks — budgets stop runs, retries bound, no run vanishes, audio inspected
 npm run test:readability  # 46 checks — the display layer never changes what was said
 npm run check:ship        # the pass/fail ship checklist
 npm run verify            # all of the above, in order

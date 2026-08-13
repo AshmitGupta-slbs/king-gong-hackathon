@@ -64,7 +64,7 @@
 
   <div class="glance">
     <p><strong>In one line:</strong> the pipeline, the gate, the harness and the UI are built and verified. The step that <em>writes the notes</em> has never run, because it needs a model credential. Everything you see on screen today is real except the notes themselves.</p>
-    <p><strong>199 automated checks pass.</strong> The ship checklist has exactly one red line, and it is deliberately red.</p>
+    <p><strong>206 automated checks pass.</strong> The ship checklist has exactly one red line, and it is deliberately red.</p>
   </div>
 
   <h2 id="vocabulary">The vocabulary</h2>
@@ -128,7 +128,7 @@
         <tr><td>Mono diarization (<code>diarize</code>)</td><td><span class="chip mustard">Partial</span></td><td>Correctness verified 6/6, and rep identity is a stated heuristic shown in the UI — but the upstream <code>diarize</code> stage <strong>500s in multi-minute windows</strong>, server-side and unrelated to payload. <strong>Still reproducing today</strong> — the deployed app's run log carries a fresh <code>diarize: HTTP 504: stream timeout</code>. <code>channel:true</code> is unaffected, and now that separation is detected from the audio, a verified-stereo upload routes around the failing stage automatically instead of depending on someone knowing to pick Stereo. See <a href="06-pyai-api-truth.html#separation">§06</a></td></tr>
         <tr><td>Segment-id assignment</td><td><span class="chip teal">Working &amp; verified</span></td><td>Asserted contiguous, ordered, never model-authored</td></tr>
         <tr><td><strong>The citation gate</strong></td><td><span class="chip teal">Working &amp; verified</span></td><td>23 checks; drops fabricated ids, flags unsupported claims, downgrades status</td></tr>
-        <tr><td>Seven-part harness</td><td><span class="chip teal">Working &amp; verified</span></td><td>105 checks: forced-failure coverage of all seven parts including a real budget <code>deadline</code>, plus upload identity, separation detection and Bedrock model-id resolution</td></tr>
+        <tr><td>Seven-part harness</td><td><span class="chip teal">Working &amp; verified</span></td><td>112 checks: forced-failure coverage of all seven parts including a real budget <code>deadline</code>, plus upload identity, separation detection, Bedrock model-id resolution and the STS account lookup</td></tr>
         <tr><td>Readability pass</td><td><span class="chip teal">Working &amp; verified</span></td><td>46 checks, incl. property tests that all 50 real segments render saying the same words <em>and</em> numbers as the verbatim text, and that the marked spans re-join to exactly that rendering</td></tr>
         <tr><td>Transcript viewer + audio sync</td><td><span class="chip teal">Working &amp; verified</span></td><td>Playwright: seek correct, page does not scroll, no console errors</td></tr>
         <tr><td>Usage counter</td><td><span class="chip teal">Working &amp; verified</span></td><td>Driven by <code>audio_seconds</code> and real tokens; reads 0.0 on a fresh clone by design</td></tr>

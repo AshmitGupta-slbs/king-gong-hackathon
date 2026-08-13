@@ -108,14 +108,26 @@ export const REGISTRY_CONFIG = {
   tts: (process.env.OPENGONG_TTS ?? 'macos-say') as 'macos-say' | 'pyai-speak',
 
   /**
-   * Claude model + effort for extraction.
+   * Claude model + effort for extraction. `LLM_MODEL` names the model.
    *
-   * `LLM_MODEL` names the model. On Bedrock the provider adds the required `anthropic.` prefix if
-   * it is absent, so either form works here — but the value must be a REAL model id. An opaque
-   * handle from a gateway that maps model names (`3s3wyt6beb2x` and the like) has nothing in this
-   * path to resolve it and will come back as `404 not_found_error`.
+   * THE DEFAULT IS A CROSS-REGION INFERENCE PROFILE, deliberately, and it has to be. An AWS account
+   * without provisioned throughput cannot invoke a *foundation* model on-demand at all — Bedrock
+   * answers "Invocation of model ID … with on-demand throughput isn't supported. Retry with the ID
+   * or ARN of an inference profile". A `global.`-prefixed id IS an inference profile, so it works
+   * with nothing else configured: no account id, no region arithmetic, no provisioned capacity.
+   *
+   * This exact value is the sibling services' own remap target, so it is known-good in this AWS org.
+   * It is written out in full rather than leaning on the `claude-*` → `global.anthropic.*` rule in
+   * lib/bedrock-model-id.ts, so the value that ships is the value that gets sent.
+   *
+   * A previous version defaulted to `claude-opus-5` — correct for the first-party API, rejected by
+   * Bedrock — and then, when that failed, refused to start at all unless LLM_MODEL was set. Both
+   * were wrong: a default the platform rejects is a bug, and refusing to start over an unset
+   * optional variable is a worse one.
+   *
+   * See lib/bedrock-model-id.ts for the four id shapes and how each is resolved.
    */
-  extractModel: process.env.LLM_MODEL ?? 'claude-opus-5',
+  extractModel: process.env.LLM_MODEL?.trim() || 'global.anthropic.claude-sonnet-4-6',
   extractEffort: (process.env.OPENGONG_EFFORT ?? 'high') as
     | 'low'
     | 'medium'

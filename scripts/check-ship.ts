@@ -330,7 +330,13 @@ const scanImports = (dir: string) => {
     if (!/\.(ts|tsx)$/.test(entry.name)) continue;
     if (rel.startsWith('lib/registry/providers')) continue; // the one place that may
     const body = readFileSync(join(ROOT, rel), 'utf8');
-    if (/from '@anthropic-ai\//.test(body)) leaks.push(rel);
+    /**
+     * Vendor SDKs, not just Anthropic's. This pattern used to match only `@anthropic-ai/`, and it
+     * therefore said nothing when AWS signing packages were imported into `lib/` — the same boundary
+     * violation, invisible to the check meant to prevent it. Dynamic `import()` counts too, since
+     * that is how a lazily-loaded SDK would sneak in.
+     */
+    if (/(from|import\()\s*'(@anthropic-ai|@aws-sdk|@aws-crypto|@smithy)\//.test(body)) leaks.push(rel);
   }
 };
 for (const d of ['app', 'lib', 'components', 'scripts']) if (existsSync(join(ROOT, d))) scanImports(d);
