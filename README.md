@@ -61,7 +61,8 @@ That works with a completely empty environment because:
 > we have **not** established whether the limit is per-IP or per-subnet, nor when it resets — the
 > error names no reset window. It matters most on shared wifi, where every laptop on the network
 > draws from the same budget. The five bundled sample calls are unaffected: they are pre-processed
-> and need no key at all (`OPENGONG_STT=fixture` forces that path).
+> and need no key at all — `lib/samples.ts` reads committed JSON and never touches the registry, so
+> no flag is needed to make the bundled demo work offline.
 
 ### To analyse your own calls
 
@@ -152,17 +153,20 @@ real, all verified by forcing the failure rather than reading the code:
 | Named loop with one exit status | `lib/harness/loop.ts` | every run ends `shipped`/`partial`/`failed`/`deadline` |
 | Blocking gate | `lib/harness/gate.ts` | feed it `seg_999` → claim deleted and logged |
 | Bounded aimed retry | `lib/harness/retry.ts` | capped, and the gate's actual complaint goes into the retry prompt |
-| Failure invariant | `lib/harness/runlog` + `db.ts` | run row written *before* work; killed processes reconcile to `failed` |
+| Failure invariant | `lib/harness/loop.ts` + `lib/db.ts` | run row written *before* work; killed processes reconcile to `failed` |
 | Capability registry | `lib/registry/` | provider swap is one config line |
 | Safe parallelism | `lib/harness/parallel.ts` | different calls concurrent, one call's writes serialised |
 | Budget governor | `lib/harness/budget.ts` | token/time/dollar caps checked *before* each call → `deadline` |
 
 ```bash
-npm run test:gate         # 23 checks — the citation gate blocks, logs, and downgrades status
-npm run test:harness      # 112 checks — budgets stop runs, retries bound, no run vanishes, audio inspected
+npm run test:gate         # 37 checks — the citation gate blocks, logs, and downgrades status
+npm run test:harness      # 127 checks — budgets stop runs, retries bound, no run vanishes, audio inspected
+npm run test:skills       # 42 checks — skills load, select, and do not poison the gate
 npm run test:readability  # 46 checks — the display layer never changes what was said
-npm run check:ship        # the pass/fail ship checklist
-npm run verify            # all of the above, in order
+npm run check:ship        # the 27-item pass/fail ship checklist
+npm run verify            # all of the above, in order — 252 checks plus the checklist
+
+npm run test:store        # 66 checks — the storage contract. NOT in verify: it needs a backend
 ```
 
 Try the gate yourself: open any call and press **Test the gate**. It feeds hand-written claims —
@@ -200,6 +204,20 @@ Things a demo would normally hide:
 - **Speaker roles in mono are a heuristic** — whoever talks first is the rep. Exact for stereo. The
   UI always tells you which mode produced the labels.
 - **Sample audio is synthesised**, not real customer calls. No PII in a public repo.
+- **The bundled sample notes were written by hand, not by a model.** Their citations are real and
+  were resolved by the real gate, but no model wrote the prose — `extracted_by` reads
+  `demo-fixture` and the app says so wherever they appear. `npm run verify` therefore has one red
+  line on a clean clone, deliberately. `npm run extract:samples` with a model credential clears it.
+- **A commitment can be closed by a person, not just by evidence.** The model may only mark a prior
+  action item done by quoting a line from a later call; a human may do it with no citation at all.
+  Both are recorded, and the UI shows which — a tick with a quote behind it and a tick that says a
+  person did it are different claims, and the follow-through percentage mixes them.
+- **Skills change the notes.** Anything under `skills/` is loaded into the extraction prompt, so
+  editing a `SKILL.md` — or pointing `OPENGONG_SKILLS_DIR` at a different corpus — changes what the
+  model looks for. "What actually ran" on the home page lists which skills were live.
+- **MongoDB makes records durable, not audio.** With `MONGODB_URI` set the call, transcript and
+  notes survive a redeploy; the uploaded WAV is a filesystem object and needs a mounted volume. See
+  `DEPLOY.md`.
 - **No CRM sync, no deal scoring, no forecasting.** This does the after-the-call job and stops. It
   will show you the exact payload a HubSpot push would post — every claim carrying a link back to
   the line that proves it — but it cannot send it. There is no client and no credential, and
@@ -220,6 +238,13 @@ Things a demo would normally hide:
 | `npm run test:store` | Storage contract, against whichever backend is configured |
 | `npm run test:readability` | Proves the display layer never changes what was said |
 | `npm run check:ship` | Ship checklist |
+| `npm run check:key` | Is the PyAI key live, and what scopes does it carry |
+| `npm run check:model` | Prints `input → resolved` per model id, and which your account accepts |
+| `npm run check:store` | Which storage backend is active, and does a round trip actually work |
+| `npm run fixtures` | Rebuild the hand-authored demo notes (never labelled as model output) |
+| `npm run reindex:samples` | Rebuild `samples/index.json` from what is on disk |
+| `npm run lint` · `npm run build` · `npm start` | The usual Next.js three |
+| `npm run start:docs` | Serve `docs/site/` on :8099 — dependency-free |
 | `npm run verify` | All five suites in order — the one command to run before shipping |
 
 ## Layout
@@ -228,9 +253,16 @@ Things a demo would normally hide:
 lib/types.ts              the data contract — nothing else defines a segment or a claim
 lib/registry/             capability registry + providers (pyai, claude, bedrock, fixtures)
 lib/harness/              the seven parts
-lib/db.ts                 node:sqlite — no native deps
-app/calls/[id]/           the workspace
-samples/                  committed transcripts + notes for the zero-setup demo
+lib/db.ts                 the storage dispatcher — SQLite by default, Mongo if MONGODB_URI is set
+lib/db-sqlite.ts          node:sqlite — no native deps, no server
+lib/db-mongo.ts           the same contract over MongoDB
+lib/store/                backend selection, and a REST shim for gateway-only clusters
+lib/skills.ts             loads skills/ into the extraction prompt
+lib/action-items.ts       commitments carried from the call that made them to the one that settles them
+lib/crm/payload.ts        what a HubSpot push would post. Pure — there is no client and no credential
+skills/<id>/SKILL.md      the judgement, in markdown you can edit without touching TypeScript
+app/(app)/calls/[id]/     the workspace
+samples/                  committed transcripts + notes for the zero-setup demo (audio: public/samples/)
 docs/api-truth.md         every API assumption, verified against the live API
 docs/decisions.md         the judgement calls, and why
 docs/site/index.html      the full documentation site — open it in a browser

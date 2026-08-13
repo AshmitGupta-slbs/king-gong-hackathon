@@ -76,7 +76,10 @@ always cheaper — at enough volume it is not.
   quality claim, including ours.
 - We have not audited any competitor's feature list for this document. Where the table above says
   "not the norm" or "not something we have seen", that is exactly as strong as it sounds.
-- This is not a suite. No coaching workflows, no deal boards, no forecasting, no CRM sync.
+- This is not a suite. No coaching workflows, no deal boards, no forecasting, no CRM sync — it will
+  show you the exact payload a HubSpot push would post, every claim linking back to the line that
+  proves it, and it cannot send it. There is no client and no credential, and `npm run check:ship`
+  fails if either appears.
 - Our transcripts arrive lowercase and uncommaed, because that is what the speech API returns.
   See the caveats in the README — all of them are in the README, which is the point.
 

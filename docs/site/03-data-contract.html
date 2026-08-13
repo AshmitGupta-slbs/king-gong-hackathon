@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>03 · Data contract · OpenGong Lite</title>
+<title>03 · Data contract · King Gong</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,500;9..144,600;9..144,700&family=JetBrains+Mono:wght@400;500;600&family=Inter+Tight:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -15,8 +15,8 @@
 <div class="topbar">
   <div class="topbar-inner">
     <a href="index.html" class="brand">
-      <div class="brand-mark">OG</div>
-      <span>OpenGong Lite</span>
+      <img class="brand-mark" src="assets/logo-mark.png" alt="" width="28" height="28" />
+      <span>King Gong</span>
     </a>
     <div class="topbar-right">
       <span class="pill">Contract</span>
@@ -52,6 +52,7 @@
       <a href="08-status.html"><span class="nav-num">08</span>Built vs pending</a>
       <a href="09-run-and-verify.html"><span class="nav-num">09</span>Run &amp; verify</a>
       <a href="10-decisions-risks.html"><span class="nav-num">10</span>Decisions &amp; risks</a>
+      <a href="11-scorecard.html"><span class="nav-num">11</span>Scorecard</a>
     </nav>
   </div>
 </aside>
@@ -151,12 +152,27 @@
   next_steps: z.array(ClaimSchema),
   follow_up_email: FollowUpEmailSchema,
   key_moments: z.array(KeyMomentSchema),
+  outcomes: z.array(OutcomeSchema).optional(),  // judgements on EARLIER calls' commitments
 });
 
 export const ClaimSchema = z.object({
   claim: z.string(),
   segment_ids: z.array(z.string()).min(1),   // ids that prove it
+});
+
+export const OutcomeSchema = z.object({
+  item_id: z.string(),                       // an action item open for this account
+  status: z.enum(['done', 'not_discussed']),
+  note: z.string(),                          // what THIS call said, in this call's words
+  segment_ids: z.array(z.string()),          // empty for not_discussed — absence has no line
 });</pre>
+
+  <p><code>outcomes</code> is the one field that is <em>not</em> about this call. It carries the model's
+  judgement on commitments made on earlier calls with the same account, each quoting back the stable
+  id it was given. Two details are load-bearing: the id, because matching a commitment on restated
+  wording is the fuzzy join the whole design avoids; and the <code>note</code>, because that is what
+  the gate scores rather than the carried commitment's own text — scoring the latter would compare
+  two different conversations and flag correct judgements as unsupported.</p>
 
   <p><code>ExtractionResult</code> is what the gate produces, and the only thing allowed to reach a screen. It adds the fields the model is not permitted to author:</p>
 
@@ -243,7 +259,7 @@ extracted_by: z.string().optional(),</pre>
 </div>
 
 <footer class="site">
-  <span>OpenGong Lite — Documentation</span>
+  <span>King Gong — Documentation</span>
   <span>§ 03 · Data contract</span>
 </footer>
 <script src="assets/script.js"></script>

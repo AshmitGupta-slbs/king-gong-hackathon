@@ -112,7 +112,7 @@ adopt this, because it puts cited notes where the deal already lives.
 
 **The citation problem is the interesting design question here.** HubSpot renders a note as HTML with
 no concept of a segment id, so the receipts have to survive the trip. The honest option is to make
-every claim a link back to `/{share_id}#seg_014` on the King Gong instance, so a reader in HubSpot can
+every claim a link back to `/s/{share_id}#seg_014` on the King Gong instance, so a reader in HubSpot can
 still click through to the moment that proves it. Writing the claims into HubSpot *without* their
 citations would strip out precisely the property this product exists to provide — it should be
 treated as a non-option rather than a v1 simplification.
@@ -141,9 +141,9 @@ This requires a public app built with HubSpot's developer projects tooling, not 
    silently writes into a CRM will be uninstalled the first time it writes something wrong.
 4. Only then consider OAuth, webhooks and a UI extension.
 
-Before writing any of it, the real object and property shapes can be explored read-only — this
-workspace already has HubSpot MCP tooling available, so the schema can be checked against an actual
-portal rather than guessed from documentation.
+Before writing any of it, check the real object and property shapes against an actual portal rather
+than guessing from documentation. That is how the three findings at the top of this document were
+established, and each one would have been got wrong by reading the docs alone.
 
 ## 7. What must not regress
 

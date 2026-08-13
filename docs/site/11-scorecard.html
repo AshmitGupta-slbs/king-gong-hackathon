@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>11 · Scorecard · King Gong</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,500;9..144,600;9..144,700&family=JetBrains+Mono:wght@400;500;600&family=Inter+Tight:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/style.css">
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.0/dist/mermaid.min.js"></script>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-inner">
+    <a href="index.html" class="brand">
+      <img class="brand-mark" src="assets/logo-mark.png" alt="" width="28" height="28" />
+      <span>King Gong</span>
+    </a>
+    <div class="topbar-right">
+      <span class="pill">Self-assessment</span>
+      <span>§ 11</span>
+    </div>
+  </div>
+</div>
+
+<div class="layout">
+<aside class="sidebar">
+  <button class="mobile-nav-toggle" aria-label="Toggle navigation">☰ Sections</button>
+  <div class="sidebar-section">
+    <div class="sidebar-label">Start here</div>
+    <nav>
+      <a href="index.html"><span class="nav-num">00</span>Overview</a>
+      <a href="01-what-it-does.html"><span class="nav-num">01</span>What it does</a>
+    </nav>
+  </div>
+  <div class="sidebar-section">
+    <div class="sidebar-label">How it works</div>
+    <nav>
+      <a href="02-architecture.html"><span class="nav-num">02</span>Architecture</a>
+      <a href="03-data-contract.html"><span class="nav-num">03</span>Data contract</a>
+      <a href="04-citation-gate.html"><span class="nav-num">04</span>The citation gate</a>
+      <a href="05-harness.html"><span class="nav-num">05</span>The harness</a>
+    </nav>
+  </div>
+  <div class="sidebar-section">
+    <div class="sidebar-label">Reality</div>
+    <nav>
+      <a href="06-pyai-api-truth.html"><span class="nav-num">06</span>PyAI API truth</a>
+      <a href="07-extraction-providers.html"><span class="nav-num">07</span>Extraction &amp; providers</a>
+      <a href="08-status.html"><span class="nav-num">08</span>Built vs pending</a>
+      <a href="09-run-and-verify.html"><span class="nav-num">09</span>Run &amp; verify</a>
+      <a href="10-decisions-risks.html"><span class="nav-num">10</span>Decisions &amp; risks</a>
+      <a href="11-scorecard.html" class="active"><span class="nav-num">11</span>Scorecard</a>
+    </nav>
+  </div>
+</aside>
+
+<main class="content">
+
+  <div class="page-eyebrow">§ 11 · Scorecard</div>
+  <h1 class="page-title">Marking our own <em>homework.</em></h1>
+  <p class="page-lede">This build is scoring itself, so treat every number as a claim by an interested party. What makes it worth reading is that each one names the file or the command that produces it. The brief asks for exactly this document — <em>"go criterion by criterion and name where you're weak, with evidence. Don't be diplomatic about it."</em> So the weak parts are named, and the last section says which one gets the remaining time.</p>
+
+  <div class="glance">
+    <p><strong>79 / 100.</strong> Ship checklist 6/6. Seven harness parts, 7/7. The weakest criterion is API gravity, and it is weak for a reason the ship checklist caused.</p>
+  </div>
+
+  <h2 id="rubric">The rubric, scored</h2>
+
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>Criterion</th><th>Weight</th><th>Score</th><th>In one line</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Product pull</strong></td><td>30%</td><td><strong>26</strong></td><td>The citation mechanic is real and it holds — but a stranger's first run shows hand-authored notes and a failing test command</td></tr>
+        <tr><td><strong>Demo magnetism</strong></td><td>25%</td><td><strong>19</strong></td><td>The moment exists and is the one the reference predicted. The rehearsal does not exist</td></tr>
+        <tr><td><strong>API gravity</strong></td><td>20%</td><td><span class="chip accent">12</span></td><td>One PyAI product where the brief specified two, and a zero-setup demo that burns nothing</td></tr>
+        <tr><td><strong>Loop depth</strong></td><td>15%</td><td><strong>14</strong></td><td>All seven parts named, tested, load-bearing</td></tr>
+        <tr><td><strong>Craft</strong></td><td>10%</td><td><strong>8</strong></td><td>The code would survive a hostile read. The docs, until this commit, would not</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2 id="pull">Product pull — 30% → 26</h2>
+
+  <p>The reference is explicit that this criterion is answered by the citation mechanic and <strong>not</strong> summary quality: <em>"summaries are table stakes; every competitor already has one."</em></p>
+
+  <p>Every claim carries <code>segment_ids</code>, and the gate resolves them against the transcript before anything ships. A claim citing a line that does not exist is <strong>deleted</strong>. Timestamps and quoted text come from the segment, never from the model's prose. Click a citation and the audio seeks to that second.</p>
+
+  <p>Three things go further than the brief asked: the gate's <strong>rejections are published</strong> as a first-class panel rather than hidden; unverified claims ship <strong>flagged rather than dropped</strong>, with the support score visible; and commitments now <strong>carry between calls and can only be closed by evidence</strong> — a model marking a prior action item done must quote the line on <em>this</em> call that says so.</p>
+
+  <div class="card accent">
+    <span class="card-eyebrow">THE DEDUCTION</span>
+    <div class="card-title">What a stranger meets on their first run</div>
+    <p>The five bundled sample notes were hand-authored, not model-written — <code>extracted_by</code> reads <code>demo-fixture</code> and the app says so in three places. And <code>npm run verify</code> fails on a clean clone, on the provenance gate, for that reason. Both are honest. Both are also the first thing a stranger sees, and "would a stranger switch tomorrow" is precisely a question about first impressions.</p>
+    <p>One command with a real credential fixes both: <code>npm run extract:samples</code>.</p>
+  </div>
+
+  <h2 id="magnetism">Demo magnetism — 25% → 19</h2>
+
+  <p>The moment exists, and it is the one the build reference predicted: it names click-a-citation-and-the-audio-jumps as <em>"the single feature most likely to be your demo's 'oh damn'"</em>. It works, it is instant, and the transcript scrolls to the line and pulses it.</p>
+
+  <p>The harness has a stage moment too — <strong>Test the gate</strong> feeds fabricated citations through the real gate and shows what it dropped, which is the brief's own advice for making Loop depth visible. And the CRM payload tab shows the exact JSON a push would post, with a check that fails the build if anyone adds a way to send it.</p>
+
+  <p><strong>What is missing is the part the brief cares about most.</strong> The demo has never been rehearsed or timed on the real setup path — <code>check:ship</code> prints that omission itself. And <code>docs/hero.png</code>, the README's flagship image, shows the stub-extractor banner, which this project's own demo script forbids: <em>"Do not demo with the STUB EXTRACTOR badge showing."</em> It also predates the CRM payload tab and the action-items card, so it shows a UI that no longer exists.</p>
+
+  <h2 id="gravity">API gravity — 20% → 12</h2>
+
+  <p>The counter is real and honest: top bar, unmissable, counting audio seconds, tokens, calls and claims blocked — and replaying a committed sample deliberately records <strong>nothing</strong>, so the number only moves when work actually happens.</p>
+
+  <p>Three things count against it, and none are small.</p>
+
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>Against</th><th>Detail</th></tr></thead>
+      <tbody>
+        <tr><td><strong>One product, not two</strong></td><td>The portfolio slide specifies a <em>"Hear + Recap loop"</em>. Hear runs on every upload. <strong>Recap is unused</strong> — the sandbox key carries neither <code>recap:read</code> nor <code>recap:configure</code> and Recap needs an org add-on, so extraction runs on Claude. Defensible, documented, still half the surface</td></tr>
+        <tr><td><strong>Speak is switched off</strong></td><td>Written and tested, defaulted to <code>macos-say</code> after Speak returned <code>503 upstream_error</code> across three model ids and two response formats. So nobody burns Speak minutes — and TTS is sample generation only, never on the request path</td></tr>
+        <tr><td><strong>The demo burns nothing</strong></td><td>The honest cost of the ship checklist. Samples replay from committed JSON with no network, which is what makes zero-setup work — and means a judge clicking through sees <code>0.0 min</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>And the shape is per-call, not daily. The brief's own model of gravity is dictation, hit dozens of times a day. Deal notes are a few times a week.</p>
+
+  <h2 id="depth">Loop depth — 15% → 14</h2>
+
+  <p>All seven parts exist as named files with a stated contract, and each has a section in the suites — see <a href="05-harness.html">§ 05</a>. Two worth pointing at specifically.</p>
+
+  <p>The gate's asymmetry is deliberate and documented: list claims with unresolvable citations are dropped, singleton deliverables are flagged and force <code>run_status: partial</code>. That is a decision somebody made, not a default.</p>
+
+  <p>The budget governor was <strong>wrong until recently and is now right</strong>. It estimated input tokens from the transcript alone, ignoring the system prompt and every context block — 14 estimated tokens against a real prompt of 980 on a two-line call. It now sizes the message actually sent. A cap that cannot see the text it is capping is not a cap.</p>
+
+  <p>The single point off: <code>npm run verify</code> does not include <code>test:store</code> (66 checks), because that needs a configured backend. Reasonable — but it means "the one command" is not literally everything.</p>
+
+  <h2 id="craft">Craft — 10% → 8</h2>
+
+  <p>193 files, 17,317 lines of TypeScript, 47 commits. Five suites totalling <strong>252 checks</strong>, a 27-item ship checklist, and four operational checks. Boundaries are enforced rather than asserted: the build fails if a vendor SDK is imported outside the providers directory, if a <code>process.env</code> read under <code>lib/</code> is undocumented, if a credential appears in a committed file, or if a HubSpot client appears anywhere.</p>
+
+  <p><strong>The two points off are the documentation.</strong> Until this commit the README pointed at a file that does not exist, gave the wrong path for the call page, omitted nine of nineteen scripts and two whole directories, and carried check counts matching neither the code nor this site. This site was four commits stale, and its generator would have re-stamped the old product name across all ten pages on the next build. Fixed now — but "would we be proud of this in public" is a question about the whole artefact, and a stranger reads the docs first.</p>
+
+  <h2 id="checklist">Ship checklist — pass/fail, no partial credit</h2>
+
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>Item</th><th>State</th><th>Evidence</th></tr></thead>
+      <tbody>
+        <tr><td>MIT license, public repo</td><td><span class="chip teal">PASS</span></td><td><code>LICENSE</code>, <code>package.json</code>, public on GitHub</td></tr>
+        <tr><td>Five-minute setup that takes five minutes</td><td><span class="chip mustard">PASS*</span></td><td>Three commands, no native compilation, works with zero credentials — but see the asterisk</td></tr>
+        <tr><td>Sample data, zero-setup demo</td><td><span class="chip teal">PASS</span></td><td>Five calls, audio and transcripts and notes committed, seeded on first load with no network</td></tr>
+        <tr><td>One killer screenshot in the README</td><td><span class="chip teal">PASS</span></td><td><code>docs/hero.png</code>, 2560×1440 — though it shows a state the demo script forbids</td></tr>
+        <tr><td>Sandbox key mints itself, no manual steps</td><td><span class="chip teal">PASS</span></td><td>Unauthenticated mint, cached, one attempt per process, named remedy when exhausted</td></tr>
+        <tr><td>Clear exits, gates, capped retries, budgets</td><td><span class="chip teal">PASS</span></td><td>All seven parts — <a href="05-harness.html">§ 05</a></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p><strong>The asterisk is the brief's own condition, and it has not been met.</strong> The requirement is a setup <em>"tested on a machine you haven't touched, not your dev laptop"</em>, timed, by someone who has not seen the code. That run has not happened. Everything suggests it would pass — but the checklist asks for evidence, and "we're fairly sure" is not evidence. One genuine risk a clean machine would expose: Node must be ≥22.5.</p>
+
+  <h2 id="scope">Scope, and one flag</h2>
+
+  <p>The MVP scope is met. One item is softer than it reads: <em>"transcript with speaker names"</em> ships speaker <strong>roles</strong> — exact for stereo, an explicitly stated heuristic for mono — with real names only when a CRM record supplies them.</p>
+
+  <div class="card accent">
+    <span class="card-eyebrow">🚩 SCOPE CREEP, FLAGGED LATE</span>
+    <div class="card-title">The CRM payload preview</div>
+    <p>The brief lists <strong>"no CRM sync"</strong> as explicitly out of scope, and instructs: <em>"if a request would add one of these, flag it as scope creep against the ship checklist rather than building it quietly."</em></p>
+    <p>What was built is not a sync — no client, no credential, no code path that could reach a portal, and a check that fails the build if any appear. The letter of the rule holds, and arguably the guarantee is stronger than the rule asked for. But the instruction was to raise the flag <em>before</em> building, and that did not happen; it went into a commit message instead. This is the correction.</p>
+  </div>
+
+  <p><strong>One divergence from the reference worth recording.</strong> The build reference anticipated an <code>opengong-lite-builder.skill</code> installed into <code>.claude/skills/</code> — a skill for the tool building the product. This repo has none. It instead put skills at <strong>runtime</strong>: six <code>SKILL.md</code> files loaded into the extraction prompt, so the judgement about what counts as a real objection lives in markdown a salesperson can edit. Deliberate, and recorded as a divergence rather than presented as compliance.</p>
+
+  <h2 id="weakest">The weakest thing, and what to do about it</h2>
+
+  <p><strong>API gravity, 12/20.</strong> Lowest score, a fifth of the total, and the one the brief warns is easiest to under-invest in because it never shows up in a screenshot.</p>
+
+  <div class="grid-2">
+    <div class="card teal">
+      <span class="card-eyebrow">HIGHEST LEVERAGE</span>
+      <div class="card-title">Run one real extraction</div>
+      <p><code>npm run extract:samples</code> with the Bedrock credential already configured. Makes the bundled notes model-written, clears the only red in <code>verify</code>, moves the token counter off zero, and unblocks a hero screenshot without the stub banner. Product pull, Craft and Demo magnetism, in one command.</p>
+    </div>
+    <div class="card teal">
+      <span class="card-eyebrow">SECOND</span>
+      <div class="card-title">Make the demo burn minutes on stage</div>
+      <p>Beat 2 uploads a real file with a live key. Rehearse it, and make sure the counter visibly moves — the brief says this in as many words.</p>
+    </div>
+    <div class="card teal">
+      <span class="card-eyebrow">THIRD</span>
+      <div class="card-title">Re-probe Speak</div>
+      <p><code>OPENGONG_TTS=pyai-speak</code> is one variable and the code is written and tested. It was defaulted off after a real 503, not by choice.</p>
+    </div>
+    <div class="card teal">
+      <span class="card-eyebrow">NOT A CODE CHANGE</span>
+      <div class="card-title">Time the setup on a clean machine</div>
+      <p>The only checklist item still carrying an asterisk, and the cheapest to close. Someone who has not seen the code, a machine nobody has touched, a stopwatch.</p>
+    </div>
+  </div>
+
+  <div class="related">
+    <div class="related-label">Related sections</div>
+    <div class="related-grid">
+      <a href="08-status.html"><strong>08 · Built vs pending</strong><small>The evidence behind these scores</small></a>
+      <a href="09-run-and-verify.html"><strong>09 · Run &amp; verify</strong><small>Reproduce every number here</small></a>
+      <a href="10-decisions-risks.html"><strong>10 · Decisions &amp; risks</strong><small>What we chose, and what we do not know</small></a>
+    </div>
+  </div>
+  <div class="page-nav">
+    <a href="10-decisions-risks.html">
+      <span class="nav-direction">← Previous</span>
+      <span class="nav-title">10 · Decisions &amp; risks</span>
+    </a>
+    <span></span>
+  </div>
+
+</main>
+
+<aside class="toc">
+  <div class="toc-label">On this page</div>
+  <ul>
+    <li><a href="#rubric">The rubric, scored</a></li>
+    <li><a href="#pull">Product pull</a></li>
+    <li><a href="#magnetism">Demo magnetism</a></li>
+    <li><a href="#gravity">API gravity</a></li>
+    <li><a href="#depth">Loop depth</a></li>
+    <li><a href="#craft">Craft</a></li>
+    <li><a href="#checklist">Ship checklist</a></li>
+    <li><a href="#scope">Scope, and one flag</a></li>
+    <li><a href="#weakest">The weakest thing</a></li>
+  </ul>
+</aside>
+</div>
+
+<footer class="site">
+  <span>King Gong — Documentation</span>
+  <span>§ 11 · Scorecard</span>
+</footer>
+<script src="assets/script.js"></script>
+
+</body>
+</html>

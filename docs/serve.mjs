@@ -100,5 +100,5 @@ const server = createServer((req, res) => {
 });
 
 server.listen(PORT, () => {
-  console.log(`OpenGong Lite docs on http://localhost:${PORT} (serving ${ROOT})`);
+  console.log(`King Gong docs on http://localhost:${PORT} (serving ${ROOT})`);
 });

@@ -95,12 +95,27 @@
   next_steps: z.array(ClaimSchema),
   follow_up_email: FollowUpEmailSchema,
   key_moments: z.array(KeyMomentSchema),
+  outcomes: z.array(OutcomeSchema).optional(),  // judgements on EARLIER calls' commitments
 });
 
 export const ClaimSchema = z.object({
   claim: z.string(),
   segment_ids: z.array(z.string()).min(1),   // ids that prove it
+});
+
+export const OutcomeSchema = z.object({
+  item_id: z.string(),                       // an action item open for this account
+  status: z.enum(['done', 'not_discussed']),
+  note: z.string(),                          // what THIS call said, in this call's words
+  segment_ids: z.array(z.string()),          // empty for not_discussed — absence has no line
 });</pre>
+
+  <p><code>outcomes</code> is the one field that is <em>not</em> about this call. It carries the model's
+  judgement on commitments made on earlier calls with the same account, each quoting back the stable
+  id it was given. Two details are load-bearing: the id, because matching a commitment on restated
+  wording is the fuzzy join the whole design avoids; and the <code>note</code>, because that is what
+  the gate scores rather than the carried commitment's own text — scoring the latter would compare
+  two different conversations and flag correct judgements as unsupported.</p>
 
   <p><code>ExtractionResult</code> is what the gate produces, and the only thing allowed to reach a screen. It adds the fields the model is not permitted to author:</p>
 
