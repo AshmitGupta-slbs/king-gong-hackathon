@@ -15,7 +15,29 @@
  */
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
+import { Info, Loader2 } from 'lucide-react';
 import { resolveSeparation } from '@/lib/separation';
+import { Button } from '@/components/ui/Button';
+import { Field, FieldLabel, inputStyles } from '@/components/ui/Field';
+import { cx } from '@/components/ui/cx';
+
+const MODES = [
+  {
+    value: 'auto',
+    name: 'Auto',
+    desc: 'Read the file and pick. Stereo with one party per channel gets exact, model-free separation; anything else uses the diarizer.',
+  },
+  {
+    value: 'diarize',
+    name: 'Mono',
+    desc: 'A diarization model splits the speakers.',
+  },
+  {
+    value: 'channel',
+    name: 'Stereo',
+    desc: 'One party per channel. Exact, no model involved. Left channel is treated as the rep.',
+  },
+] as const;
 
 export function UploadCard() {
   const router = useRouter();
@@ -23,6 +45,7 @@ export function UploadCard() {
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const [detected, setDetected] = useState<string | null>(null);
+  const [mode, setMode] = useState<string>('auto');
 
   /**
    * Preview the decision client-side with the SAME function the route uses, so what the user reads
@@ -71,85 +94,85 @@ export function UploadCard() {
   }
 
   return (
-    <form
-      onSubmit={submit}
-      className="flex flex-col gap-3 rounded-xl border border-border-subtle bg-bg-raised p-4"
-    >
-      <label className="flex flex-col gap-1.5">
-        <span className="text-[11px] uppercase tracking-wider text-fg-dim">Call title</span>
-        <input
-          name="title"
-          placeholder="Acme Corp — discovery"
-          className="rounded-md border border-border-strong bg-bg-inset px-2.5 py-1.5 text-[13px] outline-none focus:border-accent"
-        />
-      </label>
+    <form onSubmit={submit} className="flex flex-col gap-4">
+      <Field label="Call title" name="title" placeholder="Acme Corp — discovery" />
 
       <label className="flex flex-col gap-1.5">
-        <span className="text-[11px] uppercase tracking-wider text-fg-dim">Audio file</span>
+        <FieldLabel>Audio file</FieldLabel>
         <input
           type="file"
           name="audio"
           accept="audio/wav,audio/mpeg,audio/mp4,audio/flac,audio/ogg,.wav,.mp3,.m4a,.flac,.ogg"
           onChange={previewFile}
-          className="rounded-md border border-border-strong bg-bg-inset px-2.5 py-1.5 text-[12px] text-fg-muted file:mr-2 file:rounded file:border-0 file:bg-border-strong file:px-2 file:py-1 file:text-[11px] file:text-fg"
+          className={cx(
+            inputStyles,
+            'py-1.5 text-micro text-fg-muted',
+            'file:mr-2.5 file:rounded-chip file:border-0 file:bg-brand-wash file:px-2.5 file:py-1.5',
+            'file:text-caption file:font-medium file:text-brand hover:file:bg-brand-border',
+          )}
         />
       </label>
 
-      <label className="flex flex-col gap-1.5">
-        <span className="text-[11px] uppercase tracking-wider text-fg-dim">…or paste an https URL</span>
-        <input
-          name="url"
-          placeholder="https://example.com/call.wav"
-          className="rounded-md border border-border-strong bg-bg-inset px-2.5 py-1.5 text-[13px] outline-none focus:border-accent"
-        />
-      </label>
+      <Field label="…or paste an https URL" name="url" placeholder="https://example.com/call.wav" />
 
-      <fieldset className="flex flex-col gap-1.5">
-        <legend className="text-[11px] uppercase tracking-wider text-fg-dim">
-          Speaker separation
-        </legend>
-        <label className="flex items-start gap-2 text-[12px] text-fg-muted">
-          <input type="radio" name="mode" value="auto" defaultChecked className="mt-0.5 accent-[var(--accent)]" />
-          <span>
-            <span className="text-fg">Auto</span> — read the file and pick. Stereo with one party
-            per channel gets exact, model-free separation; anything else uses the diarizer.
-          </span>
-        </label>
-        <label className="flex items-start gap-2 text-[12px] text-fg-muted">
-          <input type="radio" name="mode" value="diarize" className="mt-0.5 accent-[var(--accent)]" />
-          <span>
-            <span className="text-fg">Mono</span> — diarization model splits the speakers.
-          </span>
-        </label>
-        <label className="flex items-start gap-2 text-[12px] text-fg-muted">
-          <input type="radio" name="mode" value="channel" className="mt-0.5 accent-[var(--accent)]" />
-          <span>
-            <span className="text-fg">Stereo</span> — one party per channel. Exact, no model
-            involved. Left channel is treated as the rep.
-          </span>
-        </label>
+      <fieldset className="flex flex-col gap-2">
+        <legend className="mb-2 text-micro font-medium text-fg-muted">Speaker separation</legend>
+        {MODES.map((m) => {
+          const active = mode === m.value;
+          return (
+            <label
+              key={m.value}
+              className={cx(
+                'flex cursor-pointer items-start gap-2.5 rounded-control border p-2.5 transition-colors',
+                active
+                  ? 'border-brand-border bg-brand-wash'
+                  : 'border-border-subtle hover:bg-surface-inset',
+              )}
+            >
+              <input
+                type="radio"
+                name="mode"
+                value={m.value}
+                checked={active}
+                onChange={() => setMode(m.value)}
+                className="mt-0.5 shrink-0 accent-[var(--brand)]"
+              />
+              <span className="min-w-0">
+                <span
+                  className={cx(
+                    'block text-micro font-semibold',
+                    active ? 'text-brand' : 'text-fg',
+                  )}
+                >
+                  {m.name}
+                </span>
+                <span className="mt-0.5 block text-caption leading-relaxed text-fg-muted">
+                  {m.desc}
+                </span>
+              </span>
+            </label>
+          );
+        })}
         {detected && (
-          <p className="mt-0.5 rounded-md border border-border bg-bg-inset px-2 py-1.5 text-[11px] leading-relaxed text-fg-muted">
+          <p className="flex items-start gap-2 rounded-control border border-border-subtle bg-surface-inset px-2.5 py-2 text-caption leading-relaxed text-fg-muted">
+            <Info size={13} className="mt-0.5 shrink-0 text-fg-dim" aria-hidden />
             {detected}
           </p>
         )}
       </fieldset>
 
-      <button
-        type="submit"
-        disabled={busy}
-        className="rounded-md bg-accent px-3 py-2 text-[13px] font-semibold text-[#04150f] transition hover:brightness-110 disabled:opacity-50"
-      >
+      <Button type="submit" variant="primary" size="md" disabled={busy}>
+        {busy && <Loader2 size={14} className="animate-spin" aria-hidden />}
         {busy ? 'Processing…' : 'Analyse call'}
-      </button>
+      </Button>
 
-      {note && <p className="text-[11px] text-fg-dim">{note}</p>}
+      {note && <p className="text-caption text-fg-dim">{note}</p>}
       {error && (
-        <p className="rounded border border-bad-dim bg-bad-dim/20 px-2 py-1.5 text-[11px] text-bad">
+        <p className="rounded-control border border-bad-border bg-bad-wash px-2.5 py-2 text-caption leading-relaxed text-bad">
           {error}
         </p>
       )}
-      <p className="text-[10px] leading-snug text-fg-dim">
+      <p className="text-caption leading-snug text-fg-dim">
         A PyAI sandbox key mints itself on first run — no signup, no card.
       </p>
     </form>

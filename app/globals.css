@@ -3,60 +3,172 @@
 /*
  * OpenGong Lite design tokens.
  *
- * Dark by default: this is a tool a rep opens straight after a call, next to a CRM, and the
- * screenshot has to look like a product rather than a demo. Emerald is the accent (it echoes
- * PyAI's own green); amber means "shipped but unverified"; red means "the gate dropped this".
- * Those three colours carry the entire trust story, so they are tokens, not ad-hoc classes.
+ * Light by default: this sits open next to a CRM all day, and a near-black panel in a row of white
+ * SaaS tabs reads as a demo rather than a tool.
+ *
+ * The colour rule that matters: VIOLET IS THE BRAND, and green/amber/red mean one thing each.
+ * Violet carries every interaction — nav, buttons, links, citation chips, the active transcript
+ * line. Green means the citation gate verified a claim, amber means it shipped it unverified, red
+ * means it dropped it. Those three never appear as decoration, so a colour on this screen is always
+ * a statement about evidence. (The previous palette used emerald for both "brand" and "verified",
+ * which made the trust signal unreadable.)
+ *
+ * Every text tone below is checked against the surface it sits on; the ratio is in the comment.
  */
 :root {
-  --bg: #0a0d12;
-  --bg-raised: #11161d;
-  --bg-inset: #0d1117;
-  --border: #1e2530;
-  --border-strong: #2a3441;
-  --fg: #e8ecf1;
-  --fg-muted: #94a3b8;
-  --fg-dim: #64748b;
+  /* ── Surfaces ─────────────────────────────────────────────────────────── */
+  --canvas: #f6f7f9;         /* page background */
+  --surface: #ffffff;        /* cards, sidebar, top bar */
+  --surface-inset: #f2f4f7;  /* wells, inputs, code chips — recessed, not raised */
+  --border: #e4e7ec;         /* hairlines and card edges */
+  --border-strong: #cfd4dc;  /* input borders, dividers that must actually read */
 
-  --accent: #34d399;
-  --accent-dim: #065f46;
-  --warn: #fbbf24;
-  --warn-dim: #78350f;
-  --bad: #f87171;
-  --bad-dim: #7f1d1d;
+  /* ── Text ─────────────────────────────────────────────────────────────── */
+  --fg: #101828;             /* 17.3:1 on white — headings, claims, values */
+  --fg-muted: #475467;       /*  8.0:1 on white — body prose */
+  --fg-dim: #667085;         /*  5.1:1 on white, 4.7:1 on canvas — metadata, labels */
 
-  --rep: #60a5fa;
-  --prospect: #c084fc;
+  /* ── Brand ────────────────────────────────────────────────────────────── */
+  --brand: #6941c6;          /*  7.6:1 on white */
+  --brand-hover: #5829b8;
+  --brand-wash: #f4f0ff;     /* tinted background for chips and the active line */
+  --brand-border: #d9cdf5;
+  --on-brand: #ffffff;       /* ink on a filled violet surface */
+
+  /* ── Semantics. Each is a text tone + a wash + a border, never a raw alpha ──
+   * `-solid` is the SHAPE colour (dots, timeline markers, progress fills) and is a
+   * different value from the text tone on purpose. A text amber dark enough to pass
+   * 4.5:1 (#b54708) reads as red once it is an 8px dot, which would make "flagged"
+   * and "blocked" the same signal — the exact ambiguity this palette exists to remove. */
+  --ok: #067647;             /*  5.8:1 — the gate verified this claim */
+  --ok-solid: #12b76a;
+  --ok-wash: #ecfdf3;
+  --ok-border: #abefc6;
+
+  --warn: #b54708;           /*  5.4:1 — shipped, but unverified */
+  --warn-solid: #f79009;
+  --warn-wash: #fffaeb;
+  --warn-border: #fedf89;
+
+  --bad: #b42318;            /*  6.7:1 — the gate dropped this */
+  --bad-solid: #f04438;
+  --bad-wash: #fef3f2;
+  --bad-border: #fecdca;
+
+  /* ── Speakers ─────────────────────────────────────────────────────────────
+   * Deliberately outside the brand violet AND the three semantic hues, so a speaker
+   * label can never be mistaken for a verdict.
+   *
+   * "prospect" was purple in the dark theme and cannot stay: the active transcript row is
+   * now a violet wash, and a violet label inside a violet row is mud. Teal is the one hue
+   * left that collides with neither the brand nor a verdict — and verdict green only ever
+   * appears in the notes pane, never in the transcript beside these. */
+  --rep: #175cd3;            /*  6.2:1 */
+  --rep-wash: #eff8ff;
+  --rep-border: #b2ddff;
+  --prospect: #0f766e;       /*  5.6:1 */
+  --prospect-wash: #f0fdfa;
+  --prospect-border: #99f6e4;
+
+  /* ── Layout metrics ───────────────────────────────────────────────────────
+   * Read by the shell AND by the call workspace, which used to hard-code the header
+   * height as `top-[57px]` and silently broke whenever the header changed. */
+  --header-h: 60px;
+  --sidebar-w: 232px;
+  --sidebar-w-collapsed: 60px;
 }
 
 @theme inline {
-  --color-bg: var(--bg);
-  --color-bg-raised: var(--bg-raised);
-  --color-bg-inset: var(--bg-inset);
+  /* Surfaces */
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-surface-inset: var(--surface-inset);
   --color-border-subtle: var(--border);
   --color-border-strong: var(--border-strong);
+
+  /* Text */
   --color-fg: var(--fg);
   --color-fg-muted: var(--fg-muted);
   --color-fg-dim: var(--fg-dim);
-  --color-accent: var(--accent);
-  --color-accent-dim: var(--accent-dim);
+
+  /* Brand */
+  --color-brand: var(--brand);
+  --color-brand-hover: var(--brand-hover);
+  --color-brand-wash: var(--brand-wash);
+  --color-brand-border: var(--brand-border);
+  --color-on-brand: var(--on-brand);
+
+  /* Semantics */
+  --color-ok: var(--ok);
+  --color-ok-solid: var(--ok-solid);
+  --color-ok-wash: var(--ok-wash);
+  --color-ok-border: var(--ok-border);
   --color-warn: var(--warn);
-  --color-warn-dim: var(--warn-dim);
+  --color-warn-solid: var(--warn-solid);
+  --color-warn-wash: var(--warn-wash);
+  --color-warn-border: var(--warn-border);
   --color-bad: var(--bad);
-  --color-bad-dim: var(--bad-dim);
+  --color-bad-solid: var(--bad-solid);
+  --color-bad-wash: var(--bad-wash);
+  --color-bad-border: var(--bad-border);
+
+  /* Speakers */
   --color-rep: var(--rep);
+  --color-rep-wash: var(--rep-wash);
+  --color-rep-border: var(--rep-border);
   --color-prospect: var(--prospect);
+  --color-prospect-wash: var(--prospect-wash);
+  --color-prospect-border: var(--prospect-border);
+
+  /*
+   * Type scale. Six named steps replacing ten ad-hoc pixel values, of which eight were
+   * arbitrary brackets. Hierarchy now comes from size and weight; it used to come from
+   * dimming the grey, which is why every panel read as equally unimportant.
+   */
+  --text-display: 1.875rem;      /* 30px — the home hero, once */
+  --text-display--line-height: 1.2;
+  --text-display--letter-spacing: -0.02em;
+  --text-title: 1.25rem;         /* 20px — page titles */
+  --text-title--line-height: 1.3;
+  --text-title--letter-spacing: -0.015em;
+  --text-heading: 0.9375rem;     /* 15px — card headings */
+  --text-heading--line-height: 1.4;
+  --text-body: 0.875rem;         /* 14px — transcript, claims, summary */
+  --text-body--line-height: 1.6;
+  --text-meta: 0.8125rem;        /* 13px — secondary prose */
+  --text-meta--line-height: 1.5;
+  --text-micro: 0.75rem;         /* 12px — labels and chips */
+  --text-micro--line-height: 1.4;
+  --text-caption: 0.6875rem;     /* 11px — timestamps, segment IDs, provenance. The floor. */
+  --text-caption--line-height: 1.45;
+
+  /* Geometry. Named by role so there is one right answer per element. */
+  --radius-chip: 6px;
+  --radius-control: 8px;
+  --radius-card: 12px;
+
+  /* Depth. The old UI had zero shadows and separated surfaces with a 3-point luminance step. */
+  --shadow-card: 0 1px 2px rgb(16 24 40 / 0.06), 0 1px 3px rgb(16 24 40 / 0.10);
+  --shadow-raised: 0 4px 8px -2px rgb(16 24 40 / 0.10), 0 2px 4px -2px rgb(16 24 40 / 0.06);
+
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
 body {
-  background: var(--bg);
+  background: var(--canvas);
   color: var(--fg);
   font-family: var(--font-geist-sans), system-ui, sans-serif;
 }
 
-/* Scrollbars that don't look like 2009 in a dark UI. */
+/* A visible, consistent focus ring — the old UI relied on the browser default over a dark field. */
+:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* Scrollbars sized for a light UI. */
 * {
   scrollbar-width: thin;
   scrollbar-color: var(--border-strong) transparent;
@@ -66,17 +178,27 @@ body {
 *::-webkit-scrollbar-thumb {
   background: var(--border-strong);
   border-radius: 6px;
-  border: 3px solid var(--bg);
+  border: 3px solid var(--surface);
 }
 
 /* The moment a citation is clicked, the target line pulses once. Small, but it is what makes
-   "click a claim, land on the proof" legible instead of a silent scroll. */
+   "click a claim, land on the proof" legible instead of a silent scroll. Retuned for light: it
+   now fades a violet wash DOWN to the resting highlight rather than glowing up off black. */
 @keyframes cite-pulse {
-  0%   { background-color: color-mix(in oklab, var(--accent) 26%, transparent); }
-  100% { background-color: color-mix(in oklab, var(--accent) 7%, transparent); }
+  0%   { background-color: color-mix(in oklab, var(--brand) 22%, transparent); }
+  100% { background-color: color-mix(in oklab, var(--brand) 6%, transparent); }
 }
 .cite-pulse { animation: cite-pulse 1.1s ease-out; }
 
+/*
+ * Reduced motion previously got `animation: none` and nothing else — which left the single most
+ * important interaction in the product with NO visible feedback at all. React strips the class
+ * after 1.2s either way, so a static wash behaves as a flash without animating anything.
+ */
 @media (prefers-reduced-motion: reduce) {
-  .cite-pulse { animation: none; }
+  .cite-pulse {
+    animation: none;
+    background-color: color-mix(in oklab, var(--brand) 14%, transparent);
+  }
+  * { scroll-behavior: auto !important; }
 }
