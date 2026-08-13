@@ -3,17 +3,17 @@
  *
  *   npm run check:model
  *
- * WHY THIS EXISTS. A live upload failed with
- * `404 not_found_error: The model 'anthropic.claude-opus-5' does not exist`, and two readings of the
- * documentation disagreed about the cause — one that Mantle ids are bare, one that the prefix is
- * required and the region simply cannot serve the model. The second was right (see
- * `bedrock-extract.ts`), but only after a round of confident argument in both directions, which is
- * the case for having a tool that just asks.
+ * WHY THIS EXISTS. A live upload failed with `404 not_found_error`, and two sessions then argued
+ * from documentation about whether Bedrock ids are bare or `anthropic.`-prefixed. Neither position
+ * was right: Bedrock takes four different shapes of identifier and the answer depends on which one
+ * you hold (see lib/bedrock-model-id.ts). Reading the working reference implementation settled in
+ * minutes what the argument could not — and this script exists so the next such question is asked of
+ * the API instead of debated.
  *
- * For each candidate model this sends the smallest possible request in BOTH forms — bare
- * (`claude-opus-5`) and prefixed (`anthropic.claude-opus-5`) — and reports which the endpoint
- * resolves. The prefixed form is the expected-correct one on Bedrock; the bare form is probed
- * anyway, because a tool that only tests the answer you already believe cannot correct you.
+ * For each candidate it resolves the id exactly as the provider would, prints `input → resolved` so
+ * a mangled id is visible rather than inferred, and sends the smallest possible request. A mangled id
+ * was the original bug: `3s3wyt6beb2x` used to leave as `anthropic.3s3wyt6beb2x`, and the resulting
+ * 404 was indistinguishable from "this region does not serve that model".
  *
  * The two failure modes are deliberately distinguished, because they look alike and mean opposite
  * things:
@@ -25,6 +25,7 @@
  * construction is kept identical to the provider so the credential path cannot drift.
  */
 import { REGISTRY_CONFIG } from '@/lib/registry';
+import { bedrockModelId } from '@/lib/bedrock-model-id';
 import { probeBedrockModel } from '@/lib/registry/providers/bedrock-extract';
 
 const c = {
@@ -38,7 +39,7 @@ const c = {
 /** The configured model first, then the ones most likely to be enabled. */
 const CANDIDATES = Array.from(
   new Set([
-    REGISTRY_CONFIG.extractModel.replace(/^anthropic\./, ''),
+    REGISTRY_CONFIG.extractModel,
     'claude-opus-5',
     'claude-sonnet-5',
     'claude-opus-4-8',
@@ -68,51 +69,56 @@ async function main() {
     process.exit(1);
   }
 
-  console.log(c.b(`\nProbing model ids on bedrock-mantle · region ${region}`));
-  console.log(c.dim(`  configured: OPENGONG_MODEL=${REGISTRY_CONFIG.extractModel}`));
-  console.log(c.dim('  one 1-token request per cell; bare vs anthropic.-prefixed\n'));
+  console.log(c.b(`\nProbing model ids on Bedrock · region ${region}`));
+  console.log(c.dim(`  configured: LLM_MODEL=${REGISTRY_CONFIG.extractModel}`));
+  console.log(
+    c.dim(
+      `  account: ${process.env.AWS_ACCOUNT_ID?.trim() || '(unset — a bare profile id cannot be expanded)'}`,
+    ),
+  );
+  console.log(c.dim('  one 1-token request per id, sent as resolved\n'));
 
   const resolved: string[] = [];
   let sawNotFound = false;
   let sawDenied = false;
 
-  for (const base of CANDIDATES) {
-    for (const model of [base, `anthropic.${base}`]) {
-      const { outcome, detail } = await probeBedrockModel(region, model);
-      if (outcome === 'resolved') {
-        resolved.push(model);
-        console.log(`  ${c.ok('RESOLVED')}  ${model}`);
-      } else if (outcome === 'not_found') {
-        sawNotFound = true;
-        console.log(`  ${c.dim('not found')} ${model}`);
-      } else if (outcome === 'denied') {
-        sawDenied = true;
-        console.log(`  ${c.warn('DENIED')}    ${model}  ${c.dim('— id valid, account/region cannot use it')}`);
-        console.log(c.dim(`             ${detail}`));
-      } else {
-        console.log(`  ${c.bad('error')}     ${model}`);
-        console.log(c.dim(`             ${detail}`));
-      }
+  /**
+   * Probe what the provider would ACTUALLY send. The id is resolved by shape first, and both forms
+   * are printed, because a mangled id was the whole original bug: `3s3wyt6beb2x` used to leave here
+   * as `anthropic.3s3wyt6beb2x`, and the 404 that came back was indistinguishable from a region
+   * problem. Showing input → resolved makes that class of failure visible instead of inferred.
+   */
+  for (const candidate of CANDIDATES) {
+    let model: string;
+    try {
+      model = bedrockModelId(candidate, region);
+    } catch (err) {
+      console.log(`  ${c.bad('unresolvable')} ${candidate}`);
+      console.log(c.dim(`             ${(err instanceof Error ? err.message : String(err)).split('\n')[0]}`));
+      continue;
+    }
+    const shown = model === candidate ? candidate : `${candidate} ${c.dim('→')} ${model}`;
+    const { outcome, detail } = await probeBedrockModel(region, model);
+    if (outcome === 'resolved') {
+      resolved.push(candidate);
+      console.log(`  ${c.ok('RESOLVED')}  ${shown}`);
+    } else if (outcome === 'not_found') {
+      sawNotFound = true;
+      console.log(`  ${c.dim('not found')} ${shown}`);
+    } else if (outcome === 'denied') {
+      sawDenied = true;
+      console.log(`  ${c.warn('DENIED')}    ${shown}  ${c.dim('— id valid, account/region cannot use it')}`);
+      console.log(c.dim(`             ${detail}`));
+    } else {
+      console.log(`  ${c.bad('error')}     ${shown}`);
+      console.log(c.dim(`             ${detail}`));
     }
   }
 
   console.log('');
   if (resolved.length > 0) {
     console.log(c.ok(c.b(`${resolved.length} model id(s) resolved.`)));
-    const bare = resolved.filter((m) => !m.startsWith('anthropic.'));
-    const prefixed = resolved.filter((m) => m.startsWith('anthropic.'));
-    console.log(
-      c.dim(
-        `  This endpoint wants ${
-          bare.length && !prefixed.length
-            ? 'BARE ids — no "anthropic." prefix'
-            : prefixed.length && !bare.length
-              ? 'PREFIXED ids — "anthropic." required'
-              : 'either form'
-        }.`,
-      ),
-    );
-    console.log(c.dim(`  Use:  export OPENGONG_MODEL=${resolved[0]}\n`));
+    console.log(c.dim(`  Use:  export LLM_MODEL=${resolved[0]}\n`));
     process.exit(0);
   }
 
@@ -127,14 +133,12 @@ async function main() {
     );
   } else if (sawNotFound && !sawDenied) {
     console.log(
-      c.warn('  This result says NOTHING about which id form is correct.'),
-    );
-    console.log(
       c.dim(
-        `  Every candidate came back not-found in BOTH forms, so ${region} appears to serve none of\n` +
-          '  them — the prefix cells only carry information in a region that serves at least one\n' +
-          '  model. Re-run with AWS_REGION=us-east-1 (or us-west-2) and Anthropic model access\n' +
-          '  enabled there before drawing any conclusion about naming.\n',
+        `  Every id was rejected as non-existent rather than refused, so ${region} appears to serve\n` +
+          '  none of them. Check the resolved values printed above are the shape you expect, then try\n' +
+          '  a region where the model or inference profile actually lives. A bare profile id resolves\n' +
+          '  against AWS_ACCOUNT_ID + AWS_REGION, so a wrong region silently produces a valid-looking\n' +
+          '  ARN pointing at nothing.\n',
       ),
     );
   } else {

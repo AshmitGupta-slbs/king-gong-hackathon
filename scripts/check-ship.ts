@@ -346,7 +346,42 @@ const pkg = JSON.parse(read('package.json') ?? '{}') as {
   dependencies?: Record<string, string>;
 };
 assert(Boolean(pkg.scripts?.dev), 'npm run dev exists');
-assert(existsSync(join(ROOT, '.env.example')), '.env.example documents every option');
+/**
+ * Does `.env.example` actually document every option the code reads?
+ *
+ * This check used to assert only that the file EXISTS, under the label ".env.example documents every
+ * option" — a label promising something it never tested. That gap has now bitten three times in this
+ * repo (a gitignore rule that matched nothing, a mint check that proved a runtime guarantee it never
+ * exercised, and this), so it is derived rather than asserted: scan lib/** for every `process.env.X`
+ * the code reads and require each name to appear in the file.
+ *
+ * Vendor credential names (the AWS_ and ANTHROPIC_ prefixes) are excluded — they are resolved by the
+ * SDKs' own chains and documented in prose rather than as knobs of ours.
+ */
+{
+  const envExample = read('.env.example') ?? '';
+  const referenced = new Set<string>();
+  const walkLib = (dir: string) => {
+    for (const entry of readdirSync(join(ROOT, dir), { withFileTypes: true })) {
+      const rel = join(dir, entry.name);
+      if (entry.isDirectory()) {
+        walkLib(rel);
+        continue;
+      }
+      if (!/\.tsx?$/.test(entry.name)) continue;
+      for (const m of readFileSync(join(ROOT, rel), 'utf8').matchAll(/process\.env\.([A-Z0-9_]+)/g)) {
+        if (!/^(AWS_|ANTHROPIC_|NODE_ENV$)/.test(m[1])) referenced.add(m[1]);
+      }
+    }
+  };
+  walkLib('lib');
+  const undocumented = [...referenced].filter((name) => !envExample.includes(name)).sort();
+  assert(
+    existsSync(join(ROOT, '.env.example')) && undocumented.length === 0,
+    `.env.example documents all ${referenced.size} options the code reads`,
+    undocumented.length ? `missing: ${undocumented.join(', ')}` : '',
+  );
+}
 if (pkg.dependencies && 'better-sqlite3' in pkg.dependencies) {
   warn('a native dependency crept in (better-sqlite3) — it adds a compile step to a clean clone');
 }

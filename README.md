@@ -72,10 +72,28 @@ auto-detected from whatever you have:
 export ANTHROPIC_API_KEY=sk-ant-...          # first-party Anthropic
 # ── or Claude on AWS Bedrock ──
 export AWS_ACCESS_KEY_ID=...  AWS_SECRET_ACCESS_KEY=...  AWS_REGION=us-east-1
+export AWS_ACCOUNT_ID=...                    # only for a bare inference-profile id, below
 ```
 
 With neither set, notes fall back to a keyword stub that is **loudly labelled in the UI** and is not
 a substitute for a model. See [Honest caveats](#honest-caveats).
+
+To choose explicitly rather than auto-detect, set `LLM_PROVIDER` (`anthropic_bedrock` · `anthropic` ·
+`stub`). An unrecognised value **fails loudly** rather than falling back, so a typo cannot quietly
+turn into stub notes that look like model output.
+
+`LLM_MODEL` accepts any of the four shapes Bedrock understands, each handled differently
+(`lib/bedrock-model-id.ts`) — getting this wrong yields a 404 that reads like a region problem:
+
+| Value | Sent as |
+|---|---|
+| `3s3wyt6beb2x` — a bare **application inference profile id** (a team's cost-attribution handle) | expanded to `arn:aws:bedrock:{region}:{account}:application-inference-profile/{id}`; needs `AWS_ACCOUNT_ID` |
+| `arn:aws:bedrock:…` | verbatim |
+| `global.anthropic.claude-sonnet-4-6` — cross-region profile | verbatim |
+| `claude-opus-5` — foundation id | `anthropic.` prefix added, then remapped where required |
+
+`npm run check:model` prints `input → resolved` for each candidate and reports which your account
+actually accepts — worth running before blaming credentials for a 404.
 
 Copy `.env.example` for every option.
 
@@ -120,7 +138,7 @@ real, all verified by forcing the failure rather than reading the code:
 
 ```bash
 npm run test:gate         # 23 checks — the citation gate blocks, logs, and downgrades status
-npm run test:harness      # 91 checks — budgets stop runs, retries bound, no run vanishes, audio inspected
+npm run test:harness      # 103 checks — budgets stop runs, retries bound, no run vanishes, audio inspected
 npm run test:readability  # 46 checks — the display layer never changes what was said
 npm run check:ship        # the pass/fail ship checklist
 npm run verify            # all of the above, in order

@@ -1,66 +1,74 @@
 /**
  * Extraction provider: Claude on AWS Bedrock.
  *
- * Uses the **Mantle** client — the Messages-API endpoint
- * (`https://bedrock-mantle.{region}.api.aws/anthropic`). Three AWS surfaces are easy to confuse,
- * and the difference is the model-id format:
+ * Uses **`AnthropicBedrock`** — the Bedrock Runtime Messages API — matching the reference
+ * implementation this deployment shares with its sibling services (dwight's
+ * `_complete_anthropic_bedrock`, `agent-service/app/llm_client.py:702`, re-verified against the same
+ * code in `org-agent/agent/engine/llm_client.py`). That reference is a working production path for
+ * the exact configuration used here, which is why it is followed rather than reasoned about.
  *
- *   • Legacy `InvokeModel`/`Converse` — ARN-versioned ids (`anthropic.claude-...-v1:0`), different
- *     request shape. Not used here.
- *   • **Mantle — Claude in Amazon Bedrock. THIS ONE.** Serves the same Messages API shape as
- *     first-party, and ids carry an `anthropic.` **provider prefix**: `anthropic.claude-opus-5`.
- *   • Claude Platform on AWS — `AnthropicAws` on `aws-external-anthropic.{region}.api.aws`,
- *     Anthropic-operated, **bare** ids. A separate product; not this client.
+ * There is no gateway, no `baseURL` override and no API key on this path: authentication is pure
+ * AWS SigV4 from the credential chain. `ANTHROPIC_API_KEY` is never consulted.
  *
- * THE PREFIX IS REQUIRED HERE, and it took two opposite mistakes to establish that, both worth
- * recording because the reasoning that produced them is seductive:
+ * MODEL IDS ARE NORMALISED BY SHAPE, in lib/bedrock-model-id.ts — read that file before touching
+ * anything about the `model` value. The short version: Bedrock accepts ARNs, cross-region profiles,
+ * foundation ids, and bare application-inference-profile ids, and they need different handling. An
+ * earlier version of this provider prefixed everything with `anthropic.`, which mangled a profile id
+ * into `anthropic.3s3wyt6beb2x` and produced a 404 that reads exactly like a region problem.
  *
- *  1. The original prefix was correct, but its comment was written from recall without the path
- *     ever being executed — §08 carried this provider as "Blocked · never executed" throughout.
- *     Right answer, unearned.
- *  2. It was then *removed*, on the inference that a Messages-API surface must take first-party
- *     ids. That does not follow, and the authoritative doc pre-empts it in one sentence: Mantle
- *     "serves the same Messages API shape — but model IDs carry an `anthropic.` provider prefix",
- *     with an explicit mapping `claude-opus-5` → `anthropic.claude-opus-5` and the warning "do not
- *     generate a first-party `claude-*` ID for a Bedrock client — it will 400". The bare-id rule
- *     belongs to Claude Platform on AWS, a *different* offering whose docs say so on their first
- *     line. Messages-shaped and bare-id are independent properties.
+ * Deliberate differences from the reference, both recorded because they are judgement calls:
+ *   • A missing `AWS_ACCOUNT_ID` throws instead of sending the unexpanded id with a warning.
+ *   • We ask for structured output first; the reference only ever uses tool calling (see below).
  *
- * So a 404 on `anthropic.claude-opus-5` is a well-formed id the account or region cannot serve —
- * not a naming problem. `npm run check:model` distinguishes those two empirically; prefer it over
- * anyone's reading, including this comment's.
- *
- * Structured outputs: the SDK wires the same `Resources.Messages` as the first-party client
- * (`mantle-client.d.ts` — "only the `messages` and `beta.messages` resources are supported"), so
- * `messages.parse` behaves as it does first-party and this provider needs no JSON repair path.
- *
- * Credentials resolve automatically, by the SDK's own precedence:
- *   apiKey arg > awsAccessKey/awsSecretAccessKey > AWS_BEARER_TOKEN_BEDROCK > default AWS chain
- *   region: awsRegion arg > AWS_REGION > AWS_DEFAULT_REGION
- * So exporting AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY / AWS_REGION is enough — there is
- * nothing to pass explicitly. Note the arg name is `awsSecretAccessKey` on this client (the
- * legacy `AnthropicBedrock` client and some docs examples use `awsSecretKey`).
- *
- * Also needed, and NOT something code can arrange: Anthropic model access must be enabled for
- * your account in the Bedrock console, in that region.
+ * Also needed, and NOT something code can arrange: Anthropic model access must be enabled for the
+ * account in the Bedrock console, in that region — or the profile must grant it.
  */
-import { AnthropicBedrockMantle } from '@anthropic-ai/bedrock-sdk';
+import { AnthropicBedrock } from '@anthropic-ai/bedrock-sdk';
 import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
 import { REGISTRY_CONFIG } from '..';
+import { bedrockModelId } from '@/lib/bedrock-model-id';
 import type { ExtractProvider, ExtractRequest, ExtractResult } from '../types';
 import {
   buildExtractUserMessage,
+  EXTRACT_SYSTEM,
   ExtractionDraftSchema,
   extractParams,
   toExtractResult,
 } from './extract-shared';
 
 /**
- * Bedrock ids carry the `anthropic.` provider prefix. An id that already has one is passed through
- * untouched, so `OPENGONG_MODEL` can name either form and still mean what it says.
+ * Above this cap the SDK refuses a non-streaming request — it estimates the response will exceed
+ * its timeout — so the reference switches to `messages.stream` and takes the final message. Ported
+ * because raising `OPENGONG_MAX_OUTPUT_TOKENS` past the default would otherwise start failing for a
+ * reason with nothing to do with this app.
  */
-export function bedrockModelId(model: string): string {
-  return model.startsWith('anthropic.') ? model : `anthropic.${model}`;
+const STREAM_ABOVE_MAX_TOKENS = 16_000;
+
+/** The forced-tool fallback's name; only ever seen in a request, never persisted. */
+const FALLBACK_TOOL = 'record_deal_notes';
+
+/**
+ * One client construction, shared by extraction and the probe, so a diagnostic can never answer for
+ * a different code path than the one that failed.
+ *
+ * Every credential is passed as `?? null`, which is what makes the default AWS chain work: the SDK
+ * falls back to an IAM role or `~/.aws` when a value is null. The reference does exactly this, and
+ * it is likely how the real deployments authenticate. Note the arg names on THIS client are
+ * `awsAccessKey` / `awsSecretKey` — the Mantle client uses `awsSecretAccessKey`, and mixing them up
+ * silently drops the credential.
+ */
+function bedrockClient(region: string): AnthropicBedrock {
+  const awsAccessKey = process.env.AWS_ACCESS_KEY_ID?.trim();
+  const awsSecretKey = process.env.AWS_SECRET_ACCESS_KEY?.trim();
+  const awsSessionToken = process.env.AWS_SESSION_TOKEN?.trim() ?? null;
+
+  // The options are a discriminated union — an explicit key PAIR, or neither. Passing one alone (or
+  // a nullable of each) is rejected at compile time, which is a good constraint: half-supplied
+  // credentials would otherwise silently fall through to the default chain and authenticate as
+  // somebody else entirely.
+  return awsAccessKey && awsSecretKey
+    ? new AnthropicBedrock({ awsRegion: region, awsAccessKey, awsSecretKey, awsSessionToken })
+    : new AnthropicBedrock({ awsRegion: region });
 }
 
 function hasAwsCredentials(): boolean {
@@ -88,7 +96,7 @@ export type ModelProbe = { outcome: 'resolved' | 'not_found' | 'denied' | 'error
  * endpoint can reject, and that would confound a test about model naming.
  */
 export async function probeBedrockModel(region: string, model: string): Promise<ModelProbe> {
-  const client = new AnthropicBedrockMantle({ awsRegion: region });
+  const client = bedrockClient(region);
   try {
     await client.messages.create({
       model,
@@ -104,6 +112,89 @@ export async function probeBedrockModel(region: string, model: string): Promise<
     }
     return { outcome: 'error', detail: msg };
   }
+}
+
+/** What `toExtractResult` needs, however the object was obtained. */
+type ParsedLike = {
+  parsed_output?: unknown;
+  stop_reason?: string | null;
+  stop_details?: { category?: string | null } | null;
+  usage?: { input_tokens?: number; output_tokens?: number } | null;
+};
+
+/**
+ * The preferred path: server-enforced structured output.
+ *
+ * Streams above `STREAM_ABOVE_MAX_TOKENS` because the SDK refuses a non-streaming request with a cap
+ * that high. `messages.parse` has no streaming form, so the streaming branch collects the text and
+ * validates it with the same Zod schema — which `toExtractResult` then re-validates anyway, so a
+ * quirk in either path fails at the boundary rather than reaching the gate.
+ */
+async function structuredExtract(
+  client: AnthropicBedrock,
+  model: string,
+  userMessage: string,
+): Promise<ParsedLike> {
+  const params = { model, ...extractParams(userMessage, zodOutputFormat(ExtractionDraftSchema)) };
+
+  if (params.max_tokens > STREAM_ABOVE_MAX_TOKENS) {
+    const msg = await client.messages.stream(params).finalMessage();
+    const text = msg.content.map((b) => (b.type === 'text' ? b.text : '')).join('');
+    return {
+      ...msg,
+      parsed_output: ExtractionDraftSchema.parse(JSON.parse(text)),
+    };
+  }
+  return client.messages.parse(params);
+}
+
+/**
+ * The fallback: one forced tool call whose input schema IS the extraction schema.
+ *
+ * This is the shape the reference implementation uses in production, so it is the safe harbour when
+ * structured outputs are refused. Note what it drops — `output_config` (effort and format) and
+ * adaptive `thinking` — because those are exactly the parameters a rejection would be complaining
+ * about. `tool_choice` forces the call, so there is no free-text branch to parse and no repair loop;
+ * the tool input is validated by the same schema.
+ */
+async function toolExtract(
+  client: AnthropicBedrock,
+  model: string,
+  userMessage: string,
+): Promise<ParsedLike> {
+  const format = zodOutputFormat(ExtractionDraftSchema) as unknown as { schema: Record<string, unknown> };
+  const params = {
+    model,
+    max_tokens: REGISTRY_CONFIG.budget.maxOutputTokens,
+    system: EXTRACT_SYSTEM,
+    messages: [{ role: 'user' as const, content: userMessage }],
+    tools: [
+      {
+        name: FALLBACK_TOOL,
+        description: 'Record the deal notes for this call. Every claim must cite its segment ids.',
+        input_schema: format.schema as never,
+      },
+    ],
+    tool_choice: { type: 'tool' as const, name: FALLBACK_TOOL },
+  };
+
+  const msg =
+    params.max_tokens > STREAM_ABOVE_MAX_TOKENS
+      ? await client.messages.stream(params).finalMessage()
+      : await client.messages.create(params);
+
+  const call = msg.content.find((b) => b.type === 'tool_use');
+  if (!call || call.type !== 'tool_use') {
+    throw new Error(
+      `bedrock tool-call fallback: the model returned no ${FALLBACK_TOOL} call ` +
+        `(stop_reason=${msg.stop_reason}). Nothing to gate.`,
+    );
+  }
+  return {
+    ...msg,
+    // A forced tool call still arrives as untrusted input, so validate before it goes anywhere.
+    parsed_output: ExtractionDraftSchema.parse(call.input),
+  };
 }
 
 export function bedrockExtractor(): ExtractProvider {
@@ -125,18 +216,35 @@ export function bedrockExtractor(): ExtractProvider {
         );
       }
 
-      // No explicit credential args: let the SDK resolve them so env vars, profiles, and
-      // container/IRSA roles all work without a code change.
-      const client = new AnthropicBedrockMantle({ awsRegion: region });
+      const client = bedrockClient(region);
 
-      const model = bedrockModelId(REGISTRY_CONFIG.extractModel);
+      // Resolved by shape — a bare application-inference-profile id becomes a full ARN here.
+      const model = bedrockModelId(REGISTRY_CONFIG.extractModel, region);
+      const userMessage = buildExtractUserMessage(req);
 
       try {
-        const res = await client.messages.parse({
-          model,
-          ...extractParams(buildExtractUserMessage(req), zodOutputFormat(ExtractionDraftSchema)),
-        });
-        return toExtractResult(res, 'bedrock');
+        try {
+          return toExtractResult(
+            await structuredExtract(client, model, userMessage),
+            'bedrock',
+          );
+        } catch (err) {
+          /**
+           * Structured outputs are the better path — the schema is enforced server-side and there is
+           * no JSON to repair — but they are also the one part of this request the reference does NOT
+           * exercise: it drives Bedrock purely with tool calling and never sends `output_config` or
+           * `thinking`. So if this endpoint rejects those parameters, fall back to the shape that is
+           * known to work rather than failing the run.
+           *
+           * Only parameter rejections are caught. A 404, an auth failure or a refusal must keep
+           * propagating, or the fallback would mask the real problem and double the cost doing it.
+           */
+          const m = err instanceof Error ? err.message : String(err);
+          if (!/ValidationException|output_config|structured|thinking|unsupported|invalid.*param/i.test(m)) {
+            throw err;
+          }
+          return toExtractResult(await toolExtract(client, model, userMessage), 'bedrock (tool-call fallback)');
+        }
       } catch (err) {
         // The failures most likely on a first run, called out so nobody debugs the prompt when the
         // real problem is a model id, an AWS console checkbox, or an unsupported parameter.
@@ -155,7 +263,7 @@ export function bedrockExtractor(): ExtractProvider {
               `"not offered here" from "offered but not enabled for you".\n` +
               `  • Try a region that serves this model (us-east-1 / us-west-2) and enable Anthropic ` +
               `model access there in the Bedrock console.\n` +
-              `  • Or pick a model the region does serve: OPENGONG_MODEL=claude-sonnet-5.\n` +
+              `  • Or pick a model the region does serve: LLM_MODEL=claude-sonnet-5.\n` +
               `Original: ${msg}`,
           );
         }

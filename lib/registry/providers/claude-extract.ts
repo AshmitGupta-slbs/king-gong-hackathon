@@ -30,7 +30,7 @@ export function claudeExtractor(): ExtractProvider {
       if (!process.env.ANTHROPIC_API_KEY && !process.env.ANTHROPIC_AUTH_TOKEN) {
         throw new Error(
           'No Anthropic credential found (ANTHROPIC_API_KEY / ANTHROPIC_AUTH_TOKEN, or an ' +
-            '`ant auth login` profile). Set one, use OPENGONG_EXTRACT=bedrock with AWS creds, or ' +
+            '`ant auth login` profile). Set one, use LLM_PROVIDER=anthropic_bedrock with AWS creds, or ' +
             'view a pre-processed sample call, which needs no credential at all.',
         );
       }
