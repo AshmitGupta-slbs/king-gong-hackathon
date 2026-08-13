@@ -226,6 +226,24 @@ Known-good extensions are mapped in that script: wav, mp3, m4a, mp4, flac, ogg, 
 locally first. `hear_stream_test.py --audio x.mp3` now does that via `afconvert`, which ships with
 macOS and needs no ffmpeg (there is none on this machine).
 
+**The API rejects an oversized/over-quota upload mid-body, and urllib turns that into a lie.**
+Uploading a 4.42 MB file on an over-quota key: curl reported `429 daily_cap_exceeded` after sending
+1,048,097 of 4,419,244 bytes — the server answers and closes the socket without reading the rest.
+`urllib` keeps writing into the closed socket and raises `BrokenPipeError`, discarding the real
+status, so the user sees a 40-line traceback where the answer was "you are out of quota". Any
+uploader needs either a cheap preflight GET (what `mic_diarize_test.py` does now) or to treat a
+broken pipe as "re-check status separately", never as a network fault.
+
+**Trust the bytes, not the filename.** A real recording handed to the probe was named
+`recording.mp3` and was actually `RIFF … WAVE, Microsoft PCM, 16 bit, stereo 8000 Hz`. Consequences
+of believing the extension: `afconvert` picks the MP3 parser and dies with
+`Couldn't open input file ('dta?')`, and the upload's `Content-Type: audio/mpeg` misdescribes a WAV
+payload. `sniff_format()` in `hear_stream_test.py` reads magic bytes instead; `afconvert` dispatches
+on extension, so a mislabelled file must be copied to a correctly-named temp path before decoding.
+The same file being **stereo** is the more useful discovery — see `channel:true` above, which is
+exact and skips the diarization stage entirely, so mislabelled telephony recordings are the case
+where the currently-flaky mono path can be avoided altogether.
+
 **macOS can decode MP3 but not encode it.** `afconvert -f MPG3 -d .mp3` fails with
 `ExtAudioFileSetProperty ('cfmt') failed ('fmt?')` on every input and sample rate tried, including
 a 44.1 kHz mono intermediate. `MPG3` is listed by `afconvert -hf` but is decode-only in practice.
@@ -264,18 +282,38 @@ recovering on its own; `audio_url` submissions kept working throughout, as did s
 confirming the demo path actually exercises that retry rather than surfacing the error, since this
 is the ingest path.
 
-## ⚠ `numerals: true` does NOT work on the jobs endpoint — and it is visible in the demo
+## ⚠ Spoken figures come back as words, and no request flag fixes it — visible in the demo
 
-Tested two ways, two audio sources, both with `numerals` explicitly on:
+*(This heading previously read "`numerals: true` does NOT work on the jobs endpoint". That was
+retracted — see the correction below. Renamed because a heading is what gets quoted, and leaving a
+withdrawn claim in the title while the body disowns it is worse than either alone.)*
+
+**Correction to an earlier version of this section.** It claimed flatly that "the flag is accepted
+and ignored". That was too strong, and further testing disproved it: the endpoint *does* return
+digits sometimes, with or without the flag. The accurate claim is narrower and, for our purposes,
+worse — **you cannot make spoken figures come back as digits by setting a flag.**
 
 | Submission | Audio said | Came back as |
 |---|---|---|
-| multipart upload, `numerals="true"` | "fourteen hundred" | `one four oh oh` |
-| `audio_url` JSON, `"numerals": true` (real boolean), PyAI's own `original-interview.wav` | "ten thirty" | `ten thirty` |
+| the committed `pricing-pushback.wav` (stereo, `channel:true`, `numerals:true`), 68s conversation | "fourteen hundred" | `one four oh oh` |
+| the same file, same flags, re-run later | "fourteen hundred" | `one four oh oh` — **reproducible** |
+| `audio_url` JSON, `"numerals": true` (real boolean), PyAI's `original-interview.wav` | "ten thirty" | `ten thirty` |
+| a short mono `say` clip of the same sentence — WAV 16k, WAV 22k, AIFC 22k, with `numerals:true` **and** without | "fourteen hundred" | `1400` in all four |
 
-So it is not a form-encoding problem — the flag is accepted and ignored. The streaming path renders
-the same phrase as **`1400`**, and the flat sync `/v1/audio/transcriptions` also renders `1400` —
-but that endpoint has **no diarization**, so we cannot simply switch to it.
+So the flag is not the variable. Something about the audio or the mode is: short clean mono
+utterances render digits, while the long stereo `channel:true` conversation reproducibly renders
+spoken digits, and setting or omitting `numerals` changes neither. Which of length, mono-vs-stereo,
+`channel:true`, or surrounding context is responsible is **untested** — it would take several more
+jobs to isolate and the answer would not change what we do.
+
+What it means for us: digit rendering is **unreliable and not controllable from the request**, so
+the display-side pass in `lib/readability.ts` is the right fix rather than a workaround for a broken
+flag. Do not "fix" this by turning `numerals` on and re-running the samples — verified above, it
+does not change them.
+
+The streaming path renders the same phrase as **`1400`**, and the flat sync
+`/v1/audio/transcriptions` also renders `1400` — but that endpoint has **no diarization**, so we
+cannot simply switch to it.
 
 All five committed samples are affected. Zero digits across the whole set; 30 spelled-out numbers:
 
@@ -354,8 +392,9 @@ is the only thing the citation gate and any quoted evidence ever read. Readabili
 Two corrections to an earlier version of this paragraph, both worth knowing:
 
 - **It is no longer "punctuation and casing only."** That was true until the spoken-digit pass
-  landed; there are now two passes with two separate guards. See "`numerals: true` does NOT work on
-  the jobs endpoint" above for the full rules — that section is the authority, not this one.
+  landed; there are now two passes with two separate guards. See "Spoken figures come back as words,
+  and no request flag fixes it" above for the full rules — that section is the authority, not this
+  one. (This pointer named the section by its old title until the retraction renamed it.)
 - **`display_text` is reserved, not live.** Nothing writes it. The schema field exists
   (`TranscriptSegmentSchema`) and the DB column exists, but the UI and the Markdown export both call
   `readableFor(call.title)` per segment at render time rather than reading a stored value. So the
