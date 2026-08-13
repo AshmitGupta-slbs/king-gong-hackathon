@@ -21,16 +21,16 @@ const fmt = (ms: number) => {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 };
 
-export default function Home() {
+export default async function Home() {
   // Idempotent seed of the committed samples.
-  loadSamples();
+  await loadSamples();
   // Failure invariant: any run left 'running' by a killed process becomes a failed record.
-  reconcileOrphanRuns();
+  await reconcileOrphanRuns();
 
-  const calls = listCalls();
+  const calls = await listCalls();
   const manifest = new Map(sampleManifest().map((m) => [m.id, m]));
   const registry = describeRegistry();
-  const companies = listCompanies().map((c) => ({ id: c.id, name: c.name }));
+  const companies = (await listCompanies()).map((c) => ({ id: c.id, name: c.name }));
 
   return (
     <div className="mx-auto max-w-[1400px] px-4 py-6 lg:px-6 lg:py-8">

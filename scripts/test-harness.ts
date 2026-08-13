@@ -256,23 +256,23 @@ async function main() {
   head('Failure invariant — no run disappears, even when the process dies');
   {
     const orphanId = `${TEST_PREFIX}orphan-${Date.now()}`;
-    openRun(orphanId, `${TEST_PREFIX}call`, 'ingest+extract+gate');
+    await openRun(orphanId, `${TEST_PREFIX}call`, 'ingest+extract+gate');
     // Simulate a process killed mid-run: the row exists, still marked running, and is stale.
     db()
       .prepare(`UPDATE runs SET started_at = ? WHERE id = ?`)
       .run(Date.now() - 30 * 60_000, orphanId);
 
-    const reconciled = reconcileOrphanRuns();
-    const row = listRuns(200).find((r) => r.id === orphanId);
+    const reconciled = await reconcileOrphanRuns();
+    const row = (await listRuns(200)).find((r) => r.id === orphanId);
     check('a stale running row is reconciled on boot', reconciled >= 1, `${reconciled} reconciled`);
     check('the orphan becomes a FAILED record, not a mystery', row?.status === 'failed', row?.status);
     check('and it carries a reason', Boolean(row?.error), row?.error ?? 'no error text');
 
     const closedId = `${TEST_PREFIX}closed-${Date.now()}`;
-    openRun(closedId, `${TEST_PREFIX}call`, 'ingest+extract+gate');
-    closeRun(closedId, 'shipped', { attempts: 1 });
-    const before = reconcileOrphanRuns();
-    const still = listRuns(200).find((r) => r.id === closedId);
+    await openRun(closedId, `${TEST_PREFIX}call`, 'ingest+extract+gate');
+    await closeRun(closedId, 'shipped', { attempts: 1 });
+    const before = await reconcileOrphanRuns();
+    const still = (await listRuns(200)).find((r) => r.id === closedId);
     check('a properly closed run is never touched by reconciliation', still?.status === 'shipped', `${before} reconciled`);
   }
 
@@ -298,9 +298,9 @@ async function main() {
       happy.run_status === 'shipped' || happy.run_status === 'partial',
       happy.run_status,
     );
-    check('segments were persisted', getSegments(happyId).length > 0, `${happy.segments} segments`);
+    check('segments were persisted', (await getSegments(happyId)).length > 0, `${happy.segments} segments`);
     check('an extraction was produced', happy.extraction !== null);
-    const happyRun = listRuns(200).find((r) => r.id === happy.runId);
+    const happyRun = (await listRuns(200)).find((r) => r.id === happy.runId);
     check('the run row is closed with that status', happyRun?.status === happy.run_status);
     check('and it recorded a budget snapshot', Boolean(happyRun?.notes));
 
@@ -314,7 +314,7 @@ async function main() {
     });
     check('a provider failure ends as FAILED', bad.run_status === 'failed', bad.run_status);
     check('the error is reported to the caller', Boolean(bad.error), bad.error?.slice(0, 60));
-    const badRun = listRuns(200).find((r) => r.id === bad.runId);
+    const badRun = (await listRuns(200)).find((r) => r.id === bad.runId);
     check('a failed run still leaves a row', Boolean(badRun), badRun?.status);
     check('with the failure reason attached', Boolean(badRun?.error));
     check('and no silent hang: the row is closed', badRun?.ended_at !== null);
@@ -334,7 +334,7 @@ async function main() {
       broke.run_status,
     );
     check('the deadline names the cap it hit', broke.error?.includes('maxInputTokens') ?? false, broke.error);
-    const brokeRun = listRuns(200).find((r) => r.id === broke.runId);
+    const brokeRun = (await listRuns(200)).find((r) => r.id === broke.runId);
     check('the deadlined run is recorded too', brokeRun?.status === 'deadline');
   }
 

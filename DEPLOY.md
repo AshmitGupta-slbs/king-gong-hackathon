@@ -54,6 +54,44 @@ daily_cap_exceeded`: it reports when the cap lifts and points at the console-key
 another sandbox key does **not** work around a `sandbox_limit_reached`, because that limit is on the
 network rather than the key.
 
+### Storage: SQLite by default, MongoDB when you want it to last
+
+```bash
+npm run check:store   # which backend is live, and — on Mongo — a real round-trip test
+```
+
+With **no `MONGODB_URI`** the app uses local SQLite at `data/opengong.db`. That is the zero-setup
+path: nothing to install, nothing to run, and the whole demo works. It is also ephemeral (see
+below).
+
+Set **`MONGODB_URI`** and everything — calls, transcripts, notes, accounts and the learning ledger —
+is stored in MongoDB instead. The backend is inferred from the prefix, so moving from a shared REST
+gateway to a real Atlas cluster is one variable and no code change:
+
+| `MONGODB_URI` | Backend |
+|---|---|
+| `mongodb+srv://…` or `mongodb://…` | the real driver — native, atomic |
+| any other URL | HTTP gateway via a compatibility shim |
+| unset | local SQLite |
+
+`MONGODB_DB` names the database and `MONGO_COLLECTION_PREFIX` is prepended to every collection, so
+several apps can share one cluster without colliding.
+
+> **The REST gateway shim is unverified.** Its URL paths are implemented as specified, but the
+> request/response body shape was never documented, so it has not been proven against a live
+> gateway. Prefer a `mongodb+srv://` URI, and if you must use the gateway, run `npm run check:store`
+> first — it round-trips a document rather than trusting configuration.
+
+#### Audio is a filesystem object, and Mongo does not fix that
+
+Worth being plain about, because it is easy to assume otherwise: **MongoDB makes the call *record*
+durable, not the audio**. Uploaded WAVs are written to `data/uploads/` and streamed back by
+`app/api/audio/[file]/route.ts`. After a redeploy the call, its transcript and its notes all come
+back — and the player has nothing to play.
+
+If uploaded audio needs to survive, mount a volume at `/app/data`. That covers the audio on either
+backend and is the only option that does not depend on which store is configured.
+
 ### What survives a redeploy, and what does not
 
 The container filesystem is ephemeral. Two things live on it:
@@ -61,7 +99,8 @@ The container filesystem is ephemeral. Two things live on it:
 - `data/opengong.db` — calls, segments, notes, run history, usage totals.
 - `data/uploads/` — audio for calls you uploaded.
 
-Both are wiped on every redeploy, and **that is fine for the demo**: `loadSamples()` is idempotent
+Both are wiped on every redeploy **unless `MONGODB_URI` is set** (which moves everything except the
+audio into Mongo — see above). For the bundled demo this is fine either way: `loadSamples()` is idempotent
 and runs on the home page render, so a cold container re-seeds the five sample calls on first
 request. Verified against a production build with the database deleted — the home page listed all
 five.

@@ -1,371 +1,78 @@
 /**
- * Storage: SQLite via Node's BUILT-IN `node:sqlite`. No native module, no node-gyp, nothing to
- * compile. That is a deliberate choice in service of the "five-minute setup that actually takes
- * five minutes" gate — `better-sqlite3` would add a compile step that can fail on a stranger's
- * machine, and every extra service is something that breaks a stranger's clone.
+ * Storage — one API, two backends, chosen by `MONGODB_URI`.
+ *
+ * This file used to BE the SQLite implementation. It is now the dispatcher: the SQL moved to
+ * `db-sqlite.ts` unchanged, `db-mongo.ts` implements the same contract over MongoDB, and everything
+ * below picks one and forwards. Call sites did not have to learn anything new — the function names
+ * and their meanings are exactly what they were, they are just `await`ed now.
+ *
+ * WHY BOTH. The SQLite path is the zero-setup promise: `npm run dev` on an empty environment has to
+ * work, and it does, with no service to run and nothing to compile. The Mongo path is durability:
+ * a container filesystem is ephemeral, so on a host like Railway the SQLite file — and everything a
+ * user typed into /setup or uploaded — is wiped on the next redeploy.
+ *
+ * Everything is async even on the SQLite side, where the underlying driver is synchronous. If the
+ * fast path were sync, every call site would be written against the sync shape and swapping
+ * backends would stop being an environment variable.
  */
-import { DatabaseSync } from 'node:sqlite';
-import { mkdirSync } from 'node:fs';
-import { join } from 'node:path';
-import type { Call, ExtractionResult, GateRejection, RunStatus, TranscriptSegment } from './types';
+import { backend } from './store';
+import { db as sqliteHandle, sqliteStore } from './db-sqlite';
+import { mongoStore } from './db-mongo';
+import type { Store } from './db-types';
 
-const DIR = join(process.cwd(), 'data');
-let _db: DatabaseSync | null = null;
+export type { RunRow, UsageTotals } from './db-types';
 
-export function db(): DatabaseSync {
-  if (_db) return _db;
-  mkdirSync(DIR, { recursive: true });
-  const d = new DatabaseSync(join(DIR, 'opengong.db'));
-  d.exec(`
-    PRAGMA journal_mode = WAL;
-
-    CREATE TABLE IF NOT EXISTS calls (
-      id TEXT PRIMARY KEY, title TEXT NOT NULL, audio_path TEXT NOT NULL,
-      duration_ms INTEGER NOT NULL, separation TEXT NOT NULL,
-      created_at INTEGER NOT NULL, share_id TEXT UNIQUE
-    );
-
-    CREATE TABLE IF NOT EXISTS segments (
-      call_id TEXT NOT NULL, id TEXT NOT NULL, seq INTEGER NOT NULL,
-      speaker TEXT NOT NULL, start_ms INTEGER NOT NULL, end_ms INTEGER NOT NULL,
-      text TEXT NOT NULL, display_text TEXT, channel INTEGER,
-      PRIMARY KEY (call_id, id)
-    );
-
-    CREATE TABLE IF NOT EXISTS extractions (
-      call_id TEXT PRIMARY KEY, json TEXT NOT NULL,
-      run_status TEXT NOT NULL, created_at INTEGER NOT NULL
-    );
-
-    -- FAILURE INVARIANT (harness part 4): a row is written BEFORE work starts, so a crash
-    -- leaves a 'running' row that can be reconciled. No run ever disappears without a trace.
-    CREATE TABLE IF NOT EXISTS runs (
-      id TEXT PRIMARY KEY, call_id TEXT NOT NULL, step TEXT NOT NULL,
-      status TEXT NOT NULL, attempts INTEGER NOT NULL DEFAULT 0,
-      started_at INTEGER NOT NULL, ended_at INTEGER, error TEXT, notes TEXT
-    );
-
-    CREATE TABLE IF NOT EXISTS gate_rejections (
-      id INTEGER PRIMARY KEY AUTOINCREMENT, call_id TEXT NOT NULL, run_id TEXT NOT NULL,
-      field TEXT NOT NULL, claim TEXT NOT NULL, reason TEXT NOT NULL,
-      detail TEXT NOT NULL, dropped INTEGER NOT NULL, created_at INTEGER NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS usage_events (
-      id INTEGER PRIMARY KEY AUTOINCREMENT, call_id TEXT, provider TEXT NOT NULL,
-      audio_seconds REAL DEFAULT 0, input_tokens INTEGER DEFAULT 0,
-      output_tokens INTEGER DEFAULT 0, units TEXT, created_at INTEGER NOT NULL
-    );
-
-    -- The account a call belongs to -- and the CRM record for it. One object, not two: a
-    -- "company profile" and a "deal" are the same thing here, so stage lives on this row rather
-    -- than on a parallel deal entity.
-    --
-    -- detail is a JSON blob, following the precedent set by the extractions table: the queryable
-    -- fields are columns, and the richer demo detail (contacts, prior activity, deal numbers)
-    -- rides along as a blob rather than as fifteen more columns.
-    CREATE TABLE IF NOT EXISTS companies (
-      id TEXT PRIMARY KEY, name TEXT NOT NULL, industry TEXT, size_band TEXT,
-      website TEXT, notes TEXT, stage TEXT NOT NULL DEFAULT 'Discovery',
-      created_at INTEGER NOT NULL, detail TEXT
-    );
-
-    -- A JOIN TABLE rather than a calls.company_id column, deliberately.
-    --
-    -- This schema is created by one CREATE TABLE IF NOT EXISTS block with no migration system
-    -- behind it. Adding a column to calls would therefore be a silent no-op on every database
-    -- that already exists -- including a mounted Railway volume -- and would then throw
-    -- "no column named company_id" at INSERT time, mid-run, after openRun had already written a
-    -- row. A new table IS created on an existing database, so this is the version that works
-    -- everywhere. It also lets the link be written before transcription succeeds, which a column
-    -- on calls could not: insertCall only runs after STT returns.
-    CREATE TABLE IF NOT EXISTS call_companies (
-      call_id TEXT PRIMARY KEY, company_id TEXT NOT NULL
-    );
-  `);
-  _db = d;
-  return d;
+/**
+ * The active store.
+ *
+ * Resolved per call rather than once at module load: the environment is not reliably populated at
+ * import time in Next, and a store captured too early would pin the process to SQLite even after
+ * `MONGODB_URI` became visible.
+ */
+export function store(): Store {
+  return backend() === 'none' ? sqliteStore : mongoStore;
 }
+
+/**
+ * The raw SQLite handle.
+ *
+ * Kept for the harness test suite, which pokes the database directly to prove the failure
+ * invariant. Meaningless in Mongo mode — nothing on the request path uses it.
+ */
+export const db = sqliteHandle;
 
 // ── calls ────────────────────────────────────────────────────────────────────
-
-export function insertCall(c: Call) {
-  db()
-    .prepare(
-      `INSERT OR REPLACE INTO calls (id,title,audio_path,duration_ms,separation,created_at,share_id)
-       VALUES (?,?,?,?,?,?,?)`,
-    )
-    .run(c.id, c.title, c.audio_path, c.duration_ms, c.separation, c.created_at, c.share_id);
-}
-
-/**
- * `node:sqlite` hands back rows with a NULL PROTOTYPE. React Server Components refuse to
- * serialize those across the server/client boundary ("Classes or null prototypes are not
- * supported"), so every read here rebuilds a plain object explicitly rather than casting the row.
- *
- * That is also just better practice: the DB layer returns values shaped by our data contract, and
- * a schema change surfaces as a type error here instead of as `undefined` in the UI.
- */
-function toCall(r: Record<string, unknown>): Call {
-  return {
-    id: r.id as string,
-    title: r.title as string,
-    audio_path: r.audio_path as string,
-    duration_ms: r.duration_ms as number,
-    separation: r.separation as Call['separation'],
-    created_at: r.created_at as number,
-    share_id: (r.share_id as string | null) ?? null,
-  };
-}
-
-export function getCall(id: string): Call | null {
-  const r = db().prepare(`SELECT * FROM calls WHERE id = ?`).get(id) as
-    | Record<string, unknown>
-    | undefined;
-  return r ? toCall(r) : null;
-}
-
-export function getCallByShareId(shareId: string): Call | null {
-  const r = db().prepare(`SELECT * FROM calls WHERE share_id = ?`).get(shareId) as
-    | Record<string, unknown>
-    | undefined;
-  return r ? toCall(r) : null;
-}
-
-export function listCalls(): Call[] {
-  const rows = db()
-    .prepare(`SELECT * FROM calls ORDER BY created_at DESC`)
-    .all() as Record<string, unknown>[];
-  return rows.map(toCall);
-}
+export const insertCall = (...a: Parameters<Store['insertCall']>) => store().insertCall(...a);
+export const renameCall = (...a: Parameters<Store['renameCall']>) => store().renameCall(...a);
+export const getCall = (...a: Parameters<Store['getCall']>) => store().getCall(...a);
+export const getCallByShareId = (...a: Parameters<Store['getCallByShareId']>) =>
+  store().getCallByShareId(...a);
+export const listCalls = () => store().listCalls();
 
 // ── segments ─────────────────────────────────────────────────────────────────
-
-export function replaceSegments(callId: string, segs: TranscriptSegment[]) {
-  const d = db();
-  d.prepare(`DELETE FROM segments WHERE call_id = ?`).run(callId);
-  const ins = d.prepare(
-    `INSERT INTO segments (call_id,id,seq,speaker,start_ms,end_ms,text,display_text,channel)
-     VALUES (?,?,?,?,?,?,?,?,?)`,
-  );
-  segs.forEach((s, i) =>
-    ins.run(
-      callId,
-      s.id,
-      i,
-      s.speaker,
-      s.start_ms,
-      s.end_ms,
-      s.text,
-      s.display_text ?? null,
-      s.channel ?? null,
-    ),
-  );
-}
-
-export function getSegments(callId: string): TranscriptSegment[] {
-  const rows = db()
-    .prepare(`SELECT * FROM segments WHERE call_id = ? ORDER BY seq`)
-    .all(callId) as Record<string, unknown>[];
-  return rows.map((r) => ({
-    id: r.id as string,
-    speaker: r.speaker as string,
-    start_ms: r.start_ms as number,
-    end_ms: r.end_ms as number,
-    text: r.text as string,
-    ...(r.display_text ? { display_text: r.display_text as string } : {}),
-    ...(r.channel !== null ? { channel: r.channel as number } : {}),
-  }));
-}
+export const replaceSegments = (...a: Parameters<Store['replaceSegments']>) =>
+  store().replaceSegments(...a);
+export const getSegments = (...a: Parameters<Store['getSegments']>) => store().getSegments(...a);
 
 // ── extractions ──────────────────────────────────────────────────────────────
+export const saveExtraction = (...a: Parameters<Store['saveExtraction']>) =>
+  store().saveExtraction(...a);
+export const getExtraction = (...a: Parameters<Store['getExtraction']>) =>
+  store().getExtraction(...a);
 
-export function saveExtraction(callId: string, ex: ExtractionResult) {
-  db()
-    .prepare(
-      `INSERT OR REPLACE INTO extractions (call_id,json,run_status,created_at) VALUES (?,?,?,?)`,
-    )
-    .run(callId, JSON.stringify(ex), ex.run_status, Date.now());
-}
-
-export function getExtraction(callId: string): ExtractionResult | null {
-  const r = db()
-    .prepare(`SELECT json FROM extractions WHERE call_id = ?`)
-    .get(callId) as { json?: string } | undefined;
-  return r?.json ? (JSON.parse(r.json) as ExtractionResult) : null;
-}
-
-// ── runs (failure invariant) ──────────────────────────────────────────────────
-
-export function openRun(runId: string, callId: string, step: string) {
-  db()
-    .prepare(
-      `INSERT OR REPLACE INTO runs (id,call_id,step,status,attempts,started_at) VALUES (?,?,?,?,?,?)`,
-    )
-    .run(runId, callId, step, 'running', 0, Date.now());
-}
-
-export function closeRun(
-  runId: string,
-  status: RunStatus | 'running',
-  opts: { attempts?: number; error?: string; notes?: string } = {},
-) {
-  db()
-    .prepare(`UPDATE runs SET status=?, ended_at=?, attempts=?, error=?, notes=? WHERE id=?`)
-    .run(
-      status,
-      Date.now(),
-      opts.attempts ?? 0,
-      opts.error ?? null,
-      opts.notes ?? null,
-      runId,
-    );
-}
-
-export type RunRow = {
-  id: string;
-  call_id: string;
-  step: string;
-  status: string;
-  attempts: number;
-  started_at: number;
-  ended_at: number | null;
-  error: string | null;
-  notes: string | null;
-};
-
-/**
- * How long recent successful runs actually took, as a median.
- *
- * This is the only honest thing a progress screen can say about "how much longer" — the extract
- * call is a single opaque await with no token callback, so any percentage would be invented. A
- * median over runs that really happened is a measurement, and it is presented in the past tense
- * ("similar runs took about 48s") rather than as a prediction.
- *
- * Returns null below three samples: a confident number derived from one cold-start run would be
- * exactly the sort of authoritative-sounding guess this codebase avoids elsewhere.
- */
-export function medianRecentRunMs(sample = 15): number | null {
-  const rows = db()
-    .prepare(
-      `SELECT started_at, ended_at FROM runs
-       WHERE ended_at IS NOT NULL AND status IN ('shipped','partial')
-       ORDER BY started_at DESC LIMIT ?`,
-    )
-    .all(sample) as Record<string, unknown>[];
-
-  const durations = rows
-    .map((r) => (r.ended_at as number) - (r.started_at as number))
-    .filter((ms) => Number.isFinite(ms) && ms > 0)
-    .sort((a, b) => a - b);
-
-  if (durations.length < 3) return null;
-  const mid = Math.floor(durations.length / 2);
-  return durations.length % 2 === 0
-    ? Math.round((durations[mid - 1] + durations[mid]) / 2)
-    : durations[mid];
-}
-
-export function listRuns(limit = 50): RunRow[] {
-  const rows = db()
-    .prepare(`SELECT * FROM runs ORDER BY started_at DESC LIMIT ?`)
-    .all(limit) as Record<string, unknown>[];
-  // Rebuilt as plain objects for the same null-prototype reason as toCall() above.
-  return rows.map((r) => ({
-    id: r.id as string,
-    call_id: r.call_id as string,
-    step: r.step as string,
-    status: r.status as string,
-    attempts: (r.attempts as number) ?? 0,
-    started_at: r.started_at as number,
-    ended_at: (r.ended_at as number | null) ?? null,
-    error: (r.error as string | null) ?? null,
-    notes: (r.notes as string | null) ?? null,
-  }));
-}
-
-/**
- * Any run still marked 'running' from a previous process is by definition a crash — the
- * failure invariant says it must end up as a record, not a mystery.
- */
-export function reconcileOrphanRuns(): number {
-  const res = db()
-    .prepare(
-      `UPDATE runs SET status='failed', ended_at=?, error='process exited before this run completed'
-       WHERE status='running' AND started_at < ?`,
-    )
-    .run(Date.now(), Date.now() - 10 * 60_000);
-  return Number(res.changes ?? 0);
-}
+// ── runs (failure invariant) ─────────────────────────────────────────────────
+export const openRun = (...a: Parameters<Store['openRun']>) => store().openRun(...a);
+export const closeRun = (...a: Parameters<Store['closeRun']>) => store().closeRun(...a);
+export const listRuns = (...a: Parameters<Store['listRuns']>) => store().listRuns(...a);
+export const medianRecentRunMs = (...a: Parameters<Store['medianRecentRunMs']>) =>
+  store().medianRecentRunMs(...a);
+export const reconcileOrphanRuns = () => store().reconcileOrphanRuns();
 
 // ── gate rejections ──────────────────────────────────────────────────────────
-
-export function recordRejections(callId: string, runId: string, rs: GateRejection[]) {
-  const ins = db().prepare(
-    `INSERT INTO gate_rejections (call_id,run_id,field,claim,reason,detail,dropped,created_at)
-     VALUES (?,?,?,?,?,?,?,?)`,
-  );
-  const now = Date.now();
-  for (const r of rs)
-    ins.run(callId, runId, r.field, r.claim, r.reason, r.detail, r.dropped ? 1 : 0, now);
-}
-
-export function countRejections(): { total: number; dropped: number } {
-  const r = db()
-    .prepare(
-      `SELECT COUNT(*) AS total, COALESCE(SUM(dropped),0) AS dropped FROM gate_rejections`,
-    )
-    .get() as { total: number; dropped: number };
-  return { total: Number(r.total), dropped: Number(r.dropped) };
-}
+export const recordRejections = (...a: Parameters<Store['recordRejections']>) =>
+  store().recordRejections(...a);
+export const countRejections = () => store().countRejections();
 
 // ── usage (API gravity) ──────────────────────────────────────────────────────
-
-export function recordUsage(
-  callId: string | null,
-  provider: string,
-  u: { audio_seconds?: number; input_tokens?: number; output_tokens?: number; units?: string },
-) {
-  db()
-    .prepare(
-      `INSERT INTO usage_events (call_id,provider,audio_seconds,input_tokens,output_tokens,units,created_at)
-       VALUES (?,?,?,?,?,?,?)`,
-    )
-    .run(
-      callId,
-      provider,
-      u.audio_seconds ?? 0,
-      u.input_tokens ?? 0,
-      u.output_tokens ?? 0,
-      u.units ?? null,
-      Date.now(),
-    );
-}
-
-export type UsageTotals = {
-  audio_seconds: number;
-  minutes: number;
-  input_tokens: number;
-  output_tokens: number;
-  calls_processed: number;
-  claims_blocked: number;
-};
-
-export function usageTotals(): UsageTotals {
-  const u = db()
-    .prepare(
-      `SELECT COALESCE(SUM(audio_seconds),0) AS a, COALESCE(SUM(input_tokens),0) AS i,
-              COALESCE(SUM(output_tokens),0) AS o FROM usage_events`,
-    )
-    .get() as { a: number; i: number; o: number };
-  const c = db().prepare(`SELECT COUNT(*) AS n FROM calls`).get() as { n: number };
-  const rej = countRejections();
-  return {
-    audio_seconds: Number(u.a),
-    minutes: Number(u.a) / 60,
-    input_tokens: Number(u.i),
-    output_tokens: Number(u.o),
-    calls_processed: Number(c.n),
-    claims_blocked: rej.dropped,
-  };
-}
+export const recordUsage = (...a: Parameters<Store['recordUsage']>) => store().recordUsage(...a);
+export const usageTotals = () => store().usageTotals();

@@ -66,6 +66,11 @@ export type ExtractRequest = {
    * that nothing outside `providers/` sees a vendor shape. Rendering happens in lib/companies.ts.
    */
   accountContext?: string;
+  /**
+   * What earlier calls with this account established — this system's own inference, not a human's.
+   * Banner'd separately from `accountContext` in the prompt so the model is told which is which.
+   */
+  learnedContext?: string;
 };
 
 export type ExtractResult = {

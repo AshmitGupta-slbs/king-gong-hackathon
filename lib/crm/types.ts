@@ -101,6 +101,11 @@ export type CallContext = {
 
 export interface CrmProvider {
   readonly name: string;
-  /** Null when this call has no CRM record — the UI must degrade, not crash. */
-  forCall(callId: string): CallContext | null;
+  /**
+   * Null when this call has no CRM record — the UI must degrade, not crash.
+   *
+   * Async because a provider may be a database or, later, an authenticated HubSpot call. The
+   * fixture resolves immediately and simply returns a resolved promise.
+   */
+  forCall(callId: string): Promise<CallContext | null> | CallContext | null;
 }

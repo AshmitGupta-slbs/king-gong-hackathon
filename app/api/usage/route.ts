@@ -13,9 +13,9 @@ import { describeRegistry } from '@/lib/registry';
 export const runtime = 'nodejs';
 
 export async function GET() {
-  const runs = listRuns(20);
+  const runs = await listRuns(20);
   return NextResponse.json({
-    usage: usageTotals(),
+    usage: await usageTotals(),
     registry: describeRegistry(),
     runs: runs.map((r) => ({
       id: r.id,
