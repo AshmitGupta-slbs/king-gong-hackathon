@@ -15,8 +15,9 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { Building2, Check, Loader2, Pencil, Plus, X } from 'lucide-react';
 import type { Company } from '@/lib/companies';
-import type { Learning } from '@/lib/learnings';
+import type { Learning, NotesSuggestion as Suggestion } from '@/lib/learnings';
 import { CompanyLearnings } from '@/components/CompanyLearnings';
+import { NotesSuggestion } from '@/components/NotesSuggestion';
 import { DealStageSchema } from '@/lib/crm/types';
 import { Badge, type BadgeTone } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
@@ -37,9 +38,11 @@ const STAGE_TONE: Record<string, BadgeTone> = {
 export function SetupCompanies({
   companies,
   learnings = {},
+  suggestions = {},
 }: {
   companies: Company[];
   learnings?: Record<string, Learning[]>;
+  suggestions?: Record<string, Suggestion | null>;
 }) {
   const router = useRouter();
   const [adding, setAdding] = useState(false);
@@ -155,6 +158,15 @@ export function SetupCompanies({
                       <p className="mt-2 text-caption text-fg-dim italic">
                         No context yet — notes here are given to the model before it reads the call.
                       </p>
+                    )}
+
+                    {/* The single bridge from what the calls established into what the user owns.
+                        Above the evidence, because it is the thing to act on; the list below is
+                        what you check it against. */}
+                    {suggestions[c.id] && (
+                      <div className="mt-3">
+                        <NotesSuggestion companyId={c.id} suggestion={suggestions[c.id]!} />
+                      </div>
                     )}
 
                     {/* Kept visually distinct from the notes above: different origin, different

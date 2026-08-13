@@ -36,6 +36,23 @@ export type UsageTotals = {
   claims_blocked: number;
 };
 
+/**
+ * A call plus the handful of derived facts the call LIST needs.
+ *
+ * It exists because the list has to answer "did this call's notes survive the gate?" for every row,
+ * and the honest source of that answer is the extraction, not a build artefact. Fetching it per row
+ * would be two round trips per call and would drag every segment's full text across the wire; both
+ * backends answer this in a fixed number of queries regardless of how many calls there are.
+ *
+ * `run_status` is null when a call has been transcribed but never extracted — a real state the list
+ * should show as such, not a missing value to paper over.
+ */
+export type CallSummary = Call & {
+  run_status: RunStatus | null;
+  extracted_by: string | null;
+  company_id: string | null;
+};
+
 export type UsageInput = {
   audio_seconds?: number;
   input_tokens?: number;
@@ -52,6 +69,8 @@ export interface Store {
   getCall(id: string): Promise<Call | null>;
   getCallByShareId(shareId: string): Promise<Call | null>;
   listCalls(): Promise<Call[]>;
+  /** Every call with its extraction status, in a fixed number of round trips. See CallSummary. */
+  listCallSummaries(): Promise<CallSummary[]>;
 
   // segments
   replaceSegments(callId: string, segs: TranscriptSegment[]): Promise<void>;

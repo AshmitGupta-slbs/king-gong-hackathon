@@ -98,6 +98,39 @@ export const mongoStore: Store = {
     return rows.map(toCall);
   },
 
+  /**
+   * THREE queries, whatever the number of calls — not one per row.
+   *
+   * The two lookups are projected down to the keys they contribute, so neither drags an extraction's
+   * full JSON across the wire. They are deliberately unfiltered rather than `$in`-scoped by call id:
+   * `$in` is not among the operators verified against the REST gateway, and at this scale a filter
+   * would save nothing over the fixed three trips it already costs.
+   */
+  async listCallSummaries() {
+    const [calls, extractions, links] = await Promise.all([
+      col(collections().calls).find({}).sort('created_at', -1).toArray(),
+      col(collections().extractions)
+        .find({}, { projection: { run_status: 1, extracted_by: 1 } })
+        .toArray(),
+      col(collections().callCompanies).find({}, { projection: { company_id: 1 } }).toArray(),
+    ]);
+
+    const ex = new Map(extractions.map((e) => [e._id as string, e]));
+    const link = new Map(links.map((l) => [l._id as string, l.company_id as string]));
+
+    return calls.map((r) => {
+      const e = ex.get(r._id as string);
+      return {
+        ...toCall(r),
+        run_status: (e?.run_status as RunStatus | undefined) ?? null,
+        // Only written since extracted_by became a field of its own; documents saved before that
+        // report null and simply omit the extractor, healing the next time the call is analysed.
+        extracted_by: (e?.extracted_by as string | undefined) ?? null,
+        company_id: link.get(r._id as string) ?? null,
+      };
+    });
+  },
+
   // ── segments ───────────────────────────────────────────────────────────────
   async replaceSegments(callId, segs) {
     const c = col(collections().segments);
@@ -143,7 +176,17 @@ export const mongoStore: Store = {
       {
         // Stored as a JSON string rather than a nested document, matching the SQLite column. Keeps
         // one representation of the result and avoids BSON key restrictions inside claim text.
-        $set: { json: JSON.stringify(ex), run_status: ex.run_status, created_at: Date.now() },
+        //
+        // `run_status` and `extracted_by` are ALSO lifted out as fields, so the call list can read
+        // both under a projection instead of pulling every extraction's full JSON. The blob remains
+        // the source of truth; these two are a denormalised copy for one query's benefit. SQLite
+        // reaches the same fields with json_extract and needs no such copy.
+        $set: {
+          json: JSON.stringify(ex),
+          run_status: ex.run_status,
+          extracted_by: ex.extracted_by ?? null,
+          created_at: Date.now(),
+        },
       },
       { upsert: true },
     );

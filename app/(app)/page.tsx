@@ -4,22 +4,16 @@
  * The sample calls are seeded on first load so a stranger who clones this repo and runs
  * `npm run dev` lands on five fully-analysed calls with no key, no signup and no network.
  */
-import Link from 'next/link';
-import { ChevronRight } from 'lucide-react';
-import { listCalls, reconcileOrphanRuns } from '@/lib/db';
-import { loadSamples, sampleManifest } from '@/lib/samples';
+import { Suspense } from 'react';
+import { listCallSummaries, reconcileOrphanRuns } from '@/lib/db';
+import { loadSamples } from '@/lib/samples';
 import { describeRegistry } from '@/lib/registry';
 import { listCompanies } from '@/lib/companies';
 import { UploadCard } from '@/components/UploadCard';
-import { RunStatusBadge } from '@/components/RunStatusBadge';
+import { CallList, type CallListRow } from '@/components/CallList';
 import { Card } from '@/components/ui/Card';
 
 export const dynamic = 'force-dynamic';
-
-const fmt = (ms: number) => {
-  const s = Math.floor(ms / 1000);
-  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
-};
 
 export default async function Home() {
   // Idempotent seed of the committed samples.
@@ -27,10 +21,22 @@ export default async function Home() {
   // Failure invariant: any run left 'running' by a killed process becomes a failed record.
   await reconcileOrphanRuns();
 
-  const calls = await listCalls();
-  const manifest = new Map(sampleManifest().map((m) => [m.id, m]));
+  /*
+    `listCallSummaries` rather than `listCalls` + the sample manifest.
+
+    The manifest is a BUILD ARTEFACT listing the five bundled samples, so joining against it meant
+    an uploaded call had no status badge at all, and re-analysing a sample could not change what the
+    list said about it. The status now comes from the extraction, which is the thing that decides it.
+  */
+  const [summaries, allCompanies] = await Promise.all([listCallSummaries(), listCompanies()]);
   const registry = describeRegistry();
-  const companies = (await listCompanies()).map((c) => ({ id: c.id, name: c.name }));
+  const companies = allCompanies.map((c) => ({ id: c.id, name: c.name }));
+
+  const names = new Map(companies.map((c) => [c.id, c.name]));
+  const calls: CallListRow[] = summaries.map((c) => ({
+    ...c,
+    company_name: c.company_id ? (names.get(c.company_id) ?? null) : null,
+  }));
 
   return (
     <div className="mx-auto max-w-[1400px] px-4 py-6 lg:px-6 lg:py-8">
@@ -45,57 +51,17 @@ export default async function Home() {
       </header>
 
       <div className="mt-7 grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
-        <Card title="Sample calls" count={calls.length} bodyClassName="p-0">
+        <Card title="Calls" count={calls.length} bodyClassName="p-0">
           {calls.length === 0 ? (
             <p className="px-4 py-10 text-center text-meta text-fg-dim">
               No calls yet. Run <span className="font-mono text-fg">npm run samples</span> to build
               the bundled five.
             </p>
           ) : (
-            <ul className="divide-y divide-border-subtle">
-              {calls.map((c) => {
-                const m = manifest.get(c.id);
-                return (
-                  <li key={c.id}>
-                    <Link
-                      href={`/calls/${c.id}`}
-                      className="group flex items-center gap-4 px-4 py-3.5 transition-colors hover:bg-surface-inset"
-                    >
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-body font-medium text-fg group-hover:text-brand">
-                          {c.title}
-                        </p>
-                        <p className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-micro text-fg-dim">
-                          <span className="font-mono">{fmt(c.duration_ms)}</span>
-                          <span aria-hidden className="text-border-strong">
-                            •
-                          </span>
-                          <span>{m?.segments ?? '—'} segments</span>
-                          <span aria-hidden className="text-border-strong">
-                            •
-                          </span>
-                          <span>{c.separation} separation</span>
-                          {m?.extracted_by && (
-                            <>
-                              <span aria-hidden className="text-border-strong">
-                                •
-                              </span>
-                              <span className="font-mono">{m.extracted_by}</span>
-                            </>
-                          )}
-                        </p>
-                      </div>
-                      {m?.run_status && <RunStatusBadge status={m.run_status} />}
-                      <ChevronRight
-                        size={16}
-                        aria-hidden
-                        className="shrink-0 text-fg-dim transition-colors group-hover:text-brand"
-                      />
-                    </Link>
-                  </li>
-                );
-              })}
-            </ul>
+            // useSearchParams reads request-time state, so it needs a boundary to suspend at.
+            <Suspense fallback={<p className="px-4 py-10 text-center text-meta text-fg-dim">Loading calls…</p>}>
+              <CallList calls={calls} companies={companies} />
+            </Suspense>
           )}
         </Card>
 

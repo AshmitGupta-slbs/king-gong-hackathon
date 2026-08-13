@@ -56,7 +56,8 @@ export async function ensureIndexes(): Promise<{ created: number; skipped: boole
     [c.calls, { created_at: -1 }],
     [c.calls, { share_id: 1 }],
     [c.segments, { call_id: 1, seq: 1 }],
-    [c.extractions, { call_id: 1 }],
+    // No extractions entry: the collection is keyed on `_id` (the call id), which Mongo indexes
+    // automatically. It used to declare `{ call_id: 1 }` — a field this store has never written.
     [c.runs, { started_at: -1 }],
     [c.runs, { status: 1, started_at: -1 }],
     [c.gateRejections, { call_id: 1 }],

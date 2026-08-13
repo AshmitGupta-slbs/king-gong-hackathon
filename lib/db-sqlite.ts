@@ -16,7 +16,7 @@ import { join } from 'node:path';
 import type { Call, ExtractionResult, GateRejection, RunStatus, TranscriptSegment } from './types';
 import type { Company } from './company-types';
 import type { Learning } from './learning-types';
-import type { RunRow, Store, UsageTotals } from './db-types';
+import type { CallSummary, RunRow, Store, UsageTotals } from './db-types';
 
 const DIR = join(process.cwd(), 'data');
 let _db: DatabaseSync | null = null;
@@ -173,6 +173,36 @@ function listCalls(): Call[] {
     .prepare(`SELECT * FROM calls ORDER BY created_at DESC`)
     .all() as Record<string, unknown>[];
   return rows.map(toCall);
+}
+
+/**
+ * Every call with the facts the list view shows, in ONE statement.
+ *
+ * `extracted_by` is read out of the JSON blob with `json_extract` rather than from a column of its
+ * own. The repo has no migration system — there is a single CREATE TABLE IF NOT EXISTS block — so a
+ * new column would be a silent no-op on every database that already exists, and the field would
+ * read as null for exactly the calls a user has already analysed. Reading it from the blob is
+ * correct for every row ever written. SQLite's JSON1 functions are built into `node:sqlite`.
+ */
+function listCallSummaries(): CallSummary[] {
+  const rows = db()
+    .prepare(
+      `SELECT c.*,
+              e.run_status                            AS run_status,
+              json_extract(e.json, '$.extracted_by')  AS extracted_by,
+              cc.company_id                           AS company_id
+         FROM calls c
+         LEFT JOIN extractions    e  ON e.call_id  = c.id
+         LEFT JOIN call_companies cc ON cc.call_id = c.id
+        ORDER BY c.created_at DESC`,
+    )
+    .all() as Record<string, unknown>[];
+  return rows.map((r) => ({
+    ...toCall(r),
+    run_status: (r.run_status as RunStatus | null) ?? null,
+    extracted_by: (r.extracted_by as string | null) ?? null,
+    company_id: (r.company_id as string | null) ?? null,
+  }));
 }
 
 // ── segments ─────────────────────────────────────────────────────────────────
@@ -444,6 +474,7 @@ export const sqliteStore: Store = {
   async getCall(id) { return getCall(id); },
   async getCallByShareId(shareId) { return getCallByShareId(shareId); },
   async listCalls() { return listCalls(); },
+  async listCallSummaries() { return listCallSummaries(); },
 
   async replaceSegments(callId, segs) { replaceSegments(callId, segs); },
   async getSegments(callId) { return getSegments(callId); },

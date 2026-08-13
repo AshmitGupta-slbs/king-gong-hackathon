@@ -10,11 +10,39 @@
  */
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { getCall, insertCall, replaceSegments, saveExtraction } from './db';
+import { getCall, insertCall, replaceSegments, saveExtraction, store } from './db';
 import { seedCompanies } from './crm/db';
 import type { ExtractionResult, TranscriptSegment } from './types';
 
 const DIR = join(process.cwd(), 'samples');
+
+/**
+ * Attach each sample call to the account seeded for it.
+ *
+ * `seedCompanies` has always created one company per sample and called them "the account records
+ * these calls belong to", but nothing ever wrote the row that says so — the link table was only
+ * populated by uploads, where the user picks an account. The gap was invisible until the call list
+ * started showing and filtering by account, at which point a fresh clone offered a filter matching
+ * nothing.
+ *
+ * Only fills a gap, never overwrites: a call already linked keeps whatever it is linked to.
+ *
+ * Batched rather than a `companyIdForCall` per sample, because this runs on the first render after a
+ * deploy and a per-sample lookup would be ten sequential round trips against the Mongo gateway on
+ * the one request a visitor is already waiting on. Two list reads answer it for all five.
+ */
+async function linkSamplesToAccounts(): Promise<void> {
+  const s = store();
+  const [summaries, companies] = await Promise.all([s.listCallSummaries(), s.listCompanies()]);
+  const linked = new Set(summaries.filter((c) => c.company_id).map((c) => c.id));
+  const known = new Set(companies.map((c) => c.id));
+
+  for (const m of sampleManifest()) {
+    // `co-${callId}` is the same convention seedCompanies uses to mint the id.
+    if (linked.has(m.id) || !known.has(`co-${m.id}`)) continue;
+    await s.linkCallToCompany(m.id, `co-${m.id}`);
+  }
+}
 
 export type SampleManifestEntry = {
   id: string;
@@ -60,6 +88,7 @@ export async function loadSamples(
   // The account records these calls belong to. Idempotent and skip-if-present, so a user's
   // edits in /setup are never overwritten by a reseed.
   await seedCompanies();
+  await linkSamplesToAccounts();
   seededThisProcess = true;
 
   const loaded: string[] = [];
