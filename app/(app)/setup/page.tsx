@@ -6,6 +6,7 @@
  * screen keeps a quick-add as a fallback, but this is the real one.
  */
 import { listCompanies } from '@/lib/companies';
+import { learningsForCompany } from '@/lib/learnings';
 import { loadSamples } from '@/lib/samples';
 import { describeCrm } from '@/lib/crm';
 import { SetupCompanies } from '@/components/SetupCompanies';
@@ -17,6 +18,8 @@ export default function SetupPage() {
   // Seeds the demo accounts on a cold database, exactly as the home page does for calls.
   loadSamples();
   const companies = listCompanies();
+  // Keyed by company so the client component can render each account's ledger without a fetch.
+  const learnings = Object.fromEntries(companies.map((c) => [c.id, learningsForCompany(c.id, 20)]));
   const crm = describeCrm();
 
   return (
@@ -39,7 +42,7 @@ export default function SetupPage() {
       </header>
 
       <div className="mt-7">
-        <SetupCompanies companies={companies} />
+        <SetupCompanies companies={companies} learnings={learnings} />
       </div>
     </div>
   );

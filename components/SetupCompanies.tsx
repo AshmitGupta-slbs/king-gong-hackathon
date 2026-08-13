@@ -15,6 +15,8 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { Building2, Check, Loader2, Pencil, Plus, X } from 'lucide-react';
 import type { Company } from '@/lib/companies';
+import type { Learning } from '@/lib/learnings';
+import { CompanyLearnings } from '@/components/CompanyLearnings';
 import { DealStageSchema } from '@/lib/crm/types';
 import { Badge, type BadgeTone } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
@@ -32,7 +34,13 @@ const STAGE_TONE: Record<string, BadgeTone> = {
   Stalled: 'bad',
 };
 
-export function SetupCompanies({ companies }: { companies: Company[] }) {
+export function SetupCompanies({
+  companies,
+  learnings = {},
+}: {
+  companies: Company[];
+  learnings?: Record<string, Learning[]>;
+}) {
   const router = useRouter();
   const [adding, setAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -148,6 +156,20 @@ export function SetupCompanies({ companies }: { companies: Company[] }) {
                         No context yet — notes here are given to the model before it reads the call.
                       </p>
                     )}
+
+                    {/* Kept visually distinct from the notes above: different origin, different
+                        standard of proof. */}
+                    <div className="mt-3 border-t border-border-subtle pt-3">
+                      <p className="mb-2 flex items-center gap-1.5 text-caption font-semibold text-fg-muted">
+                        Learned from calls
+                        {(learnings[c.id]?.length ?? 0) > 0 && (
+                          <span className="rounded-chip bg-surface-inset px-1.5 py-0.5 text-[11px] font-semibold text-fg-muted">
+                            {learnings[c.id]!.length}
+                          </span>
+                        )}
+                      </p>
+                      <CompanyLearnings learnings={learnings[c.id] ?? []} />
+                    </div>
                   </div>
                   <Button variant="secondary" onClick={() => setEditingId(c.id)}>
                     <Pencil size={13} aria-hidden />

@@ -69,10 +69,22 @@ export function buildExtractUserMessage(req: ExtractRequest): string {
       `${req.accountContext}\n\n`
     : '';
 
+  /**
+   * Separately banner'd from the user's notes on purpose: this is what THIS SYSTEM concluded from
+   * earlier recordings, not something a person asserted. Same prohibition applies — it is background
+   * for interpretation, and a claim about THIS call still needs a line from THIS transcript.
+   */
+  const learned = req.learnedContext
+    ? `LEARNED ON EARLIER CALLS WITH THIS ACCOUNT (derived by this system from previous ` +
+      `recordings, NOT said on this call — background only, never citable)\n` +
+      `${req.learnedContext}\n\n`
+    : '';
+
   let user =
     `Call: ${req.callTitle}\n` +
     `Valid segment ids for this call: ${ids[0]} … ${ids[ids.length - 1]} (${ids.length} segments)\n\n` +
     context +
+    learned +
     `TRANSCRIPT (cite these ids for every claim)\n${renderTranscript(req.segments)}`;
 
   // Bounded AIMED retry: the previous attempt's actual failure goes into the prompt, so the retry

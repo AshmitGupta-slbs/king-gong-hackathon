@@ -11,6 +11,7 @@
  * may sharpen what the model looks for, but it can never be the source of a cited claim.
  */
 import { db } from './db';
+import { renderLearnedContext } from './learnings';
 import type { CallContext, DealStage, Meeting, Participant, Person } from './crm/types';
 
 /** Detail that rides along as a JSON blob rather than as its own columns. */
@@ -151,6 +152,18 @@ export function renderAccountContext(c: Company | null): string | null {
   if (c.notes) lines.push(`notes: ${c.notes}`);
   if (lines.length === 0) return null;
   return [`company: ${c.name}`, ...lines].join('\n');
+}
+
+/**
+ * What earlier calls with this account established, for the next call's prompt.
+ *
+ * Deliberately a SEPARATE function from `renderAccountContext` rather than more lines inside it.
+ * The two are different kinds of true — one is what a person asserted, the other is what this
+ * system inferred from a recording — and the prompt banners them differently. Merging them here
+ * would quietly collapse that distinction at the one point where it matters most.
+ */
+export function renderLearnedForCompany(c: Company | null): string | null {
+  return c ? renderLearnedContext(c.id) : null;
 }
 
 // ── projection into the shape the call page already renders ──────────────────

@@ -21,14 +21,23 @@ import type { ExtractionResult, RunStatus, TranscriptSegment } from '@/lib/types
 import {
   closeRun,
   insertCall,
+  renameCall,
   openRun,
   recordRejections,
   recordUsage,
   replaceSegments,
   saveExtraction,
 } from '@/lib/db';
+import { deriveCallTitle, subjectFromTranscript } from '../call-title';
+import { recordLearnings } from '../learnings';
 import { BudgetGovernor, DeadlineError, estimateTokens, type BudgetCaps } from './budget';
-import { companyForCall, getCompany, linkCallToCompany, renderAccountContext } from '../companies';
+import {
+  companyForCall,
+  getCompany,
+  linkCallToCompany,
+  renderAccountContext,
+  renderLearnedForCompany,
+} from '../companies';
 import { runCitationGate } from './gate';
 import { withLock } from './parallel';
 import { safeStage, type OnStage } from './progress';
@@ -65,6 +74,8 @@ export type ProcessOutcome = {
   attempts: { stt: number; extract: number };
   budget: ReturnType<BudgetGovernor['snapshot']>;
   extraction: ExtractionResult | null;
+  /** The call's title AFTER analysis — auto-derived from what the call turned out to be about. */
+  title: string;
   error?: string;
   /** Provider error code, when the failure had one (e.g. 'daily_cap_exceeded'). */
   errorCode?: string;
@@ -101,6 +112,8 @@ export async function processCall(input: ProcessInput): Promise<ProcessOutcome> 
     let sttAttempts = 0;
     let extractAttempts = 0;
     let status: RunStatus = 'failed';
+    /** Starts as whatever was typed at upload; replaced once we know what the call was about. */
+    let title = input.title;
     let error: string | undefined;
     let errorCode: string | undefined;
     let remedy: string | undefined;
@@ -163,6 +176,11 @@ export async function processCall(input: ProcessInput): Promise<ProcessOutcome> 
        */
       const company = input.companyId ? getCompany(input.companyId) : companyForCall(callId);
       const accountContext = renderAccountContext(company) ?? undefined;
+      /**
+       * Read BEFORE this call's own learnings are written, so a call is never grounded in
+       * conclusions drawn from itself.
+       */
+      const learnedContext = renderLearnedForCompany(company) ?? undefined;
       const transcriptChars = segments.reduce((n, s) => n + s.text.length + 24, 0);
 
       const tExtract = Date.now();
@@ -177,6 +195,7 @@ export async function processCall(input: ProcessInput): Promise<ProcessOutcome> 
             segments,
             priorFailure,
             accountContext,
+            learnedContext,
           });
           budget.record(usage);
           recordUsage(callId, extractor.name, usage);
@@ -228,6 +247,27 @@ export async function processCall(input: ProcessInput): Promise<ProcessOutcome> 
         detail: extractor.name,
       });
 
+      /**
+       * Name the call after what it turned out to be about.
+       *
+       * After the gate, so the title reflects claims that survived rather than a draft that may
+       * have been partly deleted. With no account linked and no repeated proper noun in the
+       * transcript it falls back to the theme alone rather than inventing a company name.
+       */
+      title = deriveCallTitle({
+        draft: extraction,
+        companyName: company?.name,
+        transcriptSubject: subjectFromTranscript(segments),
+      });
+      renameCall(callId, title);
+
+      /**
+       * What this call established about the account. Derived only from claims that already passed
+       * the citation gate, so each one keeps the evidence it was gated on and stays clickable back
+       * to the line that proves it. Written to its own ledger, never into the user's notes.
+       */
+      if (company) recordLearnings(company.id, callId, extraction);
+
       saveExtraction(callId, extraction);
       recordRejections(callId, runId, extraction.rejections);
       status = extraction.run_status;
@@ -267,6 +307,7 @@ export async function processCall(input: ProcessInput): Promise<ProcessOutcome> 
       attempts: { stt: sttAttempts, extract: extractAttempts },
       budget: budget.snapshot(),
       extraction,
+      title,
       error,
       errorCode,
       remedy,

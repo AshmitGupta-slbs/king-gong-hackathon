@@ -8,6 +8,7 @@ import { randomUUID } from 'node:crypto';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { getCompany, listCompanies, updateCompany, upsertCompany } from '@/lib/companies';
+import { getLearning, markLearningPromoted } from '@/lib/learnings';
 import type { Company } from '@/lib/companies';
 import { DealStageSchema } from '@/lib/crm/types';
 
@@ -41,6 +42,27 @@ export async function GET() {
 export async function POST(req: Request) {
   try {
     const form = await req.formData();
+
+    /**
+     * Copy a learning into the account's own notes.
+     *
+     * A deliberate human action, never automatic: `notes` is presented to the model as something a
+     * person asserted, so the system writing into it by itself would make that claim false. This is
+     * the one path by which a derived learning becomes user-owned context, and it happens because
+     * someone read it and clicked.
+     */
+    const promoteId = Number(form.get('promoteLearning') ?? '');
+    if (Number.isInteger(promoteId) && promoteId > 0) {
+      const learning = getLearning(promoteId);
+      if (!learning) return NextResponse.json({ error: 'No such learning.' }, { status: 404 });
+      const company = getCompany(learning.company_id);
+      if (!company) return NextResponse.json({ error: 'No such company.' }, { status: 404 });
+
+      const merged = [company.notes?.trim(), learning.text.trim()].filter(Boolean).join('\n');
+      const updated = updateCompany(company.id, { notes: merged });
+      markLearningPromoted(learning.id);
+      return NextResponse.json({ company: updated });
+    }
     const parsed = CompanyInput.safeParse({
       id: form.get('id')?.toString() || undefined,
       name: form.get('name')?.toString() ?? '',

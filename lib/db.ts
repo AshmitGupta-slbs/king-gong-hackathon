@@ -79,7 +79,23 @@ export function db(): DatabaseSync {
     -- row. A new table IS created on an existing database, so this is the version that works
     -- everywhere. It also lets the link be written before transcription succeeds, which a column
     -- on calls could not: insertCall only runs after STT returns.
-    CREATE TABLE IF NOT EXISTS call_companies (
+    -- What each call taught us about an account. APPEND-ONLY: a row is a thing a specific call
+    -- established, never edited afterwards, so the account's history stays auditable. Modelled on
+    -- gate_rejections, and a new TABLE rather than a column on companies because this schema has no
+    -- migration system -- a new column would be a silent no-op on every database that already exists.
+    --
+    -- Every row carries the evidence the claim was gated on, so a learning can be clicked back to
+    -- the exact line that established it, and the extractor that produced it.
+    CREATE TABLE IF NOT EXISTS company_learnings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      company_id TEXT NOT NULL, call_id TEXT NOT NULL, created_at INTEGER NOT NULL,
+      kind TEXT NOT NULL, text TEXT NOT NULL,
+      segment_id TEXT, start_ms INTEGER, speaker TEXT, quote TEXT,
+      support REAL, verdict TEXT, extracted_by TEXT,
+      promoted INTEGER NOT NULL DEFAULT 0
+    );
+
+        CREATE TABLE IF NOT EXISTS call_companies (
       call_id TEXT PRIMARY KEY, company_id TEXT NOT NULL
     );
   `);
@@ -96,6 +112,17 @@ export function insertCall(c: Call) {
        VALUES (?,?,?,?,?,?,?)`,
     )
     .run(c.id, c.title, c.audio_path, c.duration_ms, c.separation, c.created_at, c.share_id);
+}
+
+/**
+ * Rename a call.
+ *
+ * A plain UPDATE, deliberately NOT `insertCall`: that is INSERT OR REPLACE, so writing a partial
+ * row would blank `audio_path` and `duration_ms`, and replacing the row churns the UNIQUE
+ * `share_id` — quietly breaking any share link already handed out.
+ */
+export function renameCall(id: string, title: string) {
+  db().prepare(`UPDATE calls SET title = ? WHERE id = ?`).run(title, id);
 }
 
 /**
