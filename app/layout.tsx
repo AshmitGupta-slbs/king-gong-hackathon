@@ -6,7 +6,7 @@ const geistSans = Geist({ variable: '--font-geist-sans', subsets: ['latin'] });
 const geistMono = Geist_Mono({ variable: '--font-geist-mono', subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: 'OpenGong Lite — deal notes with receipts',
+  title: 'King Gong — deal notes with receipts',
   description:
     'Upload a sales call. Get a transcript, summary, objections, intent, next steps and a ' +
     'follow-up email — where every claim points at the exact line in the call that proves it.',

@@ -1,4 +1,4 @@
-# Deploying OpenGong Lite
+# Deploying King Gong
 
 Two services from this one repo: the app, and the documentation site. Both are plain Node — no
 Docker, no build plugins, nothing to compile.

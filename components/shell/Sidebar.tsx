@@ -13,6 +13,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { AudioLines, Building2, Upload } from 'lucide-react';
+import { LogoMark, PRODUCT_NAME, PRODUCT_TAGLINE } from '@/components/Logo';
 import { cx } from '@/components/ui/cx';
 
 const NAV = [
@@ -37,19 +38,20 @@ export function Sidebar() {
       )}
     >
       <div className="flex h-[var(--header-h)] shrink-0 items-center border-b border-border-subtle px-3 lg:px-4">
+        {/* Below `lg` the rail shows the mark alone — which is exactly what a mark is for, and why
+            the wordmark is text beside it rather than baked into the image. */}
         <Link
           href="/"
+          title={PRODUCT_NAME}
           className="flex min-w-0 items-center gap-2.5 rounded-control transition-opacity hover:opacity-80"
         >
-          <span className="grid size-8 shrink-0 place-items-center rounded-control bg-brand text-on-brand">
-            <AudioLines size={17} strokeWidth={2.25} />
-          </span>
+          <LogoMark />
           <span className="hidden min-w-0 flex-col lg:flex">
             <span className="truncate text-body leading-tight font-semibold text-fg">
-              OpenGong Lite
+              {PRODUCT_NAME}
             </span>
             <span className="truncate text-caption leading-tight text-fg-dim">
-              deal notes with receipts
+              {PRODUCT_TAGLINE}
             </span>
           </span>
         </Link>

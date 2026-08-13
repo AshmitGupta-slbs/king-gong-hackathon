@@ -1,4 +1,4 @@
-# OpenGong Lite vs. buying a conversation-intelligence suite
+# King Gong vs. buying a conversation-intelligence suite
 
 The launch kit asks for a side-by-side against the paid tool. Here it is — with a rule: **we only
 claim things about our own product that a reader can verify in this repo, and we do not invent
@@ -15,7 +15,7 @@ exactly the thing we are criticising.
 Gong, Fireflies and Avoma are conversation-intelligence *suites*: recording, transcription,
 summaries, coaching workflows, deal boards, forecast rollups, a UI a sales team lives in.
 
-OpenGong Lite does **one job**: after a call, tell me what happened, what they pushed back on, and
+King Gong does **one job**: after a call, tell me what happened, what they pushed back on, and
 what I do next — and prove every line of it against the recording.
 
 If you need deal inspection, forecasting and coaching dashboards, buy the suite. That is a real
@@ -26,7 +26,7 @@ This is for the case where the notes *are* the job.
 
 ## Where we are genuinely different
 
-| | OpenGong Lite | A per-seat suite |
+| | King Gong | A per-seat suite |
 |---|---|---|
 | **Every claim carries its source line** | Yes — enforced by a blocking gate; unprovable claims are deleted, not softened | Summaries are standard; per-claim citation into the transcript is not the norm |
 | **Shows you what it rejected** | Yes — rejected claims are in the UI *and* the Markdown export | Not something we have seen offered |
