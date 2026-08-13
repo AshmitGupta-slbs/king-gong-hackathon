@@ -63,14 +63,14 @@
   <p class="page-lede">Several decisions here had more than one defensible answer. Picking one silently is the failure mode worth avoiding, so each is written with the alternative it rejected. The page opens with the unresolved problem rather than burying it.</p>
 
   <div class="glance">
-    <p><strong>The one to read:</strong> PyAI Hear has been observed inventing fluent, confident sentences out of silence. Our citation gate cannot detect that, because it only checks that a quote matches the transcript. Whether our actual ingest path does this is <strong>unmeasured</strong>.</p>
+    <p><strong>The one to read — now measured, and the answer is good.</strong> PyAI Hear invents fluent, confident sentences out of silence on its <em>streaming</em> path, and our citation gate could not detect that: it checks that a quote matches the transcript, not that the transcript matches the audio. This page carried it as the project's highest-consequence <em>unknown</em> for as long as it was one. It has now been tested on the path we actually ingest with, and the batch path is <strong>clean</strong>.</p>
     <p>Everything else on this page is a settled decision with reasoning attached.</p>
   </div>
 
-  <h2 id="silence">⚠ The open risk that matters</h2>
+  <h2 id="silence">The risk that mattered most — and how it resolved</h2>
 
   <div class="card accent">
-    <span class="card-eyebrow">UNRESOLVED · HIGHEST CONSEQUENCE</span>
+    <span class="card-eyebrow">STREAMING PATH · REAL DEFECT</span>
     <div class="card-title">Hear fabricates speech from silence</div>
     <p>On the streaming path, with nobody speaking, Hear repeatedly emitted <strong>confident finals</strong> — <code>confidence</code> 0.99+, <code>endpoint_reason: silence</code> — containing sentences that were never said. Measured input level: real speech RMS <strong>0.219</strong>; the ambience windows that produced fabricated text, RMS <strong>0.035</strong>.</p>
   </div>
@@ -92,23 +92,21 @@
     </li>
   </ol>
 
+  <div class="card teal">
+    <span class="card-eyebrow">BATCH PATH · MEASURED CLEAN</span>
+    <div class="card-title">The path we actually ingest with does not do this</div>
+    <p><code>scripts/probe/batch_silence_probe.py</code> submits <em>speech · gap · speech</em> and checks whether any returned segment lands in the gap. Both kinds of gap were run, including the one that mattered:</p>
+    <p><strong>25s of digital silence</strong> (exact zeroes) → 2 segments, both real speech, nothing in the gap. <strong>20s of room tone at RMS 0.035</strong>, the exact level that fabricated finals on the stream → <strong>2 segments, both real speech, nothing in the gap.</strong></p>
+    <p>The second is the one that counts: a path that fabricates on ambience tells you nothing about its behaviour on exact zeroes, so testing only digital silence would have proved the easy case and left the real one open.</p>
+  </div>
+
   <div class="pull">
-    Our ingest uses the <strong>batch</strong> path, not streaming. Whether batch behaves the same way is <strong>not known</strong>. It is named here as unknown rather than assumed safe.
+    The question was never "does Hear fabricate" but "does the path we ship fabricate". Naming that distinction is what made it testable — and the answer is no.
   </div>
 
-  <p><strong>What would settle it:</strong> <code>scripts/probe/batch_silence_probe.py</code> is written and unrun. It submits <em>speech · long digital silence · speech</em> — digital silence being the strongest form of the test, exact zeroes rather than room tone — and checks whether any returned segment overlaps the silent window.</p>
+  <p>So the defect is <strong>specific to streaming</strong>. Dead air on an uploaded recording cannot manufacture a quotable segment, and no input-level gate was built at ingest — which is now a measured decision rather than an omission. Anything that later moves ingest onto <code>hear:stream</code> reopens this and would need one; the probe already implements it as <code>--silence-floor</code>, default RMS 0.08.</p>
 
-  <div class="tbl-wrap">
-    <table>
-      <thead><tr><th>If the probe finds…</th><th>Then</th></tr></thead>
-      <tbody>
-        <tr><td>Batch does <strong>not</strong> fabricate</td><td>The risk is confined to a path we do not use. Document it, add the input-level gate before any future streaming ingest, move on.</td></tr>
-        <tr><td>Batch <strong>does</strong> fabricate</td><td>A genuine hole in the core guarantee. The honest fix is an input-level gate at ingest — reject or mark segments whose audio window never reached speech level — and the citation UI should surface that a segment was low-confidence. This would be the highest-priority work in the repo.</td></tr>
-      </tbody>
-    </table>
-  </div>
-
-  <p>Either way the streaming finding already implies a rule for anyone building on Hear: <strong>an input-level gate belongs before segments are trusted.</strong> The probe implements one — <code>--silence-floor</code>, default RMS 0.08.</p>
+  <p>Worth stating as a positive rather than an absent bug: the citation gate's guarantee holds end-to-end on the path this product uses, because the transcript it verifies against is faithful to the audio. That was an assumption until it was measured, and it got measured because it was written down as an assumption instead of being quietly assumed.</p>
 
   <h2 id="other-risks">Other open risks</h2>
 
