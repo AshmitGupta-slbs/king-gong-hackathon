@@ -19,6 +19,7 @@ import type { Doc } from './store';
 import type { Call, ExtractionResult, GateRejection, RunStatus, TranscriptSegment } from './types';
 import type { Company } from './company-types';
 import type { Learning } from './learning-types';
+import type { ActionItem } from './action-item-types';
 import type { RunRow, Store, UsageInput, UsageTotals } from './db-types';
 
 const col = (name: string) => getDatabase().collection(name);
@@ -31,6 +32,26 @@ const toCall = (r: Doc): Call => ({
   separation: r.separation as Call['separation'],
   created_at: r.created_at as number,
   share_id: (r.share_id as string | null) ?? null,
+});
+
+const toActionItem = (r: Doc): ActionItem => ({
+  id: (r.id ?? r._id) as string,
+  company_id: r.company_id as string,
+  origin_call_id: r.origin_call_id as string,
+  created_at: r.created_at as number,
+  text: r.text as string,
+  segment_id: (r.segment_id as string | null) ?? null,
+  start_ms: (r.start_ms as number | null) ?? null,
+  speaker: (r.speaker as string | null) ?? null,
+  quote: (r.quote as string | null) ?? null,
+  status: r.status as ActionItem['status'],
+  resolved_call_id: (r.resolved_call_id as string | null) ?? null,
+  resolved_segment_id: (r.resolved_segment_id as string | null) ?? null,
+  resolved_start_ms: (r.resolved_start_ms as number | null) ?? null,
+  resolved_quote: (r.resolved_quote as string | null) ?? null,
+  resolved_note: (r.resolved_note as string | null) ?? null,
+  resolved_by: (r.resolved_by as ActionItem['resolved_by']) ?? null,
+  resolved_at: (r.resolved_at as number | null) ?? null,
 });
 
 const toCompany = (r: Doc): Company => ({
@@ -365,5 +386,34 @@ export const mongoStore: Store = {
       { _id: String(id) },
       { $set: { promoted: 1 } },
     );
+  },
+
+  // ── action items ───────────────────────────────────────────────────────────
+  async insertActionItems(rows) {
+    if (rows.length === 0) return;
+    // `id` is carried BOTH as `_id` and as a plain field, so `toActionItem` reads the same shape
+    // here as it does from a SQL row and a projection that drops _id cannot lose the key.
+    await col(collections().actionItems).insertMany(rows.map((r) => ({ ...r, _id: r.id })));
+  },
+  async actionItemsForCompany(companyId) {
+    const rows = await col(collections().actionItems)
+      .find({ company_id: companyId })
+      .sort('created_at', -1)
+      .toArray();
+    return rows.map(toActionItem);
+  },
+  async openActionItems(companyId) {
+    const rows = await col(collections().actionItems)
+      .find({ company_id: companyId, status: 'open' })
+      .sort('created_at', 1)
+      .toArray();
+    return rows.map(toActionItem);
+  },
+  async getActionItem(id) {
+    const r = await col(collections().actionItems).findOne({ _id: id });
+    return r ? toActionItem(r) : null;
+  },
+  async resolveActionItem(id, patch) {
+    await col(collections().actionItems).updateOne({ _id: id }, { $set: { ...patch } });
   },
 };

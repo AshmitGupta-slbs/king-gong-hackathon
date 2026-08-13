@@ -169,6 +169,32 @@ async function main() {
   check('the system prompt states the instruction-is-not-evidence rule',
     /instruction to look for something is NEVER evidence/i.test(EXTRACT_SYSTEM));
 
+  // Open commitments share the same channel discipline, and add one requirement of their own.
+  const { renderOpenActionItems } = await import('@/lib/action-items');
+  const openBlock = renderOpenActionItems([
+    {
+      id: 'ai_1234abcd', company_id: 'co', origin_call_id: 'c1', created_at: Date.now(),
+      text: 'Send the security questionnaire', segment_id: 'seg_002', start_ms: 0,
+      speaker: 'rep', quote: 'i will send the questionnaire over',
+      status: 'open', resolved_call_id: null, resolved_segment_id: null, resolved_start_ms: null,
+      resolved_quote: null, resolved_note: null, resolved_by: null, resolved_at: null,
+    },
+  ]);
+  const withItems = buildExtractUserMessage({
+    callTitle: 'T', segments, openActionItems: openBlock ?? undefined,
+  });
+  check('open items reach the prompt WITH their ids', withItems.includes('[ai_1234abcd]'),
+    'without an id the model must identify an item by restating it, and a fuzzy join on wording is the thing this design exists to avoid');
+  check('...banner\'d as not said on this call', /NOT said on this call/.test(withItems));
+  check('...above the transcript',
+    withItems.indexOf('ai_1234abcd') < withItems.indexOf('TRANSCRIPT (cite these ids'));
+  check('the earlier call\'s QUOTE is withheld', !withItems.includes('i will send the questionnaire over'),
+    'it is wording from another call, and putting it in front of the model invites it back out in a claim about this one');
+  check('the system prompt says a repeated promise is not completion',
+    /repeated promise/i.test(EXTRACT_SYSTEM));
+  check('...and that not_discussed needs no citation',
+    /needs no citation/i.test(EXTRACT_SYSTEM));
+
   // ── the budget ─────────────────────────────────────────────────────────────
   head('Budget');
   const bare = estimateTokens(extractPromptText({ callTitle: 'T', segments }));

@@ -31,6 +31,7 @@ import {
 import { deriveCallTitle, subjectFromTranscript } from '../call-title';
 import { recordLearnings } from '../learnings';
 import { selectSkills } from '../skills';
+import { applyOutcomes, recordActionItems, renderOpenForCompany } from '../action-items';
 // Our own prompt text, not a vendor shape — the registry boundary is about vendor payloads, and
 // asking the prompt builder how large its own output is keeps the estimate honest.
 import { extractPromptText } from '../registry/providers/extract-shared';
@@ -193,6 +194,11 @@ export async function processCall(input: ProcessInput): Promise<ProcessOutcome> 
        * recordable after it.
        */
       const skills = selectSkills({ companyId: company?.id, stage: company?.stage });
+      /**
+       * Read BEFORE this call's own next steps are recorded, for the same reason as the learned
+       * block: a call must never be asked whether it delivered on a commitment it just made.
+       */
+      const openItems = await renderOpenForCompany(company);
 
       const tExtract = Date.now();
       const exRun = await retryAimed({
@@ -207,6 +213,7 @@ export async function processCall(input: ProcessInput): Promise<ProcessOutcome> 
             accountContext,
             learnedContext,
             skillContext: skills.text ?? undefined,
+            openActionItems: openItems.text ?? undefined,
           };
 
           /*
@@ -228,7 +235,12 @@ export async function processCall(input: ProcessInput): Promise<ProcessOutcome> 
            * an instant result rather than something to wait on. What matters is WHAT it rejected.
            */
           const tGate = Date.now();
-          const gated = runCitationGate(draft, segments, extractor.name);
+          const gated = runCitationGate(
+            draft,
+            segments,
+            extractor.name,
+            openItems.items.map((i) => i.id),
+          );
           const dropped = gated.result.rejections.filter((r) => r.dropped).length;
           const flagged = gated.result.rejections.length - dropped;
           on({
@@ -296,6 +308,18 @@ export async function processCall(input: ProcessInput): Promise<ProcessOutcome> 
        * to the line that proves it. Written to its own ledger, never into the user's notes.
        */
       if (company) await recordLearnings(company.id, callId, extraction);
+
+      /**
+       * Settle what this call closed, THEN open what it promised — in that order.
+       *
+       * Reversed, a commitment made on this call would be in the open set that this call's own
+       * judgements are applied against, and a model that restated an old commitment as a new one
+       * could close the copy it had just created.
+       */
+      if (company) {
+        await applyOutcomes(callId, extraction, segments);
+        await recordActionItems(company.id, callId, extraction);
+      }
 
       await saveExtraction(callId, extraction);
       await recordRejections(callId, runId, extraction.rejections);

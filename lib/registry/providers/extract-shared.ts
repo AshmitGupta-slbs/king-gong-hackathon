@@ -48,6 +48,16 @@ harder for pricing objections — and for nothing else. Two absolute rules:
   checked for overlap against the line you cite, so borrowed context words make a true claim look
   unsupported.
 
+OPEN ACTION ITEMS, when present, are commitments made on EARLIER calls. Judge each one against this
+call and return it in \`outcomes\`, quoting its id exactly as given:
+- "done" ONLY if this call contains a line saying the thing happened. Cite that line. A promise to
+  do it, a repeated promise, or an update that it is still pending are all NOT done.
+- "not_discussed" otherwise. It needs no citation, because nothing to cite is the whole point, and
+  it is the ordinary answer for most items on most calls. An item left open costs one line next
+  time; an item wrongly closed means nobody ever chases it again.
+Write the accompanying note in the words of THIS call. Do not restate the commitment's original
+wording — the note is checked against the line you cite, and last call's phrasing will not match it.
+
 HOW TO READ THIS CALL, when present, is a set of instructions — what to listen for, how to weigh
 what you hear, what counts as a real commitment. It says nothing about what happened on this call.
 Two rules follow, and they are the same shape as the ones above:
@@ -103,12 +113,24 @@ export function buildExtractUserMessage(req: ExtractRequest): string {
       `${req.skillContext}\n\n`
     : '';
 
+  /**
+   * Open commitments sit with the rest of the background, above the transcript, because that is
+   * what they are: things said on OTHER calls. Each carries the id the model must quote back, which
+   * is what lets a judgement attach to a specific commitment instead of being matched on wording.
+   */
+  const openItems = req.openActionItems
+    ? `OPEN ACTION ITEMS FROM EARLIER CALLS (agreed previously, NOT said on this call — never ` +
+      `citable as evidence of anything). For each one, decide from THIS call whether it happened, ` +
+      `and return it in \`outcomes\` quoting its id exactly.\n${req.openActionItems}\n\n`
+    : '';
+
   let user =
     `Call: ${req.callTitle}\n` +
     `Valid segment ids for this call: ${ids[0]} … ${ids[ids.length - 1]} (${ids.length} segments)\n\n` +
     skills +
     context +
     learned +
+    openItems +
     `TRANSCRIPT (cite these ids for every claim)\n${renderTranscript(req.segments)}`;
 
   // Bounded AIMED retry: the previous attempt's actual failure goes into the prompt, so the retry

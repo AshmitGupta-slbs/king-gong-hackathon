@@ -19,6 +19,7 @@ export function collections() {
     companies: `${prefix}companies`,
     callCompanies: `${prefix}call_companies`,
     companyLearnings: `${prefix}company_learnings`,
+    actionItems: `${prefix}action_items`,
   } as const;
 }
 

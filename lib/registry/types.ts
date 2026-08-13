@@ -79,6 +79,12 @@ export type ExtractRequest = {
    * for something for an assertion that it happened.
    */
   skillContext?: string;
+  /**
+   * Commitments still open from earlier calls, each carrying the stable id the model quotes back.
+   * A plain string for the same reason as `accountContext`: rendering belongs to the caller, and
+   * the registry must not learn what an action item is.
+   */
+  openActionItems?: string;
 };
 
 export type ExtractResult = {

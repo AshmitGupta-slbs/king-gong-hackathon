@@ -41,6 +41,8 @@ const head = (s: string) => console.log(`\n${c.b(s)}`);
 
 const ID = 'zz_test_';
 
+type ActionItem = import('@/lib/action-item-types').ActionItem;
+
 /**
  * Remove the rows the contract itself cannot.
  *
@@ -54,6 +56,7 @@ async function purge(callIds: string[], companyIds: string[], runId: string) {
   if (backend() === 'none') {
     const { db } = await import('@/lib/db-sqlite');
     const d = db();
+    for (const id of companyIds) d.prepare(`DELETE FROM action_items WHERE company_id = ?`).run(id);
     for (const id of callIds) {
       d.prepare(`DELETE FROM calls WHERE id = ?`).run(id);
       d.prepare(`DELETE FROM extractions WHERE call_id = ?`).run(id);
@@ -75,7 +78,10 @@ async function purge(callIds: string[], companyIds: string[], runId: string) {
     await db.collection(c.gateRejections).deleteMany({ call_id: id });
     await db.collection(c.usageEvents).deleteMany({ call_id: id });
   }
-  for (const id of companyIds) await db.collection(c.companies).deleteMany({ _id: id });
+  for (const id of companyIds) {
+    await db.collection(c.companies).deleteMany({ _id: id });
+    await db.collection(c.actionItems).deleteMany({ company_id: id });
+  }
   await db.collection(c.runs).deleteMany({ _id: runId });
 }
 
@@ -251,6 +257,73 @@ async function main() {
   check('a learning is addressable by id', (await s.getLearning(one.id))?.text === 'only one now');
   await s.markLearningPromoted(one.id);
   check('promotion persists', (await s.getLearning(one.id))?.promoted === true);
+
+  // ── action items ───────────────────────────────────────────────────────────
+  head('Action items');
+  const { followThrough } = await import('@/lib/action-items');
+  const item = (id: string, text: string, over: Partial<ActionItem> = {}): ActionItem => ({
+    id, company_id: companyId, origin_call_id: callId, created_at: Date.now(), text,
+    segment_id: 'seg_000', start_ms: 0, speaker: 'rep', quote: 'q',
+    status: 'open', resolved_call_id: null, resolved_segment_id: null, resolved_start_ms: null,
+    resolved_quote: null, resolved_note: null, resolved_by: null, resolved_at: null, ...over,
+  });
+  const A = `${ID}ai_a`;
+  const B = `${ID}ai_b`;
+  const C = `${ID}ai_c`;
+  await s.insertActionItems([
+    item(A, 'Send the security questionnaire'),
+    item(B, 'Loop in the CFO'),
+    item(C, 'Confirm the seat count'),
+  ]);
+
+  const open = await s.openActionItems(companyId);
+  check('open items read back', open.length === 3, `${open.length}`);
+  check('the evidence they were born with survives', open[0]?.segment_id === 'seg_000' && open[0]?.quote === 'q');
+  check('oldest first, so the longest-outstanding is not truncated away',
+    open.length < 2 || open[0].created_at <= open[open.length - 1].created_at);
+  check('an id is addressable', (await s.getActionItem(A))?.text === 'Send the security questionnaire');
+  check('a missing item is null, not a throw', (await s.getActionItem(`${ID}nope`)) === null);
+
+  // A model resolution: carries the line from the later call that proves it.
+  await s.resolveActionItem(A, {
+    status: 'done', resolved_call_id: `${ID}call2`, resolved_segment_id: 'seg_009',
+    resolved_start_ms: 41_000, resolved_quote: 'we got the questionnaire back on monday',
+    resolved_note: 'the questionnaire came back', resolved_by: 'model', resolved_at: Date.now(),
+  });
+  // A human resolution: no citation, because there is none.
+  await s.resolveActionItem(C, {
+    status: 'done', resolved_call_id: null, resolved_segment_id: null, resolved_start_ms: null,
+    resolved_quote: null, resolved_note: null, resolved_by: 'human', resolved_at: Date.now(),
+  });
+
+  const resolvedA = await s.getActionItem(A);
+  const resolvedC = await s.getActionItem(C);
+  check('a resolution persists', resolvedA?.status === 'done' && resolvedC?.status === 'done');
+  check('a MODEL resolution keeps its citation',
+    resolvedA?.resolved_by === 'model' && resolvedA?.resolved_segment_id === 'seg_009' &&
+    resolvedA?.resolved_start_ms === 41_000);
+  check('a HUMAN resolution carries none, and is distinguishable',
+    resolvedC?.resolved_by === 'human' && resolvedC?.resolved_segment_id === null,
+    'a percentage that mixes the two without saying so is worse than either alone');
+  check('the settled items leave the open set', (await s.openActionItems(companyId)).length === 1);
+  check('...but stay in the account history', (await s.actionItemsForCompany(companyId)).length === 3);
+
+  const stats = followThrough(await s.actionItemsForCompany(companyId));
+  check('follow-through counts done over done+open', stats.done === 2 && stats.open === 1 && stats.total === 3,
+    `${stats.done}/${stats.total} = ${stats.pct}%`);
+  check('the percentage is rounded from the real ratio', stats.pct === 67);
+  check('an account with nothing agreed reports null, not 0%',
+    followThrough([]).pct === null,
+    '"no commitments" and "no commitments kept" are different facts');
+
+  // Reopening must clear the resolution — a stale citation on an open item would be a lie.
+  await s.resolveActionItem(A, {
+    status: 'open', resolved_call_id: null, resolved_segment_id: null, resolved_start_ms: null,
+    resolved_quote: null, resolved_note: null, resolved_by: null, resolved_at: null,
+  });
+  const reopened = await s.getActionItem(A);
+  check('reopening clears the citation with it',
+    reopened?.status === 'open' && reopened?.resolved_segment_id === null && reopened?.resolved_by === null);
 
   // ── the notes suggestion, and the invariant it exists for ──────────────────
   head('Notes suggestion');

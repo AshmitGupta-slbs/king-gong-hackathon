@@ -18,6 +18,8 @@ import type { Company } from '@/lib/companies';
 import type { Learning, NotesSuggestion as Suggestion } from '@/lib/learnings';
 import { CompanyLearnings } from '@/components/CompanyLearnings';
 import { NotesSuggestion } from '@/components/NotesSuggestion';
+import { FollowThroughStat } from '@/components/workspace/ActionItems';
+import type { FollowThrough } from '@/lib/action-item-types';
 import { DealStageSchema } from '@/lib/crm/types';
 import { Badge, type BadgeTone } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
@@ -39,10 +41,12 @@ export function SetupCompanies({
   companies,
   learnings = {},
   suggestions = {},
+  followThrough = {},
 }: {
   companies: Company[];
   learnings?: Record<string, Learning[]>;
   suggestions?: Record<string, Suggestion | null>;
+  followThrough?: Record<string, FollowThrough>;
 }) {
   const router = useRouter();
   const [adding, setAdding] = useState(false);
@@ -157,6 +161,12 @@ export function SetupCompanies({
                     ) : (
                       <p className="mt-2 text-caption text-fg-dim italic">
                         No context yet — notes here are given to the model before it reads the call.
+                      </p>
+                    )}
+
+                    {followThrough[c.id] && (
+                      <p className="mt-2">
+                        <FollowThroughStat stats={followThrough[c.id]!} />
                       </p>
                     )}
 

@@ -66,6 +66,10 @@ export async function ensureIndexes(): Promise<{ created: number; skipped: boole
     [c.callCompanies, { call_id: 1 }],
     [c.companyLearnings, { company_id: 1, created_at: -1 }],
     [c.companyLearnings, { call_id: 1 }],
+    // Both reads this collection serves: everything for an account, and the open subset the next
+    // call is asked about.
+    [c.actionItems, { company_id: 1, created_at: -1 }],
+    [c.actionItems, { company_id: 1, status: 1 }],
   ];
   for (const [name, spec] of specs) await db.collection(name).createIndex(spec);
   return { created: specs.length, skipped: false };

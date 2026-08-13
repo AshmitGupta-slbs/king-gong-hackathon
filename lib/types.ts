@@ -113,6 +113,27 @@ export const KeyMomentSchema = z.object({
 });
 
 /**
+ * A judgement on something agreed BEFORE this call.
+ *
+ * The only field here that describes this call is `note` — and that is deliberate, because it is
+ * the field the gate scores. Scoring the carried commitment's own text would measure how much last
+ * call's wording overlaps this call's line, which is a question about two different conversations
+ * and would flag correct judgements as unsupported.
+ */
+export const OutcomeSchema = z.object({
+  item_id: z.string().describe('The id of the open action item, exactly as given to you.'),
+  status: z
+    .enum(['done', 'not_discussed'])
+    .describe('"done" only if this call says it happened. Otherwise "not_discussed".'),
+  note: z
+    .string()
+    .describe('What THIS call said about it, in this call\'s words. Empty for not_discussed.'),
+  segment_ids: z
+    .array(z.string())
+    .describe('Segments proving it happened. Empty for not_discussed — absence has no line.'),
+});
+
+/**
  * Exactly what the extraction model returns. Note what is NOT here: `run_status`, and any
  * verdict on whether a citation held up. Those are the GATE's outputs. A model must never be
  * able to declare its own output shipped.
@@ -125,11 +146,14 @@ export const ExtractionDraftSchema = z.object({
   next_steps: z.array(ClaimSchema),
   follow_up_email: FollowUpEmailSchema,
   key_moments: z.array(KeyMomentSchema),
+  /** Judgements on commitments from earlier calls. Empty when none were carried in. */
+  outcomes: z.array(OutcomeSchema).optional(),
 });
 
 export type ExtractionDraft = z.infer<typeof ExtractionDraftSchema>;
 export type Claim = z.infer<typeof ClaimSchema>;
 export type KeyMoment = z.infer<typeof KeyMomentSchema>;
+export type Outcome = z.infer<typeof OutcomeSchema>;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // What the gate produces (the only thing allowed to reach a user)
@@ -173,6 +197,16 @@ export const CitedEmailSchema = FollowUpEmailSchema.extend({
 
 export const CitedKeyMomentSchema = KeyMomentSchema.extend({
   evidence: EvidenceSchema,
+});
+
+/**
+ * A gated outcome. `evidence` is empty exactly when `status` is 'not_discussed' — nothing happened,
+ * so there is no line to point at, and that is a legitimate answer rather than a missing citation.
+ */
+export const CitedOutcomeSchema = OutcomeSchema.extend({
+  verdict: VerdictSchema,
+  support: z.number().min(0).max(1),
+  evidence: z.array(EvidenceSchema),
 });
 
 /**
@@ -224,10 +258,13 @@ export const ExtractionResultSchema = z.object({
   company_context: z.string().optional(),
   /** Skill ids whose instructions were in the prompt for this run. See lib/skills.ts. */
   skills_used: z.array(z.string()).optional(),
+  /** Judgements on commitments carried in from earlier calls, after the gate. */
+  outcomes: z.array(CitedOutcomeSchema).optional(),
 });
 
 export type ExtractionResult = z.infer<typeof ExtractionResultSchema>;
 export type CitedClaim = z.infer<typeof CitedClaimSchema>;
+export type CitedOutcome = z.infer<typeof CitedOutcomeSchema>;
 export type Evidence = z.infer<typeof EvidenceSchema>;
 export type GateRejection = z.infer<typeof GateRejectionSchema>;
 export type RunStatus = z.infer<typeof RunStatusSchema>;

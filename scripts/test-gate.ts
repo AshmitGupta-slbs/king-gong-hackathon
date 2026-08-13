@@ -116,7 +116,102 @@ console.log('\n\x1b[1m6. Partially-bad citation list keeps the good ids, drops t
     rejections.some((r) => r.reason === 'unresolvable_citation' && !r.dropped));
 }
 
-console.log('\n\x1b[1m7. supportScore sanity\x1b[0m');
+console.log('\n\x1b[1m7. Outcomes — judgements on commitments from EARLIER calls\x1b[0m');
+{
+  const OPEN = ['ai_1111aaaa', 'ai_2222bbbb'];
+
+  // An item id the account does not have is a citation pointing at nothing, and is dropped like one.
+  {
+    const draft = baseDraft({
+      outcomes: [{ item_id: 'ai_deadbeef', status: 'done', note: 'they sent it', segment_ids: ['seg_005'] }],
+    });
+    const { result, rejections } = runCitationGate(draft, segments, undefined, OPEN);
+    check('an invented item id is DROPPED', (result.outcomes?.length ?? 0) === 0,
+      'otherwise a model could close a commitment that does not exist, or another account\'s');
+    check('...and the drop is published', rejections.some((r) => r.dropped && r.field.startsWith('outcomes[')));
+  }
+
+  // The ordinary answer. No citation, and that is correct rather than a missing one.
+  {
+    const draft = baseDraft({
+      outcomes: [{ item_id: OPEN[0], status: 'not_discussed', note: '', segment_ids: [] }],
+    });
+    const { result, rejections } = runCitationGate(draft, segments, undefined, OPEN);
+    check('not_discussed passes with NO citation', result.outcomes?.[0]?.verdict === 'verified',
+      'absence has no line to point at, and demanding one would invite an invented citation');
+    check('...and logs no rejection', !rejections.some((r) => r.field.startsWith('outcomes[')));
+    check('...carrying no evidence', result.outcomes?.[0]?.evidence.length === 0);
+  }
+
+  // done needs a real line, and one that says what the note says.
+  {
+    const draft = baseDraft({
+      outcomes: [{ item_id: OPEN[0], status: 'done', note: 'they will take it to finance review on thursday', segment_ids: ['seg_005'] }],
+    });
+    const { result } = runCitationGate(draft, segments, undefined, OPEN);
+    check('a done backed by a real supporting line VERIFIES',
+      result.outcomes?.[0]?.verdict === 'verified', `support ${result.outcomes?.[0]?.support.toFixed(2)}`);
+  }
+  {
+    const draft = baseDraft({
+      outcomes: [{ item_id: OPEN[0], status: 'done', note: 'it happened', segment_ids: ['seg_999'] }],
+    });
+    const { result, rejections } = runCitationGate(draft, segments, undefined, OPEN);
+    check('a done citing a nonexistent segment is DROPPED', (result.outcomes?.length ?? 0) === 0);
+    check('...for the right reason',
+      rejections.some((r) => r.field.startsWith('outcomes[') && r.reason === 'unresolvable_citation'));
+  }
+  {
+    const draft = baseDraft({
+      outcomes: [{ item_id: OPEN[0], status: 'done', note: 'done', segment_ids: [] }],
+    });
+    const { result, rejections } = runCitationGate(draft, segments, undefined, OPEN);
+    check('a done with no citation at all is DROPPED', (result.outcomes?.length ?? 0) === 0,
+      'a commitment must not close on an assertion');
+    check('...logged as no_citation',
+      rejections.some((r) => r.field.startsWith('outcomes[') && r.reason === 'no_citation'));
+  }
+  {
+    // Cites a real line that plainly does not say the thing happened.
+    const draft = baseDraft({
+      outcomes: [{ item_id: OPEN[0], status: 'done', note: 'the legal team approved data residency', segment_ids: ['seg_000'] }],
+    });
+    const { result } = runCitationGate(draft, segments, undefined, OPEN);
+    check('a done whose line does not support it ships FLAGGED, not dropped',
+      result.outcomes?.[0]?.verdict === 'unverified',
+      'the rejection card should show what was claimed and why it did not hold');
+  }
+
+  // With nothing carried in, every outcome is unresolvable — there was nothing to judge.
+  {
+    const draft = baseDraft({
+      outcomes: [{ item_id: OPEN[0], status: 'done', note: 'sent', segment_ids: ['seg_005'] }],
+    });
+    const { result } = runCitationGate(draft, segments);
+    check('with no open items, an outcome cannot resolve', (result.outcomes?.length ?? 0) === 0);
+  }
+
+  // Exit-status accounting has to count them on both sides.
+  {
+    const draft = baseDraft({
+      objections: [], next_steps: [], key_moments: [],
+      outcomes: [{ item_id: 'ai_nope', status: 'done', note: 'x', segment_ids: ['seg_005'] }],
+    });
+    const { result } = runCitationGate(draft, segments, undefined, OPEN);
+    check('an attempt where only outcomes were tried, and all died, is not "shipped"',
+      result.run_status !== 'shipped', result.run_status);
+  }
+  {
+    const draft = baseDraft({
+      outcomes: [{ item_id: OPEN[0], status: 'not_discussed', note: '', segment_ids: [] }],
+    });
+    const { result } = runCitationGate(draft, segments, undefined, OPEN);
+    check('an otherwise clean call with a not_discussed still ships', result.run_status === 'shipped',
+      result.run_status);
+  }
+}
+
+console.log('\n\x1b[1m8. supportScore sanity\x1b[0m');
 {
   const good = supportScore('pricing is hard to justify per seat', segments[3].text);
   const bad = supportScore('legal team blocked the deal over data residency', segments[3].text);
