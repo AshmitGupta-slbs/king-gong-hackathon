@@ -30,6 +30,10 @@ import {
 } from '@/lib/db';
 import { deriveCallTitle, subjectFromTranscript } from '../call-title';
 import { recordLearnings } from '../learnings';
+import { selectSkills } from '../skills';
+// Our own prompt text, not a vendor shape — the registry boundary is about vendor payloads, and
+// asking the prompt builder how large its own output is keeps the estimate honest.
+import { extractPromptText } from '../registry/providers/extract-shared';
 import { BudgetGovernor, DeadlineError, estimateTokens, type BudgetCaps } from './budget';
 import {
   companyForCall,
@@ -183,22 +187,40 @@ export async function processCall(input: ProcessInput): Promise<ProcessOutcome> 
        * conclusions drawn from itself.
        */
       const learnedContext = (await renderLearnedForCompany(company)) ?? undefined;
-      const transcriptChars = segments.reduce((n, s) => n + s.text.length + 24, 0);
+      /**
+       * Which instructions are live for this call. Resolved here, once, alongside the other context
+       * — the model never selects its own skills, so the set is knowable before the request and
+       * recordable after it.
+       */
+      const skills = selectSkills({ companyId: company?.id, stage: company?.stage });
 
       const tExtract = Date.now();
       const exRun = await retryAimed({
         attempts: REGISTRY_CONFIG.maxAttempts,
         run: async (_n, priorFailure) => {
           on({ t: 'stage', stage: 'extract', state: 'start', attempt: _n });
-          // BUDGET GOVERNOR: checked before the model call, not after it.
-          budget.preflight(estimateTokens(transcriptChars > 0 ? 'x'.repeat(transcriptChars) : ''));
-          const { draft, usage } = await extractor.extract({
+
+          const request = {
             callTitle: input.title,
             segments,
             priorFailure,
             accountContext,
             learnedContext,
-          });
+            skillContext: skills.text ?? undefined,
+          };
+
+          /*
+            BUDGET GOVERNOR: checked before the model call, not after it.
+
+            Estimated from the message that is ACTUALLY SENT, not from the transcript alone. It used
+            to be the transcript, which under-reported by the whole system prompt and every context
+            block — tolerable while those were fixed and small, and wrong the moment skills made the
+            preamble something a user can grow. A cap that does not see the text it is capping is
+            not a cap.
+          */
+          budget.preflight(estimateTokens(extractPromptText(request)));
+
+          const { draft, usage } = await extractor.extract(request);
           budget.record(usage);
           await recordUsage(callId, extractor.name, usage);
           /**
@@ -238,9 +260,14 @@ export async function processCall(input: ProcessInput): Promise<ProcessOutcome> 
        * context makes that auditable after the fact, and survives the company record being edited
        * later.
        */
-      extraction = accountContext
-        ? { ...exRun.value.result, company_context: accountContext }
-        : exRun.value.result;
+      extraction = {
+        ...exRun.value.result,
+        ...(accountContext ? { company_context: accountContext } : {}),
+        // Same reasoning one level up: notes written under a playbook are a different output from
+        // notes written without one, so "which instructions were live" has to survive the run the
+        // way `extracted_by` records which model did.
+        ...(skills.ids.length ? { skills_used: skills.ids } : {}),
+      };
       on({
         t: 'stage',
         stage: 'extract',

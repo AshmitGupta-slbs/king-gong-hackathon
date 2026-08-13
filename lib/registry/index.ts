@@ -211,6 +211,8 @@ export const getTTS = (override?: string) =>
  */
 export { REAL_MODEL_EXTRACTORS, isRealModelExtractor } from '@/lib/provenance';
 
+import { enabledSkills, loadSkills } from '@/lib/skills';
+
 /** Shown in the UI footer so a judge can see what actually ran. Honesty as a feature. */
 export function describeRegistry() {
   const extract = REGISTRY_CONFIG.extract;
@@ -230,5 +232,20 @@ export function describeRegistry() {
     tts: REGISTRY_CONFIG.tts,
     supportThreshold: REGISTRY_CONFIG.supportThreshold,
     budget: REGISTRY_CONFIG.budget,
+    /**
+     * The skills a new upload COULD be read under — the whole enabled corpus, not the subset a
+     * given call selects, since `applies_to` is only resolvable once there is a company. Same
+     * distinction the extractor line draws: this describes the configuration, not any call's notes.
+     *
+     * Never throws: a malformed SKILL.md must fail the extraction that would have used it, loudly,
+     * not take down the home page that merely wants to describe the setup.
+     */
+    skills: (() => {
+      try {
+        return enabledSkills(loadSkills()).map((s) => s.id);
+      } catch {
+        return [];
+      }
+    })(),
   };
 }

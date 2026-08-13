@@ -48,6 +48,15 @@ harder for pricing objections — and for nothing else. Two absolute rules:
   checked for overlap against the line you cite, so borrowed context words make a true claim look
   unsupported.
 
+HOW TO READ THIS CALL, when present, is a set of instructions — what to listen for, how to weigh
+what you hear, what counts as a real commitment. It says nothing about what happened on this call.
+Two rules follow, and they are the same shape as the ones above:
+- An instruction to look for something is NEVER evidence that it is there. A direction to listen
+  for who else has to approve the purchase does not mean anyone else has to approve it. If you
+  looked and the call does not contain it, the correct answer is that there is nothing to report.
+- Write in the words of the transcript, not the words of the instructions. The vocabulary in those
+  instructions is there to help you read; a claim built out of it will not match the line you cite.
+
 Style: write like a sharp colleague summarising the call for the rep, not like a report
 generator. Claims are one specific sentence each. The follow-up email is short, concrete, and
 references only what was actually agreed on the call.`;
@@ -80,9 +89,24 @@ export function buildExtractUserMessage(req: ExtractRequest): string {
       `${req.learnedContext}\n\n`
     : '';
 
+  /**
+   * Instructions, not facts — and the distinction is the entire reason this is its own block.
+   *
+   * The two blocks above carry claims about the world that the model must not cite. This one carries
+   * directions about how to read, which it must not cite EITHER, and for a sharper reason: an
+   * instruction to look for something reads a great deal like an assertion that it is there. A skill
+   * saying "listen for who else has to approve" must never become "someone else has to approve".
+   */
+  const skills = req.skillContext
+    ? `HOW TO READ THIS CALL (instructions, not facts — nothing here happened on this call, ` +
+      `nothing here is citable, and no claim may be made because a skill mentions it)\n` +
+      `${req.skillContext}\n\n`
+    : '';
+
   let user =
     `Call: ${req.callTitle}\n` +
     `Valid segment ids for this call: ${ids[0]} … ${ids[ids.length - 1]} (${ids.length} segments)\n\n` +
+    skills +
     context +
     learned +
     `TRANSCRIPT (cite these ids for every claim)\n${renderTranscript(req.segments)}`;
@@ -96,6 +120,18 @@ export function buildExtractUserMessage(req: ExtractRequest): string {
       `ground in a real segment rather than re-citing a missing one.`;
   }
   return user;
+}
+
+/**
+ * Everything that will be sent as input, as one string.
+ *
+ * Exists so the budget governor can size the real request without the harness having to know how a
+ * prompt is assembled. Previously the governor estimated from the transcript alone and silently
+ * ignored the system prompt and every context block; keeping the answer here means the estimate
+ * cannot drift from the message again, because both come from the same builder.
+ */
+export function extractPromptText(req: ExtractRequest): string {
+  return `${EXTRACT_SYSTEM}\n${buildExtractUserMessage(req)}`;
 }
 
 /**

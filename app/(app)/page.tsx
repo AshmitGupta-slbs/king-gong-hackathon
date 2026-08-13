@@ -78,6 +78,10 @@ export default async function Home() {
               <Row k="Extraction" v={registry.extractDetail} />
               <Row k="Support threshold" v={String(registry.supportThreshold)} />
               <Row
+                k="Skills loaded"
+                v={registry.skills.length ? registry.skills.join(' · ') : 'none'}
+              />
+              <Row
                 k="Budget caps"
                 v={`${registry.budget.maxInputTokens} in · $${registry.budget.maxUsd} · ${
                   registry.budget.maxWallClockMs / 1000

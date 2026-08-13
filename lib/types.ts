@@ -222,6 +222,8 @@ export const ExtractionResultSchema = z.object({
    * record is edited later.
    */
   company_context: z.string().optional(),
+  /** Skill ids whose instructions were in the prompt for this run. See lib/skills.ts. */
+  skills_used: z.array(z.string()).optional(),
 });
 
 export type ExtractionResult = z.infer<typeof ExtractionResultSchema>;
