@@ -89,8 +89,38 @@ durable, not the audio**. Uploaded WAVs are written to `data/uploads/` and strea
 `app/api/audio/[file]/route.ts`. After a redeploy the call, its transcript and its notes all come
 back — and the player has nothing to play.
 
-If uploaded audio needs to survive, mount a volume at `/app/data`. That covers the audio on either
-backend and is the only option that does not depend on which store is configured.
+If uploaded audio needs to survive, mount a volume and point `OPENGONG_UPLOAD_DIR` at it. That
+covers the audio on either backend and is the only option that does not depend on which store is
+configured.
+
+### Recommended Railway setup: Mongo **and** a volume
+
+They solve different halves of the same problem, and neither covers the other — Mongo keeps the
+records, the volume keeps the bytes.
+
+**Variables** (service → Variables):
+
+```
+MONGODB_URI=mongodb+srv://…        # your cluster
+MONGODB_DB=opengong                # optional, this is the default
+MONGO_COLLECTION_PREFIX=opengong_  # optional; isolates this app inside a shared cluster
+OPENGONG_UPLOAD_DIR=/app/data/uploads
+PYAI_API_KEY=pyai_live_…           # already set
+```
+
+**Volume** (service → Volumes): mount at **`/app/data/uploads`**.
+
+Mount the uploads directory specifically, not `/app/data`. Mounting the parent would also persist
+`data/opengong.db`, leaving a stale SQLite file beside the live Mongo data — two stores with
+different contents and nothing to say which one the app read. With `MONGODB_URI` set the SQLite file
+is never opened, and this keeps it from existing at all.
+
+Collections are created on first write and indexes on first use, so there is nothing to provision by
+hand. Verify after the first deploy:
+
+```bash
+npm run check:store   # backend, and a real insert/read/$set/$inc/sort/count/delete round trip
+```
 
 ### What survives a redeploy, and what does not
 

@@ -15,7 +15,7 @@
  * fast path were sync, every call site would be written against the sync shape and swapping
  * backends would stop being an environment variable.
  */
-import { backend } from './store';
+import { backend, ensureIndexes } from './store';
 import { db as sqliteHandle, sqliteStore } from './db-sqlite';
 import { mongoStore } from './db-mongo';
 import type { Store } from './db-types';
@@ -29,8 +29,20 @@ export type { RunRow, UsageTotals } from './db-types';
  * import time in Next, and a store captured too early would pin the process to SQLite even after
  * `MONGODB_URI` became visible.
  */
+/**
+ * Indexes are created once per process, on first Mongo use.
+ *
+ * Not awaited by callers: a missing index makes a query slower, never wrong, so blocking every
+ * first request on DDL would trade correctness-neutral latency for real latency. Failures are
+ * swallowed for the same reason — an index that could not be created must not take down a page
+ * that would have worked without it.
+ */
+let indexing: Promise<unknown> | null = null;
+
 export function store(): Store {
-  return backend() === 'none' ? sqliteStore : mongoStore;
+  if (backend() === 'none') return sqliteStore;
+  if (!indexing) indexing = ensureIndexes().catch(() => undefined);
+  return mongoStore;
 }
 
 /**

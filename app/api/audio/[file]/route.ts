@@ -18,11 +18,14 @@ import { createReadStream, existsSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import type { ReadableOptions } from 'node:stream';
 import { NextResponse } from 'next/server';
+import { uploadDir } from '@/lib/uploads';
 
 // Reading from disk and streaming means this cannot run on Edge.
 export const runtime = 'nodejs';
 
-const DIR = join(process.cwd(), 'data', 'uploads');
+// Resolved per request rather than captured at module load: the env var is not reliably
+// populated at import time, and a stale path here serves 404s for files that exist.
+const dir = () => uploadDir();
 
 /** Node stream → web ReadableStream, so the response can be streamed rather than buffered. */
 function toWebStream(path: string, opts: ReadableOptions & { start?: number; end?: number }) {
@@ -51,7 +54,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ file: string }>
     return NextResponse.json({ error: 'Not found' }, { status: 404 });
   }
 
-  const path = join(DIR, file);
+  const path = join(dir(), file);
   if (!existsSync(path)) {
     /**
      * Expected after a redeploy: the container filesystem is ephemeral, so uploads from a previous
