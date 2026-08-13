@@ -1,12 +1,13 @@
 {
-  "summary": "[Heuristic stub — no model was involved] 10-segment call. 2 concern(s) detected by keyword, 3 action(s), 4 flagged moment(s). Intent classified as \"high interest\". Replace by running extraction against a real model before showing this to anyone.",
+  "summary": "Marcus confirmed the security review came back clean, removing the last blocker on a 40-seat rollout across the two sales pods. He agreed scope on the condition of a pre-agreed 10-seat expansion in Q2 at the same rate, and committed to getting the paperwork through signature by Friday — procurement has already reserved the budget line.",
   "intent": {
-    "label": "high interest",
+    "label": "ready to sign",
     "segment_ids": [
-      "seg_001"
+      "seg_001",
+      "seg_007"
     ],
     "verdict": "verified",
-    "support": 0,
+    "support": 0.5,
     "evidence": [
       {
         "segment_id": "seg_001",
@@ -14,54 +15,69 @@
         "start_ms": 7360,
         "end_ms": 14000,
         "text": "we did and it came back clean security signed off on monday that was honestly the last real blocker"
+      },
+      {
+        "segment_id": "seg_007",
+        "speaker": "prospect",
+        "start_ms": 49200,
+        "end_ms": 56320,
+        "text": "good send the paper over today and i'll get it through signature by friday procurement already has the budget line reserved"
       }
     ]
   },
   "objections": [
     {
-      "claim": "Prospect raised a concern: We did and it came back clean security signed off on monday that was honestly the…",
+      "claim": "Wants the option to add ten more seats in the second quarter without renegotiating the whole agreement.",
       "segment_ids": [
-        "seg_001"
+        "seg_003"
       ],
       "verdict": "verified",
-      "support": 0.7272727272727273,
+      "support": 0.8333333333333334,
       "evidence": [
         {
-          "segment_id": "seg_001",
+          "segment_id": "seg_003",
           "speaker": "prospect",
-          "start_ms": 7360,
-          "end_ms": 14000,
-          "text": "we did and it came back clean security signed off on monday that was honestly the last real blocker"
+          "start_ms": 22240,
+          "end_ms": 28480,
+          "text": "forty is right i would want the option to add ten more in the second quarter without renegotiating the whole thing"
         }
       ]
     },
     {
-      "claim": "Prospect raised a concern: Just cocky elena on it she's handling the vendor forms and she'll chase it if i'm…",
+      "claim": "Checked that onboarding is run by our team rather than becoming work for his managers.",
       "segment_ids": [
-        "seg_009"
+        "seg_005"
       ],
       "verdict": "verified",
-      "support": 0.6666666666666666,
+      "support": 0.5,
       "evidence": [
         {
-          "segment_id": "seg_009",
+          "segment_id": "seg_005",
           "speaker": "prospect",
-          "start_ms": 63120,
-          "end_ms": 68160,
-          "text": "just cocky elena on it she's handling the vendor forms and she'll chase it if i'm slow"
+          "start_ms": 37520,
+          "end_ms": 41920,
+          "text": "that works and the onboarding you said your team runs that not us"
         }
       ]
     }
   ],
   "next_steps": [
     {
-      "claim": "Agreed action: I'll have it in your inbox within the hour anything you want me to flag for…",
+      "claim": "Send the paperwork today so Marcus can get it through signature by Friday; procurement has the budget line reserved.",
       "segment_ids": [
+        "seg_007",
         "seg_008"
       ],
       "verdict": "verified",
-      "support": 0.75,
+      "support": 0.8333333333333334,
       "evidence": [
+        {
+          "segment_id": "seg_007",
+          "speaker": "prospect",
+          "start_ms": 49200,
+          "end_ms": 56320,
+          "text": "good send the paper over today and i'll get it through signature by friday procurement already has the budget line reserved"
+        },
         {
           "segment_id": "seg_008",
           "speaker": "rep",
@@ -72,49 +88,65 @@
       ]
     },
     {
-      "claim": "Agreed action: Good send the paper over today and i'll get it through signature by friday procurement already…",
+      "claim": "Copy Elena on the paperwork — she is handling the vendor forms and will chase it.",
       "segment_ids": [
-        "seg_007"
+        "seg_009"
       ],
       "verdict": "verified",
-      "support": 0.8461538461538461,
+      "support": 0.7142857142857143,
       "evidence": [
         {
-          "segment_id": "seg_007",
+          "segment_id": "seg_009",
           "speaker": "prospect",
-          "start_ms": 49200,
-          "end_ms": 56320,
-          "text": "good send the paper over today and i'll get it through signature by friday procurement already has the budget line reserved"
+          "start_ms": 63120,
+          "end_ms": 68160,
+          "text": "just cocky elena on it she's handling the vendor forms and she'll chase it if i'm slow"
         }
       ]
     },
     {
-      "claim": "Agreed action: We did and it came back clean security signed off on monday that was honestly the…",
+      "claim": "Write the ten-seat expansion in as a pre-agreed option at the same rate, exercisable within the first twelve months.",
       "segment_ids": [
-        "seg_001"
+        "seg_004"
       ],
       "verdict": "verified",
-      "support": 0.8,
+      "support": 0.5,
       "evidence": [
         {
-          "segment_id": "seg_001",
-          "speaker": "prospect",
-          "start_ms": 7360,
-          "end_ms": 14000,
-          "text": "we did and it came back clean security signed off on monday that was honestly the last real blocker"
+          "segment_id": "seg_004",
+          "speaker": "rep",
+          "start_ms": 28560,
+          "end_ms": 37520,
+          "text": "we can write that in as a preagreed expansion at the same proceed rate it just needs to be exercised inside the first twelve months"
         }
       ]
     }
   ],
   "follow_up_email": {
-    "subject": "Following up on our call",
-    "body": "Thanks for the time today. Picking up on what you raised, I will follow up on the points we agreed and come back to you with the detail.",
+    "subject": "Paperwork for signature — 40 seats + pre-agreed expansion",
+    "body": "Hi Marcus,\n\nGreat news on the security sign-off. As agreed: 40 seats across the two sales pods, with a pre-agreed option on a further 10 in Q2 at the same rate, exercisable inside the first twelve months.\n\nPaperwork is on its way within the hour and I have copied Elena for the vendor forms. Onboarding is two sessions in week one, run by us, with a check-in at day thirty — nothing for your managers to build.\n\nSam",
     "segment_ids": [
+      "seg_004",
+      "seg_007",
       "seg_009"
     ],
     "verdict": "verified",
-    "support": 0,
+    "support": 0.25,
     "evidence": [
+      {
+        "segment_id": "seg_004",
+        "speaker": "rep",
+        "start_ms": 28560,
+        "end_ms": 37520,
+        "text": "we can write that in as a preagreed expansion at the same proceed rate it just needs to be exercised inside the first twelve months"
+      },
+      {
+        "segment_id": "seg_007",
+        "speaker": "prospect",
+        "start_ms": 49200,
+        "end_ms": 56320,
+        "text": "good send the paper over today and i'll get it through signature by friday procurement already has the budget line reserved"
+      },
       {
         "segment_id": "seg_009",
         "speaker": "prospect",
@@ -126,9 +158,9 @@
   },
   "key_moments": [
     {
-      "type": "objection",
+      "type": "next_step",
       "segment_id": "seg_001",
-      "note": "We did and it came back clean security signed off…",
+      "note": "Security signed off — last blocker cleared",
       "evidence": {
         "segment_id": "seg_001",
         "speaker": "prospect",
@@ -138,9 +170,21 @@
       }
     },
     {
-      "type": "pricing",
+      "type": "objection",
+      "segment_id": "seg_003",
+      "note": "Wants expansion optionality without renegotiating",
+      "evidence": {
+        "segment_id": "seg_003",
+        "speaker": "prospect",
+        "start_ms": 22240,
+        "end_ms": 28480,
+        "text": "forty is right i would want the option to add ten more in the second quarter without renegotiating the whole thing"
+      }
+    },
+    {
+      "type": "next_step",
       "segment_id": "seg_007",
-      "note": "Good send the paper over today and i'll get it…",
+      "note": "Signature by Friday, budget line reserved",
       "evidence": {
         "segment_id": "seg_007",
         "speaker": "prospect",
@@ -148,33 +192,9 @@
         "end_ms": 56320,
         "text": "good send the paper over today and i'll get it through signature by friday procurement already has the budget line reserved"
       }
-    },
-    {
-      "type": "next_step",
-      "segment_id": "seg_008",
-      "note": "I'll have it in your inbox within the hour anything…",
-      "evidence": {
-        "segment_id": "seg_008",
-        "speaker": "rep",
-        "start_ms": 56320,
-        "end_ms": 63200,
-        "text": "i'll have it in your inbox within the hour anything you want me to flag for procurement directly"
-      }
-    },
-    {
-      "type": "objection",
-      "segment_id": "seg_009",
-      "note": "Just cocky elena on it she's handling the vendor forms…",
-      "evidence": {
-        "segment_id": "seg_009",
-        "speaker": "prospect",
-        "start_ms": 63120,
-        "end_ms": 68160,
-        "text": "just cocky elena on it she's handling the vendor forms and she'll chase it if i'm slow"
-      }
     }
   ],
   "run_status": "shipped",
   "rejections": [],
-  "extracted_by": "stub-heuristic"
+  "extracted_by": "demo-fixture"
 }

@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation';
 import { getCall, getExtraction, getSegments } from '@/lib/db';
 import { loadSamples } from '@/lib/samples';
+import { getCrm } from '@/lib/crm';
 import { CallWorkspace } from '@/components/CallWorkspace';
 import type { CallBundle } from '@/lib/types';
 
@@ -20,5 +21,13 @@ export default async function CallPage({ params }: PageProps<'/calls/[id]'>) {
     segments: getSegments(id),
     extraction: getExtraction(id),
   };
-  return <CallWorkspace bundle={bundle} />;
+
+  /**
+   * Account context is resolved on the server — `getCrm()` reads `process.env.CRM_PROVIDER`, which
+   * only exists server-side, and a real adapter would be making authenticated calls here. It is
+   * null whenever the call has no CRM record, and every consumer degrades rather than crashing.
+   */
+  const crm = getCrm().forCall(id);
+
+  return <CallWorkspace bundle={bundle} crm={crm} />;
 }

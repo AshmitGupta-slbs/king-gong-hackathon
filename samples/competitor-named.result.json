@@ -1,13 +1,21 @@
 {
-  "summary": "[Heuristic stub — no model was involved] 10-segment call. 2 concern(s) detected by keyword, 1 action(s), 3 flagged moment(s). Intent classified as \"price-sensitive\". Replace by running extraction against a real model before showing this to anyone.",
+  "summary": "Bright Harbour is down to three vendors — us, Gong and Chorus — having ruled out Fireflies for weak coaching. Gong is the internal favourite for political rather than product reasons: their VP used it before and trusts it. Dana's own objections to Gong are price and paying for a full revenue suite when they want about a third of it, and Chorus lost on summary quality.",
   "intent": {
-    "label": "price-sensitive",
+    "label": "competitive evaluation",
     "segment_ids": [
+      "seg_001",
       "seg_003"
     ],
     "verdict": "verified",
-    "support": 0.5,
+    "support": 0,
     "evidence": [
+      {
+        "segment_id": "seg_001",
+        "speaker": "prospect",
+        "start_ms": 8160,
+        "end_ms": 15840,
+        "text": "we are down to three u gong and chorus we looked at fireflies early on but it did not have the coaching side we wanted"
+      },
       {
         "segment_id": "seg_003",
         "speaker": "prospect",
@@ -19,12 +27,37 @@
   },
   "objections": [
     {
-      "claim": "Prospect raised a concern: Honestly our vp came from a company that used gong and he trusts it it is…",
+      "claim": "Gong is the safe internal choice because their VP came from a company that used it and trusts it — Dana needs to show him this is not a downgrade from the tool he already knows.",
+      "segment_ids": [
+        "seg_003",
+        "seg_007"
+      ],
+      "verdict": "verified",
+      "support": 0.7058823529411765,
+      "evidence": [
+        {
+          "segment_id": "seg_003",
+          "speaker": "prospect",
+          "start_ms": 18800,
+          "end_ms": 34000,
+          "text": "honestly our vp came from a company that used gong and he trusts it it is the safe choice internally nobody gets fired for picking gong the thing that bothers me about gong is the price and that we would be paying for a whole revenue suite when we want maybe a third of it"
+        },
+        {
+          "segment_id": "seg_007",
+          "speaker": "prospect",
+          "start_ms": 48000,
+          "end_ms": 54880,
+          "text": "that is exactly it and i need to be able to show my vp why this is not a downgrade from the thing he already trusts"
+        }
+      ]
+    },
+    {
+      "claim": "Price is the objection to Gong, specifically paying for a whole revenue suite when they want maybe a third of it.",
       "segment_ids": [
         "seg_003"
       ],
       "verdict": "verified",
-      "support": 0.6666666666666666,
+      "support": 0.8181818181818182,
       "evidence": [
         {
           "segment_id": "seg_003",
@@ -36,12 +69,12 @@
       ]
     },
     {
-      "claim": "Prospect raised a concern: Chorus was cheaper but the summaries were noticeably worse in our pilot my rep stopped reading…",
+      "claim": "Chorus was cheaper but its summaries were noticeably worse in the pilot — her rep stopped reading them by week two.",
       "segment_ids": [
         "seg_005"
       ],
       "verdict": "verified",
-      "support": 0.75,
+      "support": 1,
       "evidence": [
         {
           "segment_id": "seg_005",
@@ -55,13 +88,21 @@
   ],
   "next_steps": [
     {
-      "claim": "Agreed action: That would help send me something i can put in front of him side by side…",
+      "claim": "Send a side-by-side comparison Dana can put in front of her VP before the decision meeting on the twentieth.",
       "segment_ids": [
+        "seg_008",
         "seg_009"
       ],
       "verdict": "verified",
-      "support": 0.7777777777777778,
+      "support": 0.8,
       "evidence": [
+        {
+          "segment_id": "seg_008",
+          "speaker": "rep",
+          "start_ms": 54960,
+          "end_ms": 64000,
+          "text": "then the piece i want to show you is where every line in the notes links back to the moment in the call it came from that is the part gong does not do"
+        },
         {
           "segment_id": "seg_009",
           "speaker": "prospect",
@@ -73,14 +114,22 @@
     }
   ],
   "follow_up_email": {
-    "subject": "Following up on our call",
-    "body": "Thanks for the time today. Picking up on what you raised, I will follow up on the points we agreed and come back to you with the detail.",
+    "subject": "Side-by-side for your decision meeting on the 20th",
+    "body": "Hi Dana,\n\nAs promised, something you can put in front of Ryan side by side.\n\nThe short version: every line in the notes links back to the moment in the call it came from, so a claim you cannot verify does not survive to be read. That is the part the suite does not do, and it is why this is not a downgrade on the thing he already trusts.\n\nHappy to join the meeting on the 20th if useful.\n\nSam",
     "segment_ids": [
+      "seg_008",
       "seg_009"
     ],
     "verdict": "verified",
-    "support": 0,
+    "support": 0.4166666666666667,
     "evidence": [
+      {
+        "segment_id": "seg_008",
+        "speaker": "rep",
+        "start_ms": 54960,
+        "end_ms": 64000,
+        "text": "then the piece i want to show you is where every line in the notes links back to the moment in the call it came from that is the part gong does not do"
+      },
       {
         "segment_id": "seg_009",
         "speaker": "prospect",
@@ -94,7 +143,7 @@
     {
       "type": "competitor_mention",
       "segment_id": "seg_001",
-      "note": "Named: gong, chorus, fireflies",
+      "note": "Down to three: us, Gong, Chorus",
       "evidence": {
         "segment_id": "seg_001",
         "speaker": "prospect",
@@ -105,20 +154,32 @@
     },
     {
       "type": "competitor_mention",
-      "segment_id": "seg_002",
-      "note": "Named: gong",
+      "segment_id": "seg_003",
+      "note": "VP trusts Gong; price is the objection",
       "evidence": {
-        "segment_id": "seg_002",
-        "speaker": "rep",
-        "start_ms": 15760,
-        "end_ms": 18720,
-        "text": "what is pulling you toward gong at the moment"
+        "segment_id": "seg_003",
+        "speaker": "prospect",
+        "start_ms": 18800,
+        "end_ms": 34000,
+        "text": "honestly our vp came from a company that used gong and he trusts it it is the safe choice internally nobody gets fired for picking gong the thing that bothers me about gong is the price and that we would be paying for a whole revenue suite when we want maybe a third of it"
+      }
+    },
+    {
+      "type": "competitor_mention",
+      "segment_id": "seg_005",
+      "note": "Chorus lost on summary quality",
+      "evidence": {
+        "segment_id": "seg_005",
+        "speaker": "prospect",
+        "start_ms": 34960,
+        "end_ms": 41040,
+        "text": "chorus was cheaper but the summaries were noticeably worse in our pilot my rep stopped reading them by week two"
       }
     },
     {
       "type": "next_step",
       "segment_id": "seg_009",
-      "note": "That would help send me something i can put in…",
+      "note": "Decision meeting on the twentieth",
       "evidence": {
         "segment_id": "seg_009",
         "speaker": "prospect",
@@ -130,5 +191,5 @@
   ],
   "run_status": "shipped",
   "rejections": [],
-  "extracted_by": "stub-heuristic"
+  "extracted_by": "demo-fixture"
 }

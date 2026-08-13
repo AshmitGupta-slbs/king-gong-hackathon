@@ -1,13 +1,21 @@
 {
-  "summary": "[Heuristic stub — no model was involved] 10-segment call. 1 concern(s) detected by keyword, 1 action(s), 3 flagged moment(s). Intent classified as \"high interest\". Replace by running extraction against a real model before showing this to anyone.",
+  "summary": "Helen was explicit that the product is not the issue — the per-seat number is. At 25 seats it becomes a finance-committee item, and their CFO requires anything new to displace existing spend rather than add to it. She believes the recording tool and part of the conversation analytics spend could be retired, covering roughly half. Under five thousand in year one she can approve it herself.",
   "intent": {
-    "label": "high interest",
+    "label": "price-sensitive",
     "segment_ids": [
+      "seg_001",
       "seg_009"
     ],
     "verdict": "verified",
     "support": 0,
     "evidence": [
+      {
+        "segment_id": "seg_001",
+        "speaker": "prospect",
+        "start_ms": 4720,
+        "end_ms": 12400,
+        "text": "the product is not the issue the number is one four oh oh a seat is more than we spend on our entire sales tooling stack right now"
+      },
       {
         "segment_id": "seg_009",
         "speaker": "prospect",
@@ -19,12 +27,13 @@
   },
   "objections": [
     {
-      "claim": "Prospect raised a concern: The product is not the issue the number is one four oh oh a seat is…",
+      "claim": "Per-seat price is the blocker, not the product — at their volume it is more than they currently spend on the entire sales tooling stack.",
       "segment_ids": [
-        "seg_001"
+        "seg_001",
+        "seg_003"
       ],
       "verdict": "verified",
-      "support": 0.6666666666666666,
+      "support": 0.6923076923076923,
       "evidence": [
         {
           "segment_id": "seg_001",
@@ -32,18 +41,68 @@
           "start_ms": 4720,
           "end_ms": 12400,
           "text": "the product is not the issue the number is one four oh oh a seat is more than we spend on our entire sales tooling stack right now"
+        },
+        {
+          "segment_id": "seg_003",
+          "speaker": "prospect",
+          "start_ms": 14720,
+          "end_ms": 27840,
+          "text": "twenty five to start at that volume it is a six figure line item and it goes to the finance committee not just to me and our cfo has been very clear this year that anything new has to display something existing not add to it"
+        }
+      ]
+    },
+    {
+      "claim": "Their CFO requires anything new to displace existing spend rather than add to it, and Helen can only identify about half the cost in things it would retire.",
+      "segment_ids": [
+        "seg_003",
+        "seg_005"
+      ],
+      "verdict": "verified",
+      "support": 0.4117647058823529,
+      "evidence": [
+        {
+          "segment_id": "seg_003",
+          "speaker": "prospect",
+          "start_ms": 14720,
+          "end_ms": 27840,
+          "text": "twenty five to start at that volume it is a six figure line item and it goes to the finance committee not just to me and our cfo has been very clear this year that anything new has to display something existing not add to it"
+        },
+        {
+          "segment_id": "seg_005",
+          "speaker": "prospect",
+          "start_ms": 31360,
+          "end_ms": 38880,
+          "text": "possibly the recording tool and may be part of what we pay for conversation analytics that is maybe half the cost not all of it"
+        }
+      ]
+    },
+    {
+      "claim": "She will not go to the finance committee twice, so the number has to be right the first time she takes it in.",
+      "segment_ids": [
+        "seg_007"
+      ],
+      "verdict": "verified",
+      "support": 0.75,
+      "evidence": [
+        {
+          "segment_id": "seg_007",
+          "speaker": "prospect",
+          "start_ms": 44720,
+          "end_ms": 51200,
+          "text": "yes and i would rather not go to committee twice so i need the number to be right the first time i take it in"
         }
       ]
     }
   ],
   "next_steps": [
     {
-      "claim": "Agreed action: Then let me do two things a ten seat starting tire so the first year is…",
+      "claim": "Put together a ten-seat starting tier so the first year lands under the committee threshold, plus a written comparison of what it retires.",
       "segment_ids": [
-        "seg_008"
+        "seg_008",
+        "seg_009"
       ],
       "verdict": "verified",
-      "support": 0.8181818181818182,
+      "support": 0.6875,
       "evidence": [
         {
           "segment_id": "seg_008",
@@ -51,19 +110,34 @@
           "start_ms": 51360,
           "end_ms": 60560,
           "text": "then let me do two things a ten seat starting tire so the first year is under the committee threshold and a written comparison of what it retires"
+        },
+        {
+          "segment_id": "seg_009",
+          "speaker": "prospect",
+          "start_ms": 60560,
+          "end_ms": 67440,
+          "text": "do that if the first year comes in under five oh oh oh i can approve it myself and that changes the whole conversation"
         }
       ]
     }
   ],
   "follow_up_email": {
-    "subject": "Following up on our call",
-    "body": "Thanks for the time today. Picking up on what you raised, I will follow up on the points we agreed and come back to you with the detail.",
+    "subject": "Revised structure — 10-seat start + what it retires",
+    "body": "Hi Helen,\n\nTwo things, as discussed.\n\nFirst, a ten-seat starting tier that brings year one under the threshold you can approve yourself, with a defined path to the full 25.\n\nSecond, a written comparison of what this retires — the recording tool and the overlapping part of the conversation analytics spend — so the displacement argument is on paper before it reaches the committee.\n\nSam",
     "segment_ids": [
+      "seg_008",
       "seg_009"
     ],
     "verdict": "verified",
-    "support": 0,
+    "support": 0.38461538461538464,
     "evidence": [
+      {
+        "segment_id": "seg_008",
+        "speaker": "rep",
+        "start_ms": 51360,
+        "end_ms": 60560,
+        "text": "then let me do two things a ten seat starting tire so the first year is under the committee threshold and a written comparison of what it retires"
+      },
       {
         "segment_id": "seg_009",
         "speaker": "prospect",
@@ -77,7 +151,7 @@
     {
       "type": "pricing",
       "segment_id": "seg_001",
-      "note": "The product is not the issue the number is one…",
+      "note": "Per-seat price exceeds their whole tooling spend",
       "evidence": {
         "segment_id": "seg_001",
         "speaker": "prospect",
@@ -89,7 +163,7 @@
     {
       "type": "pricing",
       "segment_id": "seg_003",
-      "note": "Twenty five to start at that volume it is a…",
+      "note": "Finance committee + CFO displacement rule",
       "evidence": {
         "segment_id": "seg_003",
         "speaker": "prospect",
@@ -99,9 +173,21 @@
       }
     },
     {
+      "type": "pricing",
+      "segment_id": "seg_009",
+      "note": "Under five thousand year one = self-approval",
+      "evidence": {
+        "segment_id": "seg_009",
+        "speaker": "prospect",
+        "start_ms": 60560,
+        "end_ms": 67440,
+        "text": "do that if the first year comes in under five oh oh oh i can approve it myself and that changes the whole conversation"
+      }
+    },
+    {
       "type": "next_step",
       "segment_id": "seg_008",
-      "note": "Then let me do two things a ten seat starting…",
+      "note": "Ten-seat tier + written displacement comparison",
       "evidence": {
         "segment_id": "seg_008",
         "speaker": "rep",
@@ -113,5 +199,5 @@
   ],
   "run_status": "shipped",
   "rejections": [],
-  "extracted_by": "stub-heuristic"
+  "extracted_by": "demo-fixture"
 }

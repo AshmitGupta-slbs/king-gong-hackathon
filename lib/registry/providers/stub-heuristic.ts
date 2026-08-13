@@ -21,6 +21,7 @@
  * ─────────────────────────────────────────────────────────────────────────────────────────────
  */
 import type { Claim, ExtractionDraft, KeyMoment, TranscriptSegment } from '@/lib/types';
+import { COMPETITORS } from '@/lib/competitors';
 import type { ExtractProvider, ExtractRequest, ExtractResult } from '../types';
 
 /** The single source of truth for "did a real model produce this?". Read by UI and check:ship. */
@@ -34,7 +35,6 @@ const OBJECTION_CUES = [
   'says no', 'stretched', 'surveilled', 'worse', 'bothers me', 'more than we spend',
 ];
 const PRICING_CUES = ['price', 'pricing', 'seat', 'budget', 'cost', 'figure', 'committee', 'cfo', 'procurement', 'spend'];
-const COMPETITORS = ['gong', 'chorus', 'fireflies', 'avoma', 'outreach', 'salesloft', 'koras'];
 const NEXT_STEP_CUES = [
   'send', 'forward', 'follow up', "i'll", 'i will', 'check back', 'review', 'signature', 'sign',
   'copy', 'get it through', 'take it to', 'put in front of', 'let me', 'come in under',
@@ -42,7 +42,7 @@ const NEXT_STEP_CUES = [
 const NO_DECISION_CUES = ['not the priority', 'paused', 'do not know', 'no one championing', 'check back with me', 'not much has moved'];
 const COMMIT_CUES = ['signed off', 'signature', 'approve it myself', 'budget line', 'that works', 'send the paper'];
 
-const has = (text: string, cues: string[]) => cues.some((c) => text.includes(c));
+const has = (text: string, cues: readonly string[]) => cues.some((c) => text.includes(c));
 
 /** First N content words of a segment, so a claim reads like prose rather than a keyword dump. */
 function gist(text: string, words = 16): string {
