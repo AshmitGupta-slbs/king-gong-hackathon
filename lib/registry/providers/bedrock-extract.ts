@@ -57,7 +57,7 @@ import {
 
 /**
  * Bedrock ids carry the `anthropic.` provider prefix. An id that already has one is passed through
- * untouched, so `OPENGONG_MODEL` can name either form and still mean what it says.
+ * untouched, so `LLM_MODEL` can name either form and still mean what it says.
  */
 export function bedrockModelId(model: string): string {
   return model.startsWith('anthropic.') ? model : `anthropic.${model}`;
@@ -155,7 +155,7 @@ export function bedrockExtractor(): ExtractProvider {
               `"not offered here" from "offered but not enabled for you".\n` +
               `  • Try a region that serves this model (us-east-1 / us-west-2) and enable Anthropic ` +
               `model access there in the Bedrock console.\n` +
-              `  • Or pick a model the region does serve: OPENGONG_MODEL=claude-sonnet-5.\n` +
+              `  • Or pick a model the region does serve: LLM_MODEL=claude-sonnet-5.\n` +
               `Original: ${msg}`,
           );
         }

@@ -18,11 +18,11 @@
   <pre style="background:var(--ink); color:var(--paper); padding:18px; border-radius:6px; overflow-x:auto; font-size:13px; font-family:var(--mono);">// lib/registry/index.ts — ★ the one file you edit to swap a provider ★
 
 export const REGISTRY_CONFIG = {
-  stt:     (process.env.OPENGONG_STT     ?? 'pyai-jobs'),
-  extract: (process.env.OPENGONG_EXTRACT ?? detectExtractProvider()),
-  tts:     (process.env.OPENGONG_TTS     ?? 'macos-say'),
+  stt:     (process.env.OPENGONG_STT ?? 'pyai-jobs'),
+  extract: providerFromEnv() ?? detectExtractProvider(),   // LLM_PROVIDER
+  tts:     (process.env.OPENGONG_TTS ?? 'macos-say'),
 
-  extractModel:  process.env.OPENGONG_MODEL  ?? 'claude-opus-5',
+  extractModel:  process.env.LLM_MODEL       ?? 'claude-opus-5',
   extractEffort: process.env.OPENGONG_EFFORT ?? 'high',
   budget: { maxInputTokens: 180_000, maxUsd: 1.0, /* … */ },
   supportThreshold: 0.18,
@@ -30,6 +30,17 @@ export const REGISTRY_CONFIG = {
 };</pre>
 
   <p>Note that the gate's support threshold and the budget caps live here too. The reference spec asked for budget caps "in the capability registry layer", and keeping every knob on one surface means a demo can be retuned with environment variables and no rebuild.</p>
+
+  <p>The two variables that choose the model are named <code>LLM_PROVIDER</code> and <code>LLM_MODEL</code> — deliberately the names used by the other services this deploys alongside, so one host configuration works everywhere. Spelling is forgiving: case is ignored and any run of non-alphanumerics folds to <code>_</code>, so <code>anthropic_bedrock</code>, <code>anthropic-bedrock</code> and <code>ANTHROPIC BEDROCK</code> all resolve.</p>
+
+  <div class="card accent">
+    <span class="card-eyebrow">A TYPO MUST NOT BECOME A SILENT DOWNGRADE</span>
+    <div class="card-title">An unrecognised <code>LLM_PROVIDER</code> throws</div>
+    <p>It does <strong>not</strong> fall back to auto-detection. With a silent fallback, <code>LLM_PROVIDER=antropic_bedrock</code> would resolve to the keyword stub on a host with no other credentials — and the app would then serve stub-generated notes wearing the appearance of model output, which is the single thing this product argues against.</p>
+    <p>This repo shipped that exact failure once in another guise: the upload route cast an unvalidated form value, so anything that was not literally <code>'channel'</code> fell into a bare <code>else</code> and diarized, making a typo indistinguishable from a deliberate choice. Same shape, same remedy — validate, never coerce.</p>
+  </div>
+
+  <p><strong><code>LLM_MODEL</code> must be a real model id.</strong> On Bedrock the <code>anthropic.</code> prefix is added for you when absent, so either form works. What does <em>not</em> work is an opaque handle from a gateway that maps model names to ids — there is nothing on this path to resolve one, and it comes back as <code>404 not_found_error</code> indistinguishable from a model the region does not serve.</p>
 
   <h2 id="providers">The eight providers</h2>
 

@@ -8,7 +8,7 @@
  * appears — swapping keyword-stub output for model output without touching the audio.
  *
  * Provider is auto-detected: ANTHROPIC_API_KEY -> claude, AWS creds + AWS_REGION -> bedrock,
- * otherwise the keyword stub. Override with OPENGONG_EXTRACT.
+ * otherwise the keyword stub. Override with LLM_PROVIDER.
  */
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';

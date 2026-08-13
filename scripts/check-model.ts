@@ -69,7 +69,7 @@ async function main() {
   }
 
   console.log(c.b(`\nProbing model ids on bedrock-mantle · region ${region}`));
-  console.log(c.dim(`  configured: OPENGONG_MODEL=${REGISTRY_CONFIG.extractModel}`));
+  console.log(c.dim(`  configured: LLM_MODEL=${REGISTRY_CONFIG.extractModel}`));
   console.log(c.dim('  one 1-token request per cell; bare vs anthropic.-prefixed\n'));
 
   const resolved: string[] = [];
@@ -112,7 +112,7 @@ async function main() {
         }.`,
       ),
     );
-    console.log(c.dim(`  Use:  export OPENGONG_MODEL=${resolved[0]}\n`));
+    console.log(c.dim(`  Use:  export LLM_MODEL=${resolved[0]}\n`));
     process.exit(0);
   }
 

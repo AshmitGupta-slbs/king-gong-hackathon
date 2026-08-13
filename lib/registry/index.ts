@@ -18,7 +18,9 @@ import type { ExtractProvider, STTProvider, TTSProvider } from './types';
  * because it needs less setup; either is a real model. The stub is the last resort and is loudly
  * flagged everywhere it is used.
  */
-function detectExtractProvider(): 'claude' | 'bedrock' | 'stub-heuristic' {
+type ExtractProviderName = 'claude' | 'bedrock' | 'stub-heuristic';
+
+function detectExtractProvider(): ExtractProviderName {
   if (process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN) return 'claude';
   const awsRegion = process.env.AWS_REGION ?? process.env.AWS_DEFAULT_REGION;
   const awsCreds =
@@ -27,6 +29,53 @@ function detectExtractProvider(): 'claude' | 'bedrock' | 'stub-heuristic' {
     process.env.AWS_PROFILE;
   if (awsRegion && awsCreds) return 'bedrock';
   return 'stub-heuristic';
+}
+
+/**
+ * `LLM_PROVIDER` → our provider name.
+ *
+ * These two variable names (`LLM_PROVIDER`, `LLM_MODEL`) are deliberately the ones used across the
+ * other services this is deployed alongside, so one Railway configuration works everywhere. The
+ * accepted spellings are generous — case is ignored and any run of non-alphanumerics folds to `_`,
+ * so `anthropic_bedrock`, `anthropic-bedrock` and `ANTHROPIC BEDROCK` all land in the same place.
+ */
+const PROVIDER_ALIASES: Record<string, ExtractProviderName> = {
+  anthropic_bedrock: 'bedrock',
+  aws_bedrock: 'bedrock',
+  bedrock: 'bedrock',
+  anthropic: 'claude',
+  anthropic_api: 'claude',
+  claude: 'claude',
+  stub: 'stub-heuristic',
+  stub_heuristic: 'stub-heuristic',
+  heuristic: 'stub-heuristic',
+  none: 'stub-heuristic',
+};
+
+/**
+ * Resolve `LLM_PROVIDER`, or null when it is unset.
+ *
+ * THROWS on an unrecognised value rather than falling back to auto-detection. That is the whole
+ * point: with a silent fallback, `LLM_PROVIDER=antropic_bedrock` would quietly resolve to the
+ * keyword stub on a machine with no other credentials, and the app would then produce
+ * stub-generated notes that look like model output. This repo has already shipped that exact bug
+ * once in another guise — the upload route cast an unvalidated form value, so anything that was not
+ * literally 'channel' fell into a bare `else` and diarized, making a typo indistinguishable from a
+ * deliberate choice. Validate, never coerce.
+ */
+function providerFromEnv(): ExtractProviderName | null {
+  const raw = process.env.LLM_PROVIDER?.trim();
+  if (!raw) return null;
+  const key = raw.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+  const resolved = PROVIDER_ALIASES[key];
+  if (!resolved) {
+    throw new Error(
+      `LLM_PROVIDER="${raw}" is not recognised. Accepted values: ` +
+        `${Object.keys(PROVIDER_ALIASES).join(', ')}.\n` +
+        'Leave it unset to auto-detect from whichever credentials are present.',
+    );
+  }
+  return resolved;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -46,12 +95,9 @@ export const REGISTRY_CONFIG = {
    * 'stub-heuristic' — deterministic keyword stub. NOT a model, never demo it.
    *
    * Auto-detected from available credentials so a fresh clone works with whatever you have;
-   * OPENGONG_EXTRACT overrides.
+   * `LLM_PROVIDER` overrides (and an unrecognised value throws — see providerFromEnv).
    */
-  extract: (process.env.OPENGONG_EXTRACT ?? detectExtractProvider()) as
-    | 'claude'
-    | 'bedrock'
-    | 'stub-heuristic',
+  extract: providerFromEnv() ?? detectExtractProvider(),
 
   /**
    * Sample-call generation only — never on the request path.
@@ -61,8 +107,15 @@ export const REGISTRY_CONFIG = {
    */
   tts: (process.env.OPENGONG_TTS ?? 'macos-say') as 'macos-say' | 'pyai-speak',
 
-  /** Claude model + effort for extraction. */
-  extractModel: process.env.OPENGONG_MODEL ?? 'claude-opus-5',
+  /**
+   * Claude model + effort for extraction.
+   *
+   * `LLM_MODEL` names the model. On Bedrock the provider adds the required `anthropic.` prefix if
+   * it is absent, so either form works here — but the value must be a REAL model id. An opaque
+   * handle from a gateway that maps model names (`3s3wyt6beb2x` and the like) has nothing in this
+   * path to resolve it and will come back as `404 not_found_error`.
+   */
+  extractModel: process.env.LLM_MODEL ?? 'claude-opus-5',
   extractEffort: (process.env.OPENGONG_EFFORT ?? 'high') as
     | 'low'
     | 'medium'

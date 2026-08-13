@@ -77,6 +77,12 @@ export AWS_ACCESS_KEY_ID=...  AWS_SECRET_ACCESS_KEY=...  AWS_REGION=us-east-1
 With neither set, notes fall back to a keyword stub that is **loudly labelled in the UI** and is not
 a substitute for a model. See [Honest caveats](#honest-caveats).
 
+To choose explicitly rather than auto-detect, set `LLM_PROVIDER` (`anthropic_bedrock` · `anthropic` ·
+`stub`) and `LLM_MODEL` (a real model id — on Bedrock the `anthropic.` prefix is added if absent). An
+unrecognised `LLM_PROVIDER` **fails loudly** rather than falling back, so a typo cannot quietly turn
+into stub notes that look like model output. `npm run check:model` reports which model ids your AWS
+account actually resolves, which is worth running before blaming credentials for a 404.
+
 Copy `.env.example` for every option.
 
 ---
