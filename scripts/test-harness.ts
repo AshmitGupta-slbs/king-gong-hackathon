@@ -363,18 +363,27 @@ async function main() {
       bedrockModelId('anthropic.claude-sonnet-4-6', 'us-east-1') === 'global.anthropic.claude-sonnet-4-6',
       bedrockModelId('anthropic.claude-sonnet-4-6', 'us-east-1'));
 
-    check('an unknown foundation id passes through unchanged',
+    check('a non-claude foundation id passes through unchanged',
       bedrockModelId('anthropic.some-other', 'us-east-1') === 'anthropic.some-other');
+
+    // Generalised beyond the reference's two-entry table, forced by a live 400: "Invocation of model
+    // ID anthropic.claude-opus-5 with on-demand throughput isn't supported. Retry with the ID or ARN
+    // of an inference profile." A global.-prefixed id IS an inference profile.
+    check('any anthropic.claude-* id routes through a cross-region profile',
+      bedrockModelId('anthropic.claude-opus-5', 'us-east-1') === 'global.anthropic.claude-opus-5',
+      bedrockModelId('anthropic.claude-opus-5', 'us-east-1'));
+    check('and a bare claude-* name lands in the same place',
+      bedrockModelId('claude-opus-5', 'us-east-1') === 'global.anthropic.claude-opus-5',
+      bedrockModelId('claude-opus-5', 'us-east-1'));
 
     check('an empty model stays empty', bedrockModelId('', 'us-east-1') === '');
 
     // OUR addition, absent from the reference: a bare `claude-*` name also contains none of . : /
-    // so it would be misread as a profile id and expanded into a nonsense ARN. This repo's default
-    // is claude-opus-5, so the case is reachable here even though it never is upstream.
-    check('a bare claude-* name is treated as a foundation id, not a profile id',
-      bedrockModelId('claude-opus-5', 'us-east-1') === 'anthropic.claude-opus-5',
-      bedrockModelId('claude-opus-5', 'us-east-1'));
-    check('and a claude-* name that maps to a cross-region profile still remaps',
+    // so it would be misread as a profile id and expanded into a nonsense ARN.
+    check('a bare claude-* name is a foundation id, not a profile id (no ARN expansion)',
+      !bedrockModelId('claude-sonnet-4-6', 'us-east-1').startsWith('arn:'),
+      bedrockModelId('claude-sonnet-4-6', 'us-east-1'));
+    check('and the reference\'s own remap entry still holds',
       bedrockModelId('claude-sonnet-4-6', 'us-east-1') === 'global.anthropic.claude-sonnet-4-6',
       bedrockModelId('claude-sonnet-4-6', 'us-east-1'));
 
@@ -396,7 +405,7 @@ async function main() {
     // A missing account must NOT block the shapes that need no expansion.
     check('an ARN still resolves with no account id set', bedrockModelId(arn, 'us-east-1') === arn);
     check('a foundation id still resolves with no account id set',
-      bedrockModelId('claude-opus-5', 'us-east-1') === 'anthropic.claude-opus-5');
+      bedrockModelId('claude-opus-5', 'us-east-1') === 'global.anthropic.claude-opus-5');
 
     if (prevAccount === undefined) delete process.env.AWS_ACCOUNT_ID;
     else process.env.AWS_ACCOUNT_ID = prevAccount;
