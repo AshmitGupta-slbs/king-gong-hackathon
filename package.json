@@ -21,6 +21,7 @@
     "fixtures": "tsx scripts/make-demo-fixtures.ts",
     "check:ship": "tsx scripts/check-ship.ts",
     "check:model": "tsx scripts/check-model.ts",
+    "check:key": "tsx scripts/check-key.ts",
     "verify": "tsx scripts/test-gate.ts && tsx scripts/test-harness.ts && tsx scripts/test-readability.ts && tsx scripts/check-ship.ts",
     "test:readability": "tsx scripts/test-readability.ts",
     "reindex:samples": "tsx scripts/reindex-samples.ts"

@@ -9,6 +9,7 @@ import { ChevronRight } from 'lucide-react';
 import { listCalls, reconcileOrphanRuns } from '@/lib/db';
 import { loadSamples, sampleManifest } from '@/lib/samples';
 import { describeRegistry } from '@/lib/registry';
+import { listCompanies } from '@/lib/companies';
 import { UploadCard } from '@/components/UploadCard';
 import { RunStatusBadge } from '@/components/RunStatusBadge';
 import { Card } from '@/components/ui/Card';
@@ -29,6 +30,7 @@ export default function Home() {
   const calls = listCalls();
   const manifest = new Map(sampleManifest().map((m) => [m.id, m]));
   const registry = describeRegistry();
+  const companies = listCompanies().map((c) => ({ id: c.id, name: c.name }));
 
   return (
     <div className="mx-auto max-w-[1400px] px-4 py-6 lg:px-6 lg:py-8">
@@ -100,7 +102,7 @@ export default function Home() {
         <div className="flex flex-col gap-5">
           <div id="upload" className="scroll-mt-24">
             <Card title="Analyse your own call">
-              <UploadCard />
+              <UploadCard companies={companies} />
             </Card>
           </div>
 

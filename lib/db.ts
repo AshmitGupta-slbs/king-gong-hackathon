@@ -56,6 +56,32 @@ export function db(): DatabaseSync {
       audio_seconds REAL DEFAULT 0, input_tokens INTEGER DEFAULT 0,
       output_tokens INTEGER DEFAULT 0, units TEXT, created_at INTEGER NOT NULL
     );
+
+    -- The account a call belongs to -- and the CRM record for it. One object, not two: a
+    -- "company profile" and a "deal" are the same thing here, so stage lives on this row rather
+    -- than on a parallel deal entity.
+    --
+    -- detail is a JSON blob, following the precedent set by the extractions table: the queryable
+    -- fields are columns, and the richer demo detail (contacts, prior activity, deal numbers)
+    -- rides along as a blob rather than as fifteen more columns.
+    CREATE TABLE IF NOT EXISTS companies (
+      id TEXT PRIMARY KEY, name TEXT NOT NULL, industry TEXT, size_band TEXT,
+      website TEXT, notes TEXT, stage TEXT NOT NULL DEFAULT 'Discovery',
+      created_at INTEGER NOT NULL, detail TEXT
+    );
+
+    -- A JOIN TABLE rather than a calls.company_id column, deliberately.
+    --
+    -- This schema is created by one CREATE TABLE IF NOT EXISTS block with no migration system
+    -- behind it. Adding a column to calls would therefore be a silent no-op on every database
+    -- that already exists -- including a mounted Railway volume -- and would then throw
+    -- "no column named company_id" at INSERT time, mid-run, after openRun had already written a
+    -- row. A new table IS created on an existing database, so this is the version that works
+    -- everywhere. It also lets the link be written before transcription succeeds, which a column
+    -- on calls could not: insertCall only runs after STT returns.
+    CREATE TABLE IF NOT EXISTS call_companies (
+      call_id TEXT PRIMARY KEY, company_id TEXT NOT NULL
+    );
   `);
   _db = d;
   return d;

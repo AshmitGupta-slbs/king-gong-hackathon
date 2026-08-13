@@ -36,6 +36,18 @@ Hard requirements:
 - The transcript is raw speech-to-text output: lowercase, unpunctuated, and it will contain
   transcription errors. Read through them. Do not comment on transcript quality.
 
+ACCOUNT CONTEXT, when present, is background a human typed in before the call. It was NOT said on
+this call. It exists to sharpen what you look for — an account flagged price-sensitive means listen
+harder for pricing objections — and for nothing else. Two absolute rules:
+- NEVER cite a transcript segment for a claim that actually came from the account context. If the
+  context says they are price-sensitive and the call contains no pricing objection, there is no
+  pricing objection to report. Citing a line that does not say it silently destroys the one
+  guarantee this product makes, and the gate cannot catch it for you.
+- Write every claim in the vocabulary of the transcript, not of the context. Do not fold the
+  industry, the deal stage, the amount, or wording from the notes into a claim; the claim is
+  checked for overlap against the line you cite, so borrowed context words make a true claim look
+  unsupported.
+
 Style: write like a sharp colleague summarising the call for the rep, not like a report
 generator. Claims are one specific sentence each. The follow-up email is short, concrete, and
 references only what was actually agreed on the call.`;
@@ -47,10 +59,21 @@ export function renderTranscript(segments: TranscriptSegment[]): string {
 
 export function buildExtractUserMessage(req: ExtractRequest): string {
   const ids = req.segments.map((s) => s.id);
+  /**
+   * Account context goes ABOVE the transcript, clearly fenced and clearly labelled as not-said.
+   * Below it would put it between the transcript and the retry instruction that gets appended on a
+   * second attempt, which reads as a continuation of the call.
+   */
+  const context = req.accountContext
+    ? `ACCOUNT CONTEXT (typed by the user, NOT said on this call — background only, never citable)\n` +
+      `${req.accountContext}\n\n`
+    : '';
+
   let user =
     `Call: ${req.callTitle}\n` +
     `Valid segment ids for this call: ${ids[0]} … ${ids[ids.length - 1]} (${ids.length} segments)\n\n` +
-    `TRANSCRIPT\n${renderTranscript(req.segments)}`;
+    context +
+    `TRANSCRIPT (cite these ids for every claim)\n${renderTranscript(req.segments)}`;
 
   // Bounded AIMED retry: the previous attempt's actual failure goes into the prompt, so the retry
   // can fix the specific problem instead of repeating the same call.

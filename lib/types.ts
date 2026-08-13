@@ -213,6 +213,15 @@ export const ExtractionResultSchema = z.object({
    * keyword-stub output dressed as model output, and so the UI can say plainly what made this.
    */
   extracted_by: z.string().optional(),
+  /**
+   * The exact ACCOUNT CONTEXT block fed to the model for THIS extraction, when there was one.
+   *
+   * Kept for audit rather than display. The citation gate never sees the prompt, so a claim
+   * invented from account context but cited to a real segment passes every check — this is the
+   * record that makes such a claim findable afterwards, and it stays correct even if the company
+   * record is edited later.
+   */
+  company_context: z.string().optional(),
 });
 
 export type ExtractionResult = z.infer<typeof ExtractionResultSchema>;

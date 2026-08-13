@@ -28,6 +28,7 @@ import {
   saveExtraction,
 } from '@/lib/db';
 import { BudgetGovernor, DeadlineError, estimateTokens, type BudgetCaps } from './budget';
+import { companyForCall, getCompany, linkCallToCompany, renderAccountContext } from '../companies';
 import { runCitationGate } from './gate';
 import { withLock } from './parallel';
 import { safeStage, type OnStage } from './progress';
@@ -46,6 +47,8 @@ export type ProcessInput = {
   budgetCaps?: Partial<BudgetCaps>;
   /** Override the STT provider for this run (e.g. 'fixture' to replay a committed transcript). */
   sttProvider?: string;
+  /** Account this call belongs to. Its context grounds the extraction; optional by design. */
+  companyId?: string;
   /**
    * Optional narration for a progress UI. Purely additive — the run's behaviour, its outcome and
    * its recorded status do not depend on whether anyone is listening.
@@ -63,6 +66,14 @@ export type ProcessOutcome = {
   budget: ReturnType<BudgetGovernor['snapshot']>;
   extraction: ExtractionResult | null;
   error?: string;
+  /** Provider error code, when the failure had one (e.g. 'daily_cap_exceeded'). */
+  errorCode?: string;
+  /**
+   * Human guidance for a failure the user can actually act on. Distinct from `error`, which is the
+   * provider's own wording: a raw `PyAI 429 daily_cap_exceeded` tells someone nothing about what to
+   * do next, and this is the field that does.
+   */
+  remedy?: string;
 };
 
 /** The retry trigger: claims the gate had to DELETE because their citations did not resolve. */
@@ -91,6 +102,8 @@ export async function processCall(input: ProcessInput): Promise<ProcessOutcome> 
     let extractAttempts = 0;
     let status: RunStatus = 'failed';
     let error: string | undefined;
+    let errorCode: string | undefined;
+    let remedy: string | undefined;
 
     try {
       // ── 1. Transcribe (registry-provided; retried on transient provider errors) ────
@@ -128,6 +141,7 @@ export async function processCall(input: ProcessInput): Promise<ProcessOutcome> 
       });
       replaceSegments(callId, segments);
       recordUsage(callId, stt.name, sttRun.value.usage);
+      if (input.companyId) linkCallToCompany(callId, input.companyId);
       /**
        * Emitted AFTER insertCall, deliberately: from this instant `/calls/<id>` is a real page, so
        * a client that later sees a failure can still offer to open the partial call rather than
@@ -143,6 +157,12 @@ export async function processCall(input: ProcessInput): Promise<ProcessOutcome> 
 
       // ── 2. Extract, then GATE, with the gate's own complaint aimed at the retry ────
       const extractor = await getExtractor();
+      /**
+       * Rendered ONCE and reused across retries, so every attempt sees identical context and the
+       * snapshot we persist is exactly what the model was given.
+       */
+      const company = input.companyId ? getCompany(input.companyId) : companyForCall(callId);
+      const accountContext = renderAccountContext(company) ?? undefined;
       const transcriptChars = segments.reduce((n, s) => n + s.text.length + 24, 0);
 
       const tExtract = Date.now();
@@ -156,6 +176,7 @@ export async function processCall(input: ProcessInput): Promise<ProcessOutcome> 
             callTitle: input.title,
             segments,
             priorFailure,
+            accountContext,
           });
           budget.record(usage);
           recordUsage(callId, extractor.name, usage);
@@ -188,7 +209,17 @@ export async function processCall(input: ProcessInput): Promise<ProcessOutcome> 
           on({ t: 'stage', stage: 'extract', state: 'retry', attempt, reason }),
       });
       extractAttempts = exRun.attempts;
-      extraction = exRun.value.result;
+      /**
+       * The exact block that was fed to the model, kept with the notes.
+       *
+       * This is the only way a context-sourced claim can ever be caught: the gate never sees the
+       * prompt, so a claim invented from context but cited to a real segment passes it. Keeping the
+       * context makes that auditable after the fact, and survives the company record being edited
+       * later.
+       */
+      extraction = accountContext
+        ? { ...exRun.value.result, company_context: accountContext }
+        : exRun.value.result;
       on({
         t: 'stage',
         stage: 'extract',
@@ -207,6 +238,16 @@ export async function processCall(input: ProcessInput): Promise<ProcessOutcome> 
       } else {
         status = 'failed';
         error = err instanceof Error ? err.message : String(err);
+        /**
+         * Structural, not `instanceof PyaiError`: importing the PyAI client into the harness would
+         * put a vendor module on the wrong side of the registry boundary that check:ship enforces.
+         * These two fields are part of our own contract, so reading them by shape is correct here.
+         */
+        if (typeof err === 'object' && err !== null) {
+          const e = err as { code?: unknown; remedy?: unknown };
+          if (typeof e.code === 'string') errorCode = e.code;
+          if (typeof e.remedy === 'string') remedy = e.remedy;
+        }
       }
     } finally {
       // Exactly one terminal status, always written.
@@ -227,6 +268,8 @@ export async function processCall(input: ProcessInput): Promise<ProcessOutcome> 
       budget: budget.snapshot(),
       extraction,
       error,
+      errorCode,
+      remedy,
     };
   });
 }

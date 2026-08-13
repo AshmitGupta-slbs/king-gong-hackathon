@@ -8,6 +8,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { NextResponse } from 'next/server';
+import { z } from 'zod';
 import { listCalls, medianRecentRunMs } from '@/lib/db';
 import { processCall } from '@/lib/harness/loop';
 import { resolveSeparation } from '@/lib/separation';
@@ -68,6 +69,17 @@ async function prepareUpload(req: Request) {
   const requested = RequestedSeparationSchema.safeParse(form.get('mode') ?? 'auto');
   if (!requested.success) throw new BadUpload('mode must be one of: auto, channel, diarize');
 
+  // Validated, not cast — same rule as `mode` above. Empty means "no account", which is allowed:
+  // a quick one-off upload must never be blocked waiting for someone to fill in a CRM record.
+  const companyField = form.get('companyId');
+  const company = z
+    .string()
+    .trim()
+    .min(1)
+    .optional()
+    .safeParse(companyField ? String(companyField) : undefined);
+  if (!company.success) throw new BadUpload('companyId must be a non-empty string when provided.');
+
   let bytes: Uint8Array;
   let filename: string;
 
@@ -117,6 +129,7 @@ async function prepareUpload(req: Request) {
     bytes: bytes.byteLength,
     input: {
       callId,
+      companyId: company.data,
       title,
       audio: bytes,
       filename,

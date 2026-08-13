@@ -10,7 +10,7 @@ Docker, no build plugins, nothing to compile.
 | Build | `npm run build` |
 | Start | `npm start` |
 | Node | pinned by `engines` + `.nvmrc` (see below) |
-| Env vars | none required |
+| Env vars | none required to demo; see the PyAI key section below before uploading audio |
 
 **The Node version is not optional.** `lib/db.ts` uses Node's built-in `node:sqlite`, which needs
 **Node ≥ 22.5**. `package.json` declares `"engines": { "node": ">=22.5.0" }` and `.nvmrc` pins `24`.
@@ -22,6 +22,37 @@ and a PyAI sandbox key mints itself on first use. To get real model-written note
 labelled keyword stub, set **either** `ANTHROPIC_API_KEY` **or** `AWS_ACCESS_KEY_ID` +
 `AWS_SECRET_ACCESS_KEY` + `AWS_REGION` (with Bedrock model access enabled). See `.env.example` for
 every option.
+
+### The PyAI key, and what to do when it caps
+
+Uploading **new** audio is the only thing that needs a live PyAI key. The five bundled sample calls
+are pre-processed and make no API call, so a capped key never blocks a demo of those.
+
+```bash
+npm run check:key   # source, tier, expiry, and whether it answers requests right now
+```
+
+Two tiers, and the difference matters on a deployed service:
+
+| | `pyai_test_` (sandbox) | `pyai_live_` (console account) |
+|---|---|---|
+| How you get it | mints itself, no signup | https://console.pyai.com, prepaid credit |
+| Daily cap | **yes** — resets 00:00 UTC | no |
+| Minting limit | **per network, not per key** | n/a |
+
+**Rotating the key on a host like Railway.** Set `PYAI_API_KEY` as a service variable. When a
+sandbox key caps, the app will mint a replacement in-process automatically — but a `pyai_live_` key
+is never replaced automatically, because silently swapping a paid uncapped key for a capped sandbox
+one would be a downgrade nobody asked for. To rotate manually, update the variable and redeploy.
+
+**Do not rely on `.pyai-key.json` in a deployment.** The container filesystem is ephemeral (see
+below), so a minted key does not survive a redeploy — each one re-mints, and every mint draws on the
+same per-network budget.
+
+**When the cap is hit**, the app now says so in words rather than surfacing `PyAI 429
+daily_cap_exceeded`: it reports when the cap lifts and points at the console-key option. Minting
+another sandbox key does **not** work around a `sandbox_limit_reached`, because that limit is on the
+network rather than the key.
 
 ### What survives a redeploy, and what does not
 
