@@ -6,7 +6,7 @@
  * screen keeps a quick-add as a fallback, but this is the real one.
  */
 import { listCompanies } from '@/lib/companies';
-import { learningsForCompany } from '@/lib/learnings';
+import { learningsForCompany, suggestedNotes } from '@/lib/learnings';
 import { loadSamples } from '@/lib/samples';
 import { describeCrm } from '@/lib/crm';
 import { SetupCompanies } from '@/components/SetupCompanies';
@@ -19,11 +19,18 @@ export default async function SetupPage() {
   await loadSamples();
   const companies = await listCompanies();
   // Keyed by company so the client component can render each account's ledger without a fetch.
-  const learnings = Object.fromEntries(
-    await Promise.all(
-      companies.map(async (c) => [c.id, await learningsForCompany(c.id, 20)] as const),
-    ),
-  );
+  // The suggestion is composed over the FULL ledger (500 rows), not the 20 listed as evidence —
+  // it speaks for everything not yet in the notes, so a narrower window would quietly drop facts.
+  const [learnings, suggestions] = await Promise.all([
+    Object.fromEntries(
+      await Promise.all(
+        companies.map(async (c) => [c.id, await learningsForCompany(c.id, 20)] as const),
+      ),
+    ) as Record<string, Awaited<ReturnType<typeof learningsForCompany>>>,
+    Object.fromEntries(
+      await Promise.all(companies.map(async (c) => [c.id, await suggestedNotes(c.id)] as const)),
+    ) as Record<string, Awaited<ReturnType<typeof suggestedNotes>>>,
+  ]);
   const crm = describeCrm();
 
   return (
@@ -46,7 +53,7 @@ export default async function SetupPage() {
       </header>
 
       <div className="mt-7">
-        <SetupCompanies companies={companies} learnings={learnings} />
+        <SetupCompanies companies={companies} learnings={learnings} suggestions={suggestions} />
       </div>
     </div>
   );

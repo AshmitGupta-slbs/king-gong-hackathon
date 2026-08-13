@@ -20,7 +20,7 @@ import { db as sqliteHandle, sqliteStore } from './db-sqlite';
 import { mongoStore } from './db-mongo';
 import type { Store } from './db-types';
 
-export type { RunRow, UsageTotals } from './db-types';
+export type { CallSummary, RunRow, UsageTotals } from './db-types';
 
 /**
  * The active store.
@@ -60,6 +60,7 @@ export const getCall = (...a: Parameters<Store['getCall']>) => store().getCall(.
 export const getCallByShareId = (...a: Parameters<Store['getCallByShareId']>) =>
   store().getCallByShareId(...a);
 export const listCalls = () => store().listCalls();
+export const listCallSummaries = () => store().listCallSummaries();
 
 // ── segments ─────────────────────────────────────────────────────────────────
 export const replaceSegments = (...a: Parameters<Store['replaceSegments']>) =>

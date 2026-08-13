@@ -1,22 +1,19 @@
-'use client';
-
 /**
- * What the calls taught us about this account.
+ * What the calls taught us about this account — the EVIDENCE behind the suggested notes above.
  *
- * Rendered as a distinct section BELOW the editable notes, never merged into them. The two look
+ * Rendered as a distinct section below the editable notes, never merged into them. The two look
  * different because they are different: the notes box is what a person asserted, and this is what
  * the system concluded from a recording — each item showing the exact line it concluded it from.
  *
- * "Promote to notes" is the only bridge between them, and it is a click. Nothing here writes itself
- * into the user's own context.
+ * Read-only, and no longer a client component. Each row used to carry its own "Promote to notes"
+ * button, which meant an account with eight learnings asked the same question eight times. The one
+ * bridge into notes is now the single draft in `NotesSuggestion`; this list is what you check it
+ * against.
  */
-import { useRouter } from 'next/navigation';
-import { useState } from 'react';
 import Link from 'next/link';
-import { ArrowUp, Loader2, Quote, Sparkles } from 'lucide-react';
+import { Quote, Sparkles } from 'lucide-react';
 import type { Learning } from '@/lib/learnings';
 import { Badge, type BadgeTone } from '@/components/ui/Badge';
-import { Button } from '@/components/ui/Button';
 import { cx } from '@/components/ui/cx';
 
 const KIND: Record<string, { label: string; tone: BadgeTone }> = {
@@ -32,9 +29,6 @@ const mmss = (ms: number) => {
 };
 
 export function CompanyLearnings({ learnings }: { learnings: Learning[] }) {
-  const router = useRouter();
-  const [busyId, setBusyId] = useState<number | null>(null);
-
   if (learnings.length === 0) {
     return (
       <p className="text-caption leading-relaxed text-fg-dim italic">
@@ -42,18 +36,6 @@ export function CompanyLearnings({ learnings }: { learnings: Learning[] }) {
         listed here, each item citing the line it came from.
       </p>
     );
-  }
-
-  async function promote(id: number) {
-    setBusyId(id);
-    try {
-      const body = new FormData();
-      body.set('promoteLearning', String(id));
-      await fetch('/api/companies', { method: 'POST', body });
-      router.refresh();
-    } finally {
-      setBusyId(null);
-    }
   }
 
   return (
@@ -110,28 +92,10 @@ export function CompanyLearnings({ learnings }: { learnings: Learning[] }) {
               </Link>
             )}
 
-            <div className="mt-2 flex items-center gap-2">
-              <span className="flex items-center gap-1 text-caption text-fg-dim">
-                <Sparkles size={11} aria-hidden />
-                {l.extracted_by ?? 'unknown extractor'}
-              </span>
-              {!l.promoted && !unverified && (
-                <Button
-                  variant="ghost"
-                  className="ml-auto"
-                  onClick={() => promote(l.id)}
-                  disabled={busyId === l.id}
-                  title="Copy this into the account's own notes, where it becomes context you own"
-                >
-                  {busyId === l.id ? (
-                    <Loader2 size={12} className="animate-spin" aria-hidden />
-                  ) : (
-                    <ArrowUp size={12} aria-hidden />
-                  )}
-                  Promote to notes
-                </Button>
-              )}
-            </div>
+            <p className="mt-2 flex items-center gap-1 text-caption text-fg-dim">
+              <Sparkles size={11} aria-hidden />
+              {l.extracted_by ?? 'unknown extractor'}
+            </p>
           </li>
         );
       })}

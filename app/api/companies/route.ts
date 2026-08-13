@@ -8,7 +8,7 @@ import { randomUUID } from 'node:crypto';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { getCompany, listCompanies, updateCompany, upsertCompany } from '@/lib/companies';
-import { getLearning, markLearningPromoted } from '@/lib/learnings';
+import { learningsForCompany, markLearningPromoted } from '@/lib/learnings';
 import type { Company } from '@/lib/companies';
 import { DealStageSchema } from '@/lib/crm/types';
 
@@ -35,6 +35,26 @@ const CompanyInput = z.object({
 /** '' from an untouched form field means "no value", not "the empty string". */
 const orNull = (v: string | undefined) => (v && v.length > 0 ? v : null);
 
+/**
+ * Learning ids, as a JSON array in a form field.
+ *
+ * Kept as strings OR numbers because the two backends key them differently — SQLite autoincrements
+ * an integer, Mongo assigns a UUID — and coercing to one of those is the bug this endpoint used to
+ * have. Malformed input yields no ids rather than an error: the notes still save, and an unmarked
+ * learning simply appears in the next suggestion.
+ */
+function parseIds(raw: string | undefined): (number | string)[] {
+  if (!raw) return [];
+  try {
+    const v: unknown = JSON.parse(raw);
+    return Array.isArray(v)
+      ? v.filter((x): x is number | string => typeof x === 'number' || typeof x === 'string')
+      : [];
+  } catch {
+    return [];
+  }
+}
+
 export async function GET() {
   return NextResponse.json({ companies: await listCompanies() });
 }
@@ -44,23 +64,41 @@ export async function POST(req: Request) {
     const form = await req.formData();
 
     /**
-     * Copy a learning into the account's own notes.
+     * Accept the suggested addition to an account's notes.
      *
-     * A deliberate human action, never automatic: `notes` is presented to the model as something a
-     * person asserted, so the system writing into it by itself would make that claim false. This is
-     * the one path by which a derived learning becomes user-owned context, and it happens because
-     * someone read it and clicked.
+     * ONE action for the whole draft, replacing a per-learning promote endpoint that asked the same
+     * question once per row — and that could never have worked on the Mongo backend anyway, where a
+     * learning id is a UUID string and the old `Number.isInteger` guard was always false.
+     *
+     * The text is whatever the user submitted, not what the server proposed: they read the draft and
+     * may have rewritten it, and that edit is precisely what makes the notes theirs. `notes` is
+     * presented to the model as something a person asserted, so a human has to have passed through
+     * here for that to stay true.
      */
-    const promoteId = Number(form.get('promoteLearning') ?? '');
-    if (Number.isInteger(promoteId) && promoteId > 0) {
-      const learning = await getLearning(promoteId);
-      if (!learning) return NextResponse.json({ error: 'No such learning.' }, { status: 404 });
-      const company = await getCompany(learning.company_id);
+    const suggestionFor = form.get('suggestionFor')?.toString();
+    if (suggestionFor) {
+      const company = await getCompany(suggestionFor);
       if (!company) return NextResponse.json({ error: 'No such company.' }, { status: 404 });
 
-      const merged = [company.notes?.trim(), learning.text.trim()].filter(Boolean).join('\n');
+      const text = (form.get('suggestionText')?.toString() ?? '').trim();
+      if (!text) return NextResponse.json({ error: 'Nothing to add.' }, { status: 400 });
+
+      /*
+        The ids arrive from the client, so membership is checked against this account's own ledger
+        before anything is marked. Marking a learning promoted removes it from the block fed to the
+        next extraction, so an unchecked id would let one request quietly strip another account's
+        context. One read answers it for every id.
+      */
+      const ids = parseIds(form.get('suggestionIds')?.toString());
+      const own = new Set(
+        (await learningsForCompany(company.id, 500)).map((l) => String(l.id)),
+      );
+
+      const merged = [company.notes?.trim(), text].filter(Boolean).join('\n');
       const updated = await updateCompany(company.id, { notes: merged });
-      await markLearningPromoted(learning.id);
+      await Promise.all(
+        ids.filter((id) => own.has(String(id))).map((id) => markLearningPromoted(id)),
+      );
       return NextResponse.json({ company: updated });
     }
     const parsed = CompanyInput.safeParse({

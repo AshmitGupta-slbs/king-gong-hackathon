@@ -41,6 +41,44 @@ const head = (s: string) => console.log(`\n${c.b(s)}`);
 
 const ID = 'zz_test_';
 
+/**
+ * Remove the rows the contract itself cannot.
+ *
+ * Two implementations because the two backends are reached differently below the Store: Mongo has a
+ * collection API this can call, SQLite is a file this can issue SQL against. Neither is something
+ * the app does — that is the point of keeping it in the test rather than widening the contract.
+ */
+async function purge(callIds: string[], companyIds: string[], runId: string) {
+  const { backend, collections, getDatabase } = await import('@/lib/store');
+
+  if (backend() === 'none') {
+    const { db } = await import('@/lib/db-sqlite');
+    const d = db();
+    for (const id of callIds) {
+      d.prepare(`DELETE FROM calls WHERE id = ?`).run(id);
+      d.prepare(`DELETE FROM extractions WHERE call_id = ?`).run(id);
+      d.prepare(`DELETE FROM call_companies WHERE call_id = ?`).run(id);
+      d.prepare(`DELETE FROM gate_rejections WHERE call_id = ?`).run(id);
+      d.prepare(`DELETE FROM usage_events WHERE call_id = ?`).run(id);
+    }
+    for (const id of companyIds) d.prepare(`DELETE FROM companies WHERE id = ?`).run(id);
+    d.prepare(`DELETE FROM runs WHERE id = ?`).run(runId);
+    return;
+  }
+
+  const db = getDatabase();
+  const c = collections();
+  for (const id of callIds) {
+    await db.collection(c.calls).deleteMany({ _id: id });
+    await db.collection(c.extractions).deleteMany({ _id: id });
+    await db.collection(c.callCompanies).deleteMany({ _id: id });
+    await db.collection(c.gateRejections).deleteMany({ call_id: id });
+    await db.collection(c.usageEvents).deleteMany({ call_id: id });
+  }
+  for (const id of companyIds) await db.collection(c.companies).deleteMany({ _id: id });
+  await db.collection(c.runs).deleteMany({ _id: runId });
+}
+
 async function main() {
   const { store } = await import('@/lib/db');
   const { backend, describeStore } = await import('@/lib/store');
@@ -112,6 +150,34 @@ async function main() {
   const readEx = await s.getExtraction(callId);
   check('an extraction round-trips', readEx?.summary === 'a summary' && readEx?.run_status === 'shipped');
   check('nested structure survives', readEx?.intent.label === 'price-sensitive');
+
+  // ── the call list's one query ──────────────────────────────────────────────
+  head('Call summaries');
+  await s.linkCallToCompany(callId, companyId);
+  let summaries = await s.listCallSummaries();
+  const mine = summaries.find((x) => x.id === callId);
+  check('listCallSummaries includes every call', mine !== undefined, `${summaries.length} rows`);
+  check('...carrying the call\'s own fields', mine?.title === 'Renamed by analysis' && mine?.duration_ms === 61_000);
+  check('...and the extraction status', mine?.run_status === 'shipped',
+    'this is the Verified/Partial badge — reading it from a build manifest is the bug this replaced');
+  check('...and the extractor that produced it', mine?.extracted_by === 'test', String(mine?.extracted_by));
+  check('...and the account it belongs to', mine?.company_id === companyId);
+  check('newest-first, matching listCalls', summaries.length < 2 ||
+    summaries[0].created_at >= summaries[summaries.length - 1].created_at);
+
+  // A call with no extraction is a real state — the list renders it as "No notes" — so it must come
+  // back as a row with a null status, NOT be dropped by the join.
+  const bareId = `${ID}bare`;
+  await s.insertCall({
+    id: bareId, title: 'Transcribed, never extracted', audio_path: `/api/audio/${bareId}.wav`,
+    duration_ms: 1000, separation: 'diarize', created_at: Date.now(), share_id: bareId,
+  });
+  summaries = await s.listCallSummaries();
+  const bare = summaries.find((x) => x.id === bareId);
+  check('an un-extracted call is still listed', bare !== undefined,
+    'an inner join here would hide every call whose extraction failed');
+  check('...with a null status rather than a missing row', bare?.run_status === null &&
+    bare?.extracted_by === null && bare?.company_id === null);
 
   // ── runs: the failure invariant ────────────────────────────────────────────
   head('Runs');
@@ -186,15 +252,71 @@ async function main() {
   await s.markLearningPromoted(one.id);
   check('promotion persists', (await s.getLearning(one.id))?.promoted === true);
 
+  // ── the notes suggestion, and the invariant it exists for ──────────────────
+  head('Notes suggestion');
+  const { renderLearnedContext, suggestedNotes } = await import('@/lib/learnings');
+  const co2 = `${ID}co2`;
+  const call2 = `${ID}call2`;
+  await s.upsertCompany({
+    id: co2, name: 'Suggestion Test Co', industry: null, size_band: null, website: null,
+    notes: null, stage: 'Discovery', created_at: Date.now(), detail: null,
+  });
+  const l2 = (kind: 'objection' | 'next_step' | 'intent', text: string, verdict = 'verified') => ({
+    company_id: co2, call_id: call2, created_at: Date.now(), kind, text,
+    segment_id: 'seg_000', start_ms: 0, speaker: 'prospect', quote: 'q',
+    support: 0.5, verdict, extracted_by: 'test', promoted: false,
+  });
+  await s.replaceLearningsForCall(call2, [
+    l2('intent', 'Read on this call: price-sensitive'),
+    l2('objection', 'Budget is committed until the next fiscal year.'),
+    l2('next_step', 'Send the security questionnaire by Friday.'),
+    l2('objection', 'Their lawyer has not looked at the DPA yet.', 'unverified'),
+  ]);
+
+  const sug = await suggestedNotes(co2);
+  check('a suggestion is composed', sug !== null, `${sug?.learningIds.length} learnings`);
+  check('it covers EVERY pending verified row', sug?.learningIds.length === 3,
+    'a cap here leaves rows behind, and a second suggestion appears the moment the first is accepted');
+  check('unverified rows are left out', !(sug?.text ?? '').includes('lawyer'),
+    'an unconfirmed claim must not be laundered into the notes a person is said to have written');
+  check('the account read is rendered', (sug?.text ?? '').includes('Where it stands: price-sensitive'));
+  check('the blocker is rendered', (sug?.text ?? '').includes('Blocker: Budget is committed'));
+
+  const learnedBefore = (await renderLearnedContext(co2)) ?? '';
+  check('the learned block carries the same read beforehand', learnedBefore.includes('price-sensitive'));
+
+  for (const id of sug!.learningIds) await s.markLearningPromoted(id);
+
+  const learnedAfter = (await renderLearnedContext(co2)) ?? '';
+  check('a promoted fact LEAVES the learned block', !learnedAfter.includes('price-sensitive'),
+    'otherwise the same sentence reaches the model twice, once as the user\'s and once as ours');
+  check('accepting settles the account in one action', (await suggestedNotes(co2)) === null,
+    'anything still pending would surface as a second ask');
+  check('the evidence rows survive as citations', (await s.learningsForCompany(co2)).length === 4);
+
+  await s.replaceLearningsForCall(call2, []);
+
   // ── cleanup ────────────────────────────────────────────────────────────────
   head('Cleanup');
   await s.replaceSegments(callId, []);
   await s.replaceLearningsForCall(callId, []);
+  await s.replaceSegments(bareId, []);
+
+  /*
+    The Store contract has no delete for calls, companies or runs, so the rows this suite writes
+    used to be left behind with a note. That was fine when nothing displayed them and wrong the
+    moment the call list started reading from the database: pointing this suite at the deployed
+    gateway — which its own header invites you to do — put "Renamed by analysis" in the demo.
+
+    Cleaning up therefore reaches past the contract to the collection API, which is honest about
+    what it is: a test tidying its own fixtures, not a capability the app has.
+  */
+  await purge([callId, bareId, call2], [companyId, co2], runId);
+
   check('test rows removed', (await s.getSegments(callId)).length === 0 &&
     (await s.learningsForCompany(companyId)).length === 0);
-  console.log(
-    c.dim(`  note: the ${ID}* call, company and run rows are left behind — no delete in the contract.`),
-  );
+  check('the suite leaves no calls behind', (await s.listCalls()).every((x) => !x.id.startsWith(ID)),
+    'a suite pointed at the deployed database must not add rows to the demo');
 
   console.log(
     failures === 0
