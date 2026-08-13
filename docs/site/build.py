@@ -46,6 +46,7 @@ NAV = [
         ('08-status.html', '08', 'Built vs pending'),
         ('09-run-and-verify.html', '09', 'Run &amp; verify'),
         ('10-decisions-risks.html', '10', 'Decisions &amp; risks'),
+        ('11-scorecard.html', '11', 'Scorecard'),
     ]),
 ]
 
@@ -57,7 +58,7 @@ SHELL = """<!DOCTYPE html>
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>{title} · OpenGong Lite</title>
+<title>{title} · King Gong</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,500;9..144,600;9..144,700&family=JetBrains+Mono:wght@400;500;600&family=Inter+Tight:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -69,8 +70,8 @@ SHELL = """<!DOCTYPE html>
 <div class="topbar">
   <div class="topbar-inner">
     <a href="index.html" class="brand">
-      <div class="brand-mark">OG</div>
-      <span>OpenGong Lite</span>
+      <img class="brand-mark" src="assets/logo-mark.png" alt="" width="28" height="28" />
+      <span>King Gong</span>
     </a>
     <div class="topbar-right">
       <span class="pill">{pill}</span>
@@ -92,7 +93,7 @@ SHELL = """<!DOCTYPE html>
 {toc}</div>
 
 <footer class="site">
-  <span>OpenGong Lite — Documentation</span>
+  <span>King Gong — Documentation</span>
   <span>§ {num} · {short}</span>
 </footer>
 <script src="assets/script.js"></script>

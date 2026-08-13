@@ -4,15 +4,21 @@ Runs on the **real setup path**: `npm run dev`, browser at `localhost:3000`. No 
 person knows. Rehearse it twice, timed, before Friday.
 
 **Before you start:** have a second terminal open, and one short stereo call file ready on the
-desktop for beat 2. Reset state with `rm -rf data/` if you want the usage counter to start at zero.
+desktop for beat 2.
+
+**Resetting state.** `rm -rf data/` clears the local SQLite database and any uploaded audio. It does
+**nothing** if `MONGODB_URI` is set — a Mongo-backed instance keeps its calls, and the usage counter
+will not start at zero. Demo from a local clone unless you have deliberately prepared the deployed
+one.
 
 ---
 
 ## Beat 0 — the sentence (15s)
 
 > "Gong charges about fourteen hundred dollars a seat. The job it actually does after a call is
-> three questions: what happened, what did they push back on, what do I do next. We built that. The
-> difference is that every line in our notes points at the moment in the call that proves it."
+> three questions: what happened, what did they push back on, what do I do next. King Gong does that
+> job, free. The difference is that every line in our notes points at the moment in the call that
+> proves it."
 
 Land on the home page while saying it. Don't narrate the UI.
 
@@ -68,6 +74,14 @@ Point at the amber markers on the scrubber.
 
 > "Flagged moments, plotted on the timeline. Competitor mentions, pricing, objections."
 
+**If the call has commitments carried in from an earlier call**, scroll to the top of the notes
+column — "Carried in from earlier calls". Otherwise skip this; do not invent it.
+
+> "This account agreed three things on the last call. Two of them happened, and the tick isn't our
+> opinion — it quotes the line on *this* call that says so. The third was never mentioned, so it
+> stays open. Silence doesn't close anything. Two of three, sixty-seven percent — and we always show
+> you the denominator, because a percentage over three items is a sentence, not a statistic."
+
 ---
 
 ## Beat 4 — the gate, live (60s)
@@ -104,15 +118,26 @@ Click **Export .md**, open the file.
 > bottom of everything the gate rejected. We publish our own rejections. Ask any other tool in this
 > category to do that."
 
+Then click the **CRM payload** tab and press **Show the payload**.
+
+> "And if you don't want to paste — this is exactly what we would write into HubSpot. Real property
+> names, and every claim in that note body carries a link back to the second of the call that proves
+> it, so it survives the trip. Unverified claims are left out and counted, because a CRM note
+> outlives its context.
+>
+> We cannot send it. There is no client and no credential in this repo, and there is a check that
+> fails the build if anyone adds one. The brief said no CRM sync, so we built the half you can read."
+
 Then, in the terminal:
 
 ```bash
 npm run test:harness
 ```
 
-> "Sixty checks across the gate and the harness. Budgets stop runs before the spend, retries are
-> capped and carry the failure reason forward, and no run can vanish without leaving a record —
-> including if you kill the process mid-run."
+> "A hundred and twenty-seven checks on the harness alone, two hundred and fifty-two across all four
+> suites. Budgets stop runs before the spend, retries are capped and carry the failure reason
+> forward, and no run can vanish without leaving a record — including if you kill the process
+> mid-run."
 
 > "MIT, public, one `npm run dev`. A PyAI sandbox key mints itself. Gong is fourteen hundred a seat;
 > this is a git clone."

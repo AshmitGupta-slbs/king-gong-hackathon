@@ -78,8 +78,8 @@ gateway to a real Atlas cluster is one variable and no code change:
 several apps can share one cluster without colliding.
 
 Both backends are verified against real storage — `npm run test:store` runs the same contract
-against whichever is configured, and passes on all three (SQLite, a real `mongod`, and the live
-`ml-v2.justcall.io` gateway).
+against whichever is configured, and passes on all three: SQLite, a real `mongod`, and a REST
+gateway.
 
 **On the REST gateway specifically.** It publishes its own schema at
 `{MONGODB_URI}/agent_chat/query_mongo/openapi.json`, which is worth reading before changing
@@ -120,6 +120,17 @@ OPENGONG_UPLOAD_DIR=/app/data/uploads
 PYAI_API_KEY=pyai_live_…           # already set
 ```
 
+**Skills are a deployment knob too.** `skills/` ships in the image, so nothing is required — but
+`OPENGONG_SKILLS_DIR` can point at a mounted corpus, which lets a team change what the model looks
+for without a rebuild. `OPENGONG_SKILLS` takes `all` (the default), `none`, or a comma-separated
+list of ids; a name matching no skill **throws on the next extraction** rather than being ignored,
+so a typo fails loudly instead of quietly producing notes under different instructions.
+
+```
+OPENGONG_SKILLS=all                # or none, or: objection-taxonomy,outcome-judging
+OPENGONG_SKILLS_DIR=/app/skills    # only if you mount your own corpus
+```
+
 **Volume** (service → Volumes): mount at **`/app/data/uploads`**.
 
 Mount the uploads directory specifically, not `/app/data`. Mounting the parent would also persist
@@ -147,8 +158,16 @@ and runs on the home page render, so a cold container re-seeds the five sample c
 request. Verified against a production build with the database deleted — the home page listed all
 five.
 
-What you lose is run history, usage totals, and uploaded calls. If that matters, attach a volume
-mounted at `/app/data` and both survive, because both live under `data/`.
+What you lose is run history, usage totals, and uploaded calls.
+
+**Two ways to keep them, and they do not combine.** Either set `MONGODB_URI`, which makes the
+records durable but not the audio — then add a volume at `/app/data/uploads` for the WAVs. Or, with
+no Mongo, attach a volume at `/app/data` so the SQLite file and the uploads both survive.
+
+Do **not** do both with a volume at `/app/data`: that persists `data/opengong.db` alongside live
+Mongo data, leaving two stores with different contents and nothing to say which one the app read.
+With `MONGODB_URI` set the SQLite file is never opened, and mounting only `uploads` keeps it from
+existing at all.
 
 ## Service 2 — the documentation
 
@@ -191,8 +210,14 @@ If you add any other runtime-written file, do not put it in `public/`.
 - Click a citation chip: audio seeks to that moment.
 - **Test the gate** on any call: 3 dropped, 2 flagged, status `partial`.
 - Export Markdown: it downloads and ends with the digit-substitution footnote.
-- Docs: the bare domain serves the index, all 11 pages load, both diagrams render.
+- Docs: the bare domain serves the index, all 12 pages load, both diagrams render.
 - Upload one short call, then click one of its citations — the fix above is what makes that work.
+- **Skills actually loaded**: "What actually ran" on the home page lists them. If it says `none`,
+  a mounted `OPENGONG_SKILLS_DIR` is empty or wrong — the app degrades silently to no skills.
+- **CRM payload** tab on any call: press *Show the payload*, confirm JSON renders and the citation
+  links point at your deployed origin rather than `localhost`.
+- **`/setup`** shows a follow-through figure per account, and each account lists what its calls
+  established.
 
 ### If a live upload fails, check this before your audio
 

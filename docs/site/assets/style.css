@@ -78,6 +78,9 @@ hr{border:none; height:1px; background:var(--rule); margin:36px 0;}
   display:grid; place-items:center;
   font-family:var(--mono); font-size:13px; font-weight:600;
 }
+/* The mark is the real logo now, not two letters in a circle. It brings its own shape, so the
+   dark plate above would only hide it. */
+img.brand-mark{ background:none; border-radius:0; object-fit:contain; }
 .brand:hover{color:var(--ink);}
 .brand-mark{transition:transform .25s ease;}
 .brand:hover .brand-mark{transform:rotate(20deg);}

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>08 · Built vs pending · OpenGong Lite</title>
+<title>08 · Built vs pending · King Gong</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,500;9..144,600;9..144,700&family=JetBrains+Mono:wght@400;500;600&family=Inter+Tight:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -15,8 +15,8 @@
 <div class="topbar">
   <div class="topbar-inner">
     <a href="index.html" class="brand">
-      <div class="brand-mark">OG</div>
-      <span>OpenGong Lite</span>
+      <img class="brand-mark" src="assets/logo-mark.png" alt="" width="28" height="28" />
+      <span>King Gong</span>
     </a>
     <div class="topbar-right">
       <span class="pill">Reality check</span>
@@ -52,6 +52,7 @@
       <a href="08-status.html" class="active"><span class="nav-num">08</span>Built vs pending</a>
       <a href="09-run-and-verify.html"><span class="nav-num">09</span>Run &amp; verify</a>
       <a href="10-decisions-risks.html"><span class="nav-num">10</span>Decisions &amp; risks</a>
+      <a href="11-scorecard.html"><span class="nav-num">11</span>Scorecard</a>
     </nav>
   </div>
 </aside>
@@ -63,8 +64,8 @@
   <p class="page-lede">No status word is used loosely on this page. "Working" means there is a test or a browser check behind it. "Unverified" means the code exists and has never run against the real thing. "Blocked" means something outside the code is missing.</p>
 
   <div class="glance">
-    <p><strong>In one line:</strong> the pipeline, the gate, the harness and the UI are built and verified. The step that <em>writes the notes</em> has never run, because it needs a model credential. Everything you see on screen today is real except the notes themselves.</p>
-    <p><strong>206 automated checks pass.</strong> The ship checklist has exactly one red line, and it is deliberately red.</p>
+    <p><strong>In one line:</strong> the pipeline, the gate, the harness and the UI are built and verified. Extraction has since run for real on Bedrock in the deployed environment. What has <em>not</em> changed is the five committed samples: their notes were hand-authored for the demo, and the app says so wherever they appear.</p>
+    <p><strong>252 automated checks pass</strong> across four suites, plus a 27-item ship checklist with exactly one red line — and it is deliberately red. See <a href="11-scorecard.html">§ 11 · Scorecard</a> for what that red costs.</p>
   </div>
 
   <h2 id="vocabulary">The vocabulary</h2>
@@ -127,8 +128,8 @@
         <tr><td>Mislabelled upload formats</td><td><span class="chip teal">Working &amp; verified</span></td><td>The container is sniffed from magic bytes, not the extension — a real export named <code>recording.mp3</code> was actually RIFF/WAVE. Previously every upload was declared <code>audio/wav</code> regardless. 16 checks in <code>test:harness</code>, incl. both AIFF brands — <code>say</code> emits AIFF-C by default</td></tr>
         <tr><td>Mono diarization (<code>diarize</code>)</td><td><span class="chip mustard">Partial</span></td><td>Correctness verified 6/6, and rep identity is a stated heuristic shown in the UI — but the upstream <code>diarize</code> stage <strong>500s in multi-minute windows</strong>, server-side and unrelated to payload. <strong>Still reproducing today</strong> — the deployed app's run log carries a fresh <code>diarize: HTTP 504: stream timeout</code>. <code>channel:true</code> is unaffected, and now that separation is detected from the audio, a verified-stereo upload routes around the failing stage automatically instead of depending on someone knowing to pick Stereo. See <a href="06-pyai-api-truth.html#separation">§06</a></td></tr>
         <tr><td>Segment-id assignment</td><td><span class="chip teal">Working &amp; verified</span></td><td>Asserted contiguous, ordered, never model-authored</td></tr>
-        <tr><td><strong>The citation gate</strong></td><td><span class="chip teal">Working &amp; verified</span></td><td>23 checks; drops fabricated ids, flags unsupported claims, downgrades status</td></tr>
-        <tr><td>Seven-part harness</td><td><span class="chip teal">Working &amp; verified</span></td><td>112 checks: forced-failure coverage of all seven parts including a real budget <code>deadline</code>, plus upload identity, separation detection, Bedrock model-id resolution and the STS account lookup</td></tr>
+        <tr><td><strong>The citation gate</strong></td><td><span class="chip teal">Working &amp; verified</span></td><td>37 checks; drops fabricated ids, flags unsupported claims, downgrades status, and rejects an outcome naming an action item this account does not have</td></tr>
+        <tr><td>Seven-part harness</td><td><span class="chip teal">Working &amp; verified</span></td><td>127 checks: forced-failure coverage of all seven parts including a real budget <code>deadline</code>, plus upload identity, separation detection, Bedrock model-id resolution and the STS account lookup</td></tr>
         <tr><td>Readability pass</td><td><span class="chip teal">Working &amp; verified</span></td><td>46 checks, incl. property tests that all 50 real segments render saying the same words <em>and</em> numbers as the verbatim text, and that the marked spans re-join to exactly that rendering</td></tr>
         <tr><td>Transcript viewer + audio sync</td><td><span class="chip teal">Working &amp; verified</span></td><td>Playwright: seek correct, page does not scroll, no console errors</td></tr>
         <tr><td>Usage counter</td><td><span class="chip teal">Working &amp; verified</span></td><td>Driven by <code>audio_seconds</code> and real tokens; reads 0.0 on a fresh clone by design</td></tr>
@@ -145,7 +146,7 @@
         <tr><td><strong>Silence fabrication on our batch path</strong></td><td><span class="chip teal">Working &amp; verified</span></td><td><strong>Measured clean</strong> — this was the project's highest-consequence unknown. Real on streaming; on batch, tested with 25s of digital silence <em>and</em> 20s of room tone at RMS 0.035, the exact level that fabricated on the stream. No segment landed in either gap. So dead air on an uploaded call cannot manufacture quotable evidence, and the gate's guarantee holds against the audio rather than only the transcript. See <a href="10-decisions-risks.html#silence">§10</a></td></tr>
         <tr><td>Hear streaming ingest</td><td><span class="chip">Not used</span></td><td>Heavily probed and documented, but batch owns ingest. No product code depends on it</td></tr>
         <tr><td>Demo rehearsal</td><td><span class="chip accent">Pending</span></td><td>Script written (<code>docs/demo-script.md</code>); the two timed run-throughs need a human</td></tr>
-        <tr><td>Public git repo</td><td><span class="chip accent">Pending</span></td><td>MIT licence present; the repo is not yet initialised or pushed</td></tr>
+        <tr><td>Public git repo</td><td><span class="chip teal">Done</span></td><td>MIT licence, public on GitHub, 47 commits, pull requests merged through #18</td></tr>
       </tbody>
     </table>
   </div>
@@ -154,12 +155,12 @@
 
   <div class="card accent">
     <span class="card-eyebrow">THE ONE BLOCKER THAT MATTERS</span>
-    <div class="card-title">Note generation has never run</div>
-    <p>Both model providers are written and typechecked. Neither has made a single call, because there is no credential on the machine. This is the riskiest unverified integration in the build — the code is <em>believed</em> correct, not <em>known</em> correct.</p>
-    <p><strong>What unblocks it:</strong> either <code>ANTHROPIC_API_KEY</code>, or the three AWS variables plus Anthropic model access enabled in the Bedrock console. Then one command — <code>npm run extract:samples</code> — regenerates all five sets of notes without re-recording audio or re-burning PyAI minutes.</p>
+    <div class="card-title">The committed samples were written by hand, not by a model</div>
+    <p>Extraction itself is no longer unproven — it runs on Bedrock in the deployed environment. But the five sample results in this repo were hand-authored for the demo, so a clone with no credential shows notes no model wrote. Their citations are real and were resolved by the real gate; the prose was not generated.</p>
+    <p><strong>What unblocks it:</strong> either <code>ANTHROPIC_API_KEY</code>, or AWS credentials plus Anthropic model access in the Bedrock console. Then one command — <code>npm run extract:samples</code> — regenerates all five sets of notes without re-recording audio or re-burning PyAI minutes.</p>
   </div>
 
-  <p>Until then the notes come from keyword rules, and the app says so in three places: a banner on the home page, a <code>STUB EXTRACTOR</code> badge in the header, and the summary text itself. <code>check:ship</code> refuses to pass.</p>
+  <p>Until then <code>extracted_by</code> reads <code>demo-fixture</code>, and the app says so wherever those notes appear rather than letting them pass as model output. <code>check:ship</code> refuses to pass — that is the one deliberate red, and it is the single highest-leverage thing left to fix.</p>
 
   <h2 id="unverified">Working but unverified — and why that distinction matters</h2>
 
@@ -169,8 +170,9 @@
     <table>
       <thead><tr><th>Thing</th><th>What is missing</th></tr></thead>
       <tbody>
-        <tr><td>Browser upload of a real audio file</td><td>The route and loop are tested, but nobody has dragged a real file into the form in a browser and watched it complete. That is demo beat 2, and it needs doing before Friday.</td></tr>
-        <tr><td>Bedrock end-to-end</td><td>Client surface confirmed by inspection; the actual request has never been made. Two specific unknowns: whether <code>messages.parse()</code> behaves identically on Mantle, and whether <code>output_config.effort</code> is accepted there.</td></tr>
+        <tr><td>The five-minute setup, on a machine nobody has touched</td><td>Three commands, no native compilation and no credential needed — but the checklist asks for it <em>timed, on a clean machine, by someone who has not seen the code</em>, and that run has not happened. The one risk it would expose: Node must be ≥22.5.</td></tr>
+        <tr><td>The demo, rehearsed</td><td>Every beat works individually. Nobody has run the whole script twice, timed, on the real setup path — which is what the brief actually asks for.</td></tr>
+        <tr><td>Model-judged action-item outcomes</td><td>The gate path, the storage and the UI are covered by 14 and 14 checks respectively, and the prompt carries the open items. The end-to-end judgement — a real model reading call B and closing a commitment from call A — needs a credential and has not been watched.</td></tr>
       </tbody>
     </table>
   </div>
@@ -194,6 +196,12 @@
 
   <p style="margin-top:18px;">The last one is worth a note: it was fully designed as a contingency in case <code>transcribe:jobs</code> turned out to be denied. It was not, so the design was dropped and recorded in <code>docs/api-truth.md</code> so nobody rebuilds it.</p>
 
+  <p><strong>Two of those chips need a footnote, because the truth got more specific.</strong></p>
+
+  <p><code>CRM sync</code> remains absent and there is now a check that keeps it absent: <code>check:ship</code> fails the build if a HubSpot client or credential appears anywhere in <code>app/</code>, <code>lib/</code>, <code>components/</code> or <code>scripts/</code>. What the app <em>does</em> have is a read-only <strong>CRM payload preview</strong> — the exact JSON a push would post, with every claim linking back to the moment that proves it, and no way to send it. The brief lists CRM sync as out of scope, so that adjacency is flagged in the <a href="11-scorecard.html">scorecard</a> rather than left in a commit message.</p>
+
+  <p><code>PyAI Recap</code> is still unused, and the reason is a credential rather than a preference: the sandbox key carries neither <code>recap:read</code> nor <code>recap:configure</code>, and Recap needs an org add-on. Extraction runs on Claude instead, which PyAI's own conversation-intelligence guide recommends for free-form extraction. It is the single biggest cost to the API-gravity score.</p>
+
   <h2 id="shipcheck">Ship checklist state</h2>
 
   <p><code>npm run check:ship</code> automates the pass/fail gates. Current output, honestly:</p>
@@ -211,12 +219,13 @@
         <tr><td>No credentials would be committed; minted key is gitignored</td><td><span class="chip teal">pass</span></td></tr>
         <tr><td>All seven harness parts present</td><td><span class="chip teal">pass</span></td></tr>
         <tr><td>No vendor SDK imported outside the providers directory</td><td><span class="chip teal">pass</span></td></tr>
-        <tr><td><code>.env.example</code> documents every option</td><td><span class="chip teal">pass</span></td></tr>
+        <tr><td><code>.env.example</code> documents every option the code reads</td><td><span class="chip teal">pass</span></td></tr>
+        <tr><td>The CRM payload cannot be sent — no HubSpot client, no credential</td><td><span class="chip teal">pass</span></td></tr>
       </tbody>
     </table>
   </div>
 
-  <p>Three things the script explicitly says it does <em>not</em> cover, so they are not mistaken for covered: running the test suites, timing the setup on a machine nobody has touched, and rehearsing the demo twice on the real path.</p>
+  <p>Three things the script explicitly says it does <em>not</em> cover, so they are not mistaken for covered: running the test suites, timing the setup on a machine nobody has touched, and rehearsing the demo twice on the real path. The last two are still outstanding, and both are named in the <a href="11-scorecard.html">scorecard</a>.</p>
 
   <div class="related">
     <div class="related-label">Related sections</div>
@@ -254,7 +263,7 @@
 </div>
 
 <footer class="site">
-  <span>OpenGong Lite — Documentation</span>
+  <span>King Gong — Documentation</span>
   <span>§ 08 · Built vs pending</span>
 </footer>
 <script src="assets/script.js"></script>

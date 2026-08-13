@@ -177,3 +177,99 @@ With `channel: true` the mapping is deterministic. With `diarize: true` there is
 we use a stated rule: **whoever speaks first is the rep**, because the rep opens the call. Right on
 essentially every real sales call, wrong on some. `Call.separation` is persisted and displayed in
 the UI so nobody mistakes a heuristic for a measurement.
+
+---
+
+## 10. Skills are files, and they may not supply vocabulary
+
+The parts of the prompt most worth iterating on — what counts as a real objection, when a commitment
+is verifiable, how to judge whether last call's promise happened — are the parts a programmer is
+worst placed to write. They live in `skills/<id>/SKILL.md` so a salesperson can improve them without
+touching TypeScript.
+
+**The constraint that makes it safe:** a skill may say what to *look for* and how to *judge*. It may
+not supply phrasing to *describe* findings in. The gate scores a claim by how much of it appears in
+the line it cites, so a skill saying "describe pricing pushback as budget-constrained" hands the
+model words that are nowhere in the call — and a true claim comes back under-supported, everywhere,
+while still reading well. `npm run test:skills` checks the corpus for the imperatives that introduce
+output wording and for framework jargon no prospect would utter, and records the failure with a
+worked example: the same true claim scores 1.00 in the call's words and 0.00 in borrowed ones.
+
+Frontmatter is three flat scalars, not YAML. A file reaching for nesting is doing something the
+loader would only half understand, so it throws instead. `OPENGONG_SKILLS` naming a skill that does
+not exist throws too — a typo must not silently mean "analysed without it", because the notes would
+look fine and have been produced under different instructions.
+
+**This is not the Anthropic Agent Skills runtime.** No progressive disclosure, no tool use, and the
+model never selects its own. Selection happens in code before the call, because a pipeline with a
+fixed budget and a gate that must explain itself needs the instruction set knowable in advance
+rather than discovered mid-request.
+
+*Rejected:* keeping the prompt in string literals (nobody outside the codebase can improve it), and
+a builder-time skill in `.claude/skills/` as the reference suggested (helps whoever writes the code,
+not whoever uses the product).
+
+---
+
+## 11. Action items are a new table, and silence closes nothing
+
+A commitment is not a learning. A learning is true forever once it is true; a commitment is open
+until something happens. So `action_items` is its own table.
+
+It had to be a new **table** rather than a column: this schema is one `CREATE TABLE IF NOT EXISTS`
+block with no migration system, so a new column is a silent no-op on every database that already
+exists and then throws at INSERT time, mid-run, after the run row was written. And it could not
+reuse `promoted` on `company_learnings`, which already means "a human copied this into notes" — a
+different axis, since a commitment can be in the notes and still not done.
+
+**Only a citation or a person closes one.** A model marking an item done must quote a line from a
+*later* call that says so; a human may do it with no citation, because that is what a human
+assertion is. Both are stored distinguishably and rendered differently, because a percentage that
+mixed them silently would be worse than either alone.
+
+**Silence resolves nothing.** An item nobody mentioned stays open and comes back next time. That
+costs one line in a prompt; wrongly closing it means nobody ever chases the thing again.
+
+Two smaller choices inside it. Tier 2 scores the model's *note about this call*, not the carried
+commitment's text — scoring the latter would measure overlap between two different conversations and
+flag correct judgements as unsupported. And the percentage always renders with its denominator:
+"67%" is a claim about an account, "2 of 3" is a fact about three specific commitments, and on a real
+deal the number is always small enough for the difference to matter.
+
+---
+
+## 12. The CRM payload has no client, and writes no `dealstage`
+
+The question worth answering before wiring a CRM token is not "can we push?" but "what lands in the
+CRM, and would we be happy for a customer to read it?" That is answerable with no credential and no
+risk to a live pipeline, so it was answered first. `check:ship` now fails the build if an outbound
+HubSpot host or a `HUBSPOT_*` credential appears anywhere — the promise is enforced rather than
+remembered.
+
+Three decisions inside the payload, all from reading a live portal's schema rather than the docs:
+
+- **No `dealstage` is ever written.** Stage ids are per-portal GUIDs, not labels — in the portal
+  checked, "Negotiate" is `4a26def2-fe7f-49ef-8a0b-cb73f99f3907` — and our own `DealStage`
+  vocabulary matches none of them. A label would be rejected; a guessed GUID would move somebody's
+  real deal. Stage travels as a signal for a human to act on.
+- **Association ids are null**, each carrying the lookup that would resolve it. Nothing in this app
+  stores a HubSpot object id, and an invented one would look more finished and be less true.
+- **Unverified claims are excluded from the note body** and counted under `omitted`. In the app they
+  ship with a visible warning, because hiding them would be lying by omission to the person who
+  recorded the call. A CRM is a different audience: the note outlives its context and becomes the
+  account's record.
+
+The brief lists CRM sync as out of scope. This is not a sync, but it is adjacent, and the flag is
+raised in [`scorecard.md`](scorecard.md) rather than left in a commit message.
+
+---
+
+## 13. The budget governor now sizes the message it is capping
+
+It used to estimate input tokens from the transcript alone, ignoring the system prompt and every
+context block. On a two-line call that is 14 estimated tokens against a real prompt of 980.
+
+Tolerable while the preamble was fixed and small. Wrong the moment skills made it something a user
+can grow: a 20 KB skill adds roughly 5,500 real input tokens and, under the old estimate, zero. A cap
+that cannot see the text it is capping is not a cap. It now asks the prompt builder how large its own
+output is, so the estimate cannot drift from the message again.
