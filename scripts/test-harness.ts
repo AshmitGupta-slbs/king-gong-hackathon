@@ -16,6 +16,7 @@ import { BudgetGovernor, DeadlineError, estimateTokens } from '@/lib/harness/bud
 import { processCall } from '@/lib/harness/loop';
 import { activeLockCount, parallelMap, withLock } from '@/lib/harness/parallel';
 import { retryAimed } from '@/lib/harness/retry';
+import { audioUploadIdentity, buildWav, silence, sniffAudioFormat } from '@/lib/wav';
 
 let failures = 0;
 const check = (name: string, cond: boolean, detail = '') => {
@@ -319,6 +320,40 @@ async function main() {
     check('the deadline names the cap it hit', broke.error?.includes('maxInputTokens') ?? false, broke.error);
     const brokeRun = listRuns(200).find((r) => r.id === broke.runId);
     check('the deadlined run is recorded too', brokeRun?.status === 'deadline');
+  }
+
+  head('Upload identity — the container is read from the bytes, never the filename');
+  {
+    // The case that motivated this: a real dialer export named .mp3 that is actually RIFF/WAVE.
+    // Declaring the extension's format would misreport it to the API on the files people really
+    // have, so the sniffed type wins and the filename is corrected to agree with it.
+    const wavBytes = buildWav({ pcm16: silence(40, 8000), sampleRate: 8000, channels: 1 });
+    const mislabelled = audioUploadIdentity(wavBytes, 'recording.mp3');
+    check('a WAV named .mp3 is declared audio/wav', mislabelled.mime === 'audio/wav', mislabelled.mime);
+    check('and its filename is corrected to .wav', mislabelled.filename === 'recording.wav', mislabelled.filename);
+    check('the correction is reported', mislabelled.corrected);
+
+    const honest = audioUploadIdentity(wavBytes, 'call.wav');
+    check('a correctly-named WAV is left alone', honest.filename === 'call.wav' && !honest.corrected);
+
+    check('RIFF/WAVE is detected', sniffAudioFormat(wavBytes)?.ext === 'wav');
+    check('ID3-tagged MP3 is detected',
+      sniffAudioFormat(new Uint8Array([0x49, 0x44, 0x33, 3, 0, 0, 0, 0, 0, 0, 0, 0]))?.mime === 'audio/mpeg');
+    check('a bare MPEG frame is detected',
+      sniffAudioFormat(new Uint8Array([0xff, 0xfb, 0x90, 0, 0, 0, 0, 0, 0, 0, 0, 0]))?.mime === 'audio/mpeg');
+    check('OggS is detected',
+      sniffAudioFormat(new Uint8Array([0x4f, 0x67, 0x67, 0x53, 0, 0, 0, 0, 0, 0, 0, 0]))?.ext === 'ogg');
+    check('fLaC is detected',
+      sniffAudioFormat(new Uint8Array([0x66, 0x4c, 0x61, 0x43, 0, 0, 0, 0, 0, 0, 0, 0]))?.ext === 'flac');
+    check('ftyp (m4a/mp4) is detected',
+      sniffAudioFormat(new Uint8Array([0, 0, 0, 0x20, 0x66, 0x74, 0x79, 0x70, 0x4d, 0x34, 0x41, 0x20]))?.mime === 'audio/mp4');
+
+    // Unknown or truncated input must not block an upload — fall back to the old behaviour.
+    check('an unrecognised container sniffs as null', sniffAudioFormat(new Uint8Array(16)) === null);
+    check('too-short input sniffs as null', sniffAudioFormat(new Uint8Array([1, 2, 3])) === null);
+    const unknown = audioUploadIdentity(new Uint8Array(16), 'mystery.bin');
+    check('an unknown container keeps its filename and falls back to audio/wav',
+      unknown.mime === 'audio/wav' && unknown.filename === 'mystery.bin' && !unknown.corrected);
   }
 
   // Clean up so test rows never show up in the demo UI.

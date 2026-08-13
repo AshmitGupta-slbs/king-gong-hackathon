@@ -13,6 +13,7 @@
  */
 import type { TranscriptSegment } from '@/lib/types';
 import { pyaiGet, pyaiPostMultipart, PyaiError } from '@/lib/pyai';
+import { audioUploadIdentity } from '@/lib/wav';
 import type { STTProvider, STTRequest, STTResult } from '../types';
 
 type PyaiSegment = {
@@ -102,11 +103,20 @@ export function pyaiJobsSTT(): STTProvider {
       else fields.diarize = 'true';
       if (req.numerals) fields.numerals = 'true';
 
+      /**
+       * Declare what the bytes actually are, not what the filename claims.
+       *
+       * This used to send `audio/wav` for every upload unconditionally. A real dialer export
+       * arrived named `recording.mp3` while actually being RIFF/WAVE 16-bit stereo — mislabelled
+       * files are the normal case, not the edge case, and the endpoint accepts compressed audio
+       * directly so there is nothing to transcode either way.
+       */
+      const id = audioUploadIdentity(req.audio, req.filename);
       const submitted = await pyaiPostMultipart<PyaiJob>('/transcription/jobs', fields, {
         field: 'audio',
-        filename: req.filename,
+        filename: id.filename,
         bytes: req.audio,
-        contentType: 'audio/wav',
+        contentType: id.mime,
       });
 
       const jobId = submitted.data.job_id;
