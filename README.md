@@ -120,7 +120,7 @@ real, all verified by forcing the failure rather than reading the code:
 
 ```bash
 npm run test:gate         # 23 checks — the citation gate blocks, logs, and downgrades status
-npm run test:harness      # 55 checks — budgets stop runs, retries bound, no run vanishes, formats sniffed
+npm run test:harness      # 91 checks — budgets stop runs, retries bound, no run vanishes, audio inspected
 npm run test:readability  # 46 checks — the display layer never changes what was said
 npm run check:ship        # the pass/fail ship checklist
 npm run verify            # all of the above, in order
