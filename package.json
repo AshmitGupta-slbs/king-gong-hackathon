@@ -1,0 +1,45 @@
+{
+  "name": "opengong-lite",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Deal notes with receipts — sales-call transcription and notes where every claim cites the transcript line that proves it, and unprovable claims are deleted rather than softened.",
+  "license": "MIT",
+  "author": "SaaS Labs",
+  "engines": {
+    "node": ">=22.5.0"
+  },
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "start:docs": "node docs/serve.mjs",
+    "lint": "eslint",
+    "test:gate": "tsx scripts/test-gate.ts",
+    "samples": "tsx scripts/make-samples.ts",
+    "test:harness": "tsx scripts/test-harness.ts",
+    "extract:samples": "tsx scripts/extract-samples.ts",
+    "check:ship": "tsx scripts/check-ship.ts",
+    "verify": "tsx scripts/test-gate.ts && tsx scripts/test-harness.ts && tsx scripts/test-readability.ts && tsx scripts/check-ship.ts",
+    "test:readability": "tsx scripts/test-readability.ts",
+    "reindex:samples": "tsx scripts/reindex-samples.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/bedrock-sdk": "^0.32.1",
+    "@anthropic-ai/sdk": "^0.116.0",
+    "next": "16.3.0",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^26.2.0",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.3.0",
+    "tailwindcss": "^4",
+    "tsx": "^4.23.12",
+    "typescript": "^5"
+  }
+}

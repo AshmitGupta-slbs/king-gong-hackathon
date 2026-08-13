@@ -1,0 +1,86 @@
+{
+  "segments": [
+    {
+      "id": "seg_000",
+      "speaker": "rep",
+      "start_ms": 0,
+      "end_ms": 6080,
+      "text": "thanks for jumping on tom i know things have been busy since we last spoke in june",
+      "channel": 0
+    },
+    {
+      "id": "seg_001",
+      "speaker": "prospect",
+      "start_ms": 6000,
+      "end_ms": 10560,
+      "text": "they had and i should be straight with you not much has moved on our side",
+      "channel": 1
+    },
+    {
+      "id": "seg_002",
+      "speaker": "rep",
+      "start_ms": 10640,
+      "end_ms": 18240,
+      "text": "that is fair when we last talked the driver was ramping the new reps faster is that still a priority",
+      "channel": 0
+    },
+    {
+      "id": "seg_003",
+      "speaker": "prospect",
+      "start_ms": 18160,
+      "end_ms": 25680,
+      "text": "it is still a problem but it is not the priority anymore we paused hiring in august so we are not ramping anybody right now",
+      "channel": 1
+    },
+    {
+      "id": "seg_004",
+      "speaker": "rep",
+      "start_ms": 25840,
+      "end_ms": 29440,
+      "text": "understood is there a point in the year where that changes",
+      "channel": 0
+    },
+    {
+      "id": "seg_005",
+      "speaker": "prospect",
+      "start_ms": 29520,
+      "end_ms": 37360,
+      "text": "maybe january depending on how the quarter lands i genuinely do not know and i do not want to give you a date that is not real",
+      "channel": 1
+    },
+    {
+      "id": "seg_006",
+      "speaker": "rep",
+      "start_ms": 37440,
+      "end_ms": 44480,
+      "text": "i appreciate that is there anyone else internally for whom this is live right now even if it is not you",
+      "channel": 0
+    },
+    {
+      "id": "seg_007",
+      "speaker": "prospect",
+      "start_ms": 44560,
+      "end_ms": 51040,
+      "text": "not really our enablement lead left in july and nobody has picked that up so there is no one championing it",
+      "channel": 1
+    },
+    {
+      "id": "seg_008",
+      "speaker": "rep",
+      "start_ms": 50960,
+      "end_ms": 57360,
+      "text": "then i do not think there is a deal here this quarter and i would rather say that than keep booking calls",
+      "channel": 0
+    },
+    {
+      "id": "seg_009",
+      "speaker": "prospect",
+      "start_ms": 57280,
+      "end_ms": 62720,
+      "text": "i respect that check back with me in january and if hiring restarts i will tell you honestly",
+      "channel": 1
+    }
+  ],
+  "audio_seconds": 62.987,
+  "speakers": 2
+}

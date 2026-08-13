@@ -1,0 +1,162 @@
+<!--title: 03 · Data contract-->
+<!--pill: Contract-->
+<!--toc: one-definition|One definition, nowhere else ;; segment|The transcript segment ;; ids|The segment-id rules ;; draft-vs-result|Draft vs result ;; evidence|Evidence and verdicts ;; provenance|Provenance-->
+
+  <div class="page-eyebrow">§ 03 · The data contract</div>
+  <h1 class="page-title">One definition of a <em>claim.</em></h1>
+  <p class="page-lede">Ingestion, extraction, the gate, the transcript viewer and the export all depend on the same shapes. Where those shapes drift, citations stop resolving — so there is exactly one file that defines them, and a rule that nothing else may.</p>
+
+  <div class="glance">
+    <p><strong>In one line:</strong> <code>lib/types.ts</code> defines a transcript segment and a claim; everything else imports from it. The model's output is a <em>draft</em> and the gate's output is a <em>result</em> — two different types, on purpose, so a model cannot declare its own output trustworthy.</p>
+    <p>Schemas are written in Zod and the TypeScript types are <strong>inferred from them</strong>, so the runtime validator and the compile-time type physically cannot disagree.</p>
+  </div>
+
+  <h2 id="one-definition">One definition, nowhere else</h2>
+
+  <p>The failure this prevents is mundane and fatal: one part of the codebase inventing a slightly different shape for a segment. Ingestion writes <code>start_ms</code>, the viewer reads <code>startMs</code>, and citations silently stop resolving — at hour twenty, during integration, when there is no time to find it.</p>
+
+  <div class="pull">
+    If the shape needs to change, it changes <strong>here</strong>, in the same commit as the code that needed it.
+  </div>
+
+  <h2 id="segment">The transcript segment</h2>
+
+  <p>The atomic unit every citation points into. One call produces an ordered list of these.</p>
+
+  <pre style="background:var(--ink); color:var(--paper); padding:18px; border-radius:6px; overflow-x:auto; font-size:13px; font-family:var(--mono);">export const TranscriptSegmentSchema = z.object({
+  id: z.string().regex(/^seg_\d{3,}$/, 'segment ids look like seg_000'),
+  speaker: SpeakerSchema,
+  start_ms: z.number().int().nonnegative(),
+  end_ms: z.number().int().nonnegative(),
+  /** VERBATIM provider output. The citation source of truth. */
+  text: z.string(),
+  /** Optional readability rendering. NEVER read in the gate. */
+  display_text: z.string().optional(),
+  /** Present only for stereo one-party-per-channel audio. */
+  channel: z.number().int().optional(),
+});</pre>
+
+  <p>Two fields carry more weight than they look like they do.</p>
+
+  <div class="grid-2">
+    <div class="card accent">
+      <span class="card-eyebrow">TEXT</span>
+      <div class="card-title">Verbatim, deliberately ugly</div>
+      <p><code>text</code> is exactly what the speech API returned — lowercase, unpunctuated, transcription errors intact. It is the only thing the gate reads and the only thing quoted as evidence. We do not clean it up here.</p>
+    </div>
+    <div class="card">
+      <span class="card-eyebrow">DISPLAY_TEXT</span>
+      <div class="card-title">Presentation only, and guarded</div>
+      <p><strong>Reserved, and written by nothing today.</strong> Display rendering happens at the presentation boundary instead: the UI and the Markdown export each call <code>readableFor(title)</code> per segment, so the readable form is derived on demand rather than stored — a stored rendering can go stale against the rules that produced it. The field is kept for a future ingest-time cache. Either way it is never read by the gate and never quoted as evidence; <code>text</code> is the citation source of truth. The rendering rules are in <a href="10-decisions-risks.html#readability">§10</a>.</p>
+    </div>
+  </div>
+
+  <h2 id="ids">The segment-id rules</h2>
+
+  <p>Everything hangs off these, so they are stated as rules rather than left as habits.</p>
+
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>Rule</th><th>Why</th></tr></thead>
+      <tbody>
+        <tr><td>Assigned <strong>once</strong>, at ingestion</td><td>An id that can be regenerated is an id that can stop matching a stored citation.</td></tr>
+        <tr><td>Zero-padded <code>seg_000</code></td><td>Lexical order matches temporal order, so sorting anywhere is safe.</td></tr>
+        <tr><td>Ordered by <code>start_ms</code></td><td>The viewer, the player and the gate all assume it.</td></tr>
+        <tr><td>Never reused, never reordered</td><td>A share link from yesterday must still point at the same words.</td></tr>
+        <tr><td><strong>Never invented by a model</strong></td><td>The model cites ids; it does not mint them. This is the difference between a citation and a guess.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>PyAI does not hand back this shape, so the ingest mapper does real work rather than passing through. Four concrete differences, all measured rather than assumed (see <a href="06-pyai-api-truth.html">§06</a>):</p>
+
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>PyAI returns</th><th>Our contract wants</th><th>Mapping</th></tr></thead>
+      <tbody>
+        <tr><td><code>id</code> — integer, 0-based</td><td><code>seg_000</code> — string</td><td>zero-pad the index</td></tr>
+        <tr><td><code>start</code>/<code>end</code> — float seconds</td><td><code>start_ms</code>/<code>end_ms</code> — integer ms</td><td><code>Math.round(x * 1000)</code></td></tr>
+        <tr><td><code>speaker: "speaker_1"</code></td><td><code>rep</code> / <code>prospect</code></td><td>channel index (stereo) or first-speaker heuristic (mono)</td></tr>
+        <tr><td><code>channel</code> only when <code>channel:true</code></td><td>optional</td><td>absent on diarized mono</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2 id="draft-vs-result">Draft vs result — the important split</h2>
+
+  <p>This is a deliberate divergence from the original spec, and it is the most important structural decision in the contract.</p>
+
+  <p><code>ExtractionDraft</code> is what the model returns. Note what is <strong>not</strong> in it: no <code>run_status</code>, and no verdict on whether any citation held up.</p>
+
+  <pre style="background:var(--ink); color:var(--paper); padding:18px; border-radius:6px; overflow-x:auto; font-size:13px; font-family:var(--mono);">export const ExtractionDraftSchema = z.object({
+  summary: z.string(),          // free prose — a synthesis, not a claim
+  intent: IntentSchema,         // { label, segment_ids }
+  objections: z.array(ClaimSchema),
+  next_steps: z.array(ClaimSchema),
+  follow_up_email: FollowUpEmailSchema,
+  key_moments: z.array(KeyMomentSchema),
+});
+
+export const ClaimSchema = z.object({
+  claim: z.string(),
+  segment_ids: z.array(z.string()).min(1),   // ids that prove it
+});</pre>
+
+  <p><code>ExtractionResult</code> is what the gate produces, and the only thing allowed to reach a screen. It adds the fields the model is not permitted to author:</p>
+
+  <pre style="background:var(--ink); color:var(--paper); padding:18px; border-radius:6px; overflow-x:auto; font-size:13px; font-family:var(--mono);">run_status:  'shipped' | 'partial' | 'failed' | 'deadline'
+rejections:  GateRejection[]        // what was dropped or flagged, and why
+verdict:     'verified' | 'unverified'   // per claim
+support:     number                 // 0..1, the tier-2 score, recorded for audit
+evidence:    Evidence[]             // resolved from the transcript</pre>
+
+  <div class="pull">
+    A model must never be able to declare its own output <strong>shipped</strong>. Splitting the types is how that becomes structurally impossible rather than a code-review question.
+  </div>
+
+  <h2 id="evidence">Evidence and verdicts</h2>
+
+  <p><code>Evidence</code> is resolved by the gate, not supplied by the model:</p>
+
+  <pre style="background:var(--ink); color:var(--paper); padding:18px; border-radius:6px; overflow-x:auto; font-size:13px; font-family:var(--mono);">export const EvidenceSchema = z.object({
+  segment_id: z.string(),
+  speaker: SpeakerSchema,
+  start_ms: z.number().int().nonnegative(),
+  end_ms: z.number().int().nonnegative(),
+  text: z.string(),
+});</pre>
+
+  <p>Every field there is copied from the segment. <strong>Timestamps and quoted text never come from model prose</strong> — which is why a citation chip can be trusted to seek the audio to the right second, and why the quote under a claim is the call's words rather than the model's paraphrase of them.</p>
+
+  <p>The two verdicts mean different things, and the distinction is visible in the UI as an amber badge:</p>
+
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>Verdict</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td><span class="chip teal">verified</span></td><td>Every cited segment exists, and (for assertions) its text plausibly supports the claim.</td></tr>
+        <tr><td><span class="chip mustard">unverified</span></td><td>The cited segments exist, but the text does not visibly support the claim. Ships with a warning rather than lying by omission.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>Claims whose citations do not resolve <em>at all</em> get no verdict — they are removed from the output entirely. There is no third label, because a deleted claim is not a labelled claim.</p>
+
+  <h2 id="provenance">Provenance</h2>
+
+  <p>One field exists purely to stop us fooling ourselves:</p>
+
+  <pre style="background:var(--ink); color:var(--paper); padding:18px; border-radius:6px; overflow-x:auto; font-size:13px; font-family:var(--mono);">/** Which registry provider produced the draft:
+ *  'claude' | 'bedrock' | 'stub-heuristic' */
+extracted_by: z.string().optional(),</pre>
+
+  <p>It is persisted into every <code>samples/*.result.json</code>, surfaced in the UI header, and read by <code>npm run check:ship</code>, which <strong>fails</strong> while any shipped note was produced by the keyword stub. See <a href="07-extraction-providers.html#provenance">§07</a>.</p>
+
+  <div class="related">
+    <div class="related-label">Related sections</div>
+    <div class="related-grid">
+      <a href="04-citation-gate.html"><strong>04 · The citation gate</strong><small>What turns a draft into a result</small></a>
+      <a href="06-pyai-api-truth.html"><strong>06 · PyAI API truth</strong><small>Where the mapping facts came from</small></a>
+      <a href="07-extraction-providers.html"><strong>07 · Providers</strong><small>Who fills the draft in</small></a>
+    </div>
+  </div>

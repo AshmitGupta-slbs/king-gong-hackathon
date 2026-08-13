@@ -1,0 +1,180 @@
+{
+  "summary": "[Heuristic stub — no model was involved] 10-segment call. 2 concern(s) detected by keyword, 3 action(s), 4 flagged moment(s). Intent classified as \"high interest\". Replace by running extraction against a real model before showing this to anyone.",
+  "intent": {
+    "label": "high interest",
+    "segment_ids": [
+      "seg_001"
+    ],
+    "verdict": "verified",
+    "support": 0,
+    "evidence": [
+      {
+        "segment_id": "seg_001",
+        "speaker": "prospect",
+        "start_ms": 7360,
+        "end_ms": 14000,
+        "text": "we did and it came back clean security signed off on monday that was honestly the last real blocker"
+      }
+    ]
+  },
+  "objections": [
+    {
+      "claim": "Prospect raised a concern: We did and it came back clean security signed off on monday that was honestly the…",
+      "segment_ids": [
+        "seg_001"
+      ],
+      "verdict": "verified",
+      "support": 0.7272727272727273,
+      "evidence": [
+        {
+          "segment_id": "seg_001",
+          "speaker": "prospect",
+          "start_ms": 7360,
+          "end_ms": 14000,
+          "text": "we did and it came back clean security signed off on monday that was honestly the last real blocker"
+        }
+      ]
+    },
+    {
+      "claim": "Prospect raised a concern: Just cocky elena on it she's handling the vendor forms and she'll chase it if i'm…",
+      "segment_ids": [
+        "seg_009"
+      ],
+      "verdict": "verified",
+      "support": 0.6666666666666666,
+      "evidence": [
+        {
+          "segment_id": "seg_009",
+          "speaker": "prospect",
+          "start_ms": 63120,
+          "end_ms": 68160,
+          "text": "just cocky elena on it she's handling the vendor forms and she'll chase it if i'm slow"
+        }
+      ]
+    }
+  ],
+  "next_steps": [
+    {
+      "claim": "Agreed action: I'll have it in your inbox within the hour anything you want me to flag for…",
+      "segment_ids": [
+        "seg_008"
+      ],
+      "verdict": "verified",
+      "support": 0.75,
+      "evidence": [
+        {
+          "segment_id": "seg_008",
+          "speaker": "rep",
+          "start_ms": 56320,
+          "end_ms": 63200,
+          "text": "i'll have it in your inbox within the hour anything you want me to flag for procurement directly"
+        }
+      ]
+    },
+    {
+      "claim": "Agreed action: Good send the paper over today and i'll get it through signature by friday procurement already…",
+      "segment_ids": [
+        "seg_007"
+      ],
+      "verdict": "verified",
+      "support": 0.8461538461538461,
+      "evidence": [
+        {
+          "segment_id": "seg_007",
+          "speaker": "prospect",
+          "start_ms": 49200,
+          "end_ms": 56320,
+          "text": "good send the paper over today and i'll get it through signature by friday procurement already has the budget line reserved"
+        }
+      ]
+    },
+    {
+      "claim": "Agreed action: We did and it came back clean security signed off on monday that was honestly the…",
+      "segment_ids": [
+        "seg_001"
+      ],
+      "verdict": "verified",
+      "support": 0.8,
+      "evidence": [
+        {
+          "segment_id": "seg_001",
+          "speaker": "prospect",
+          "start_ms": 7360,
+          "end_ms": 14000,
+          "text": "we did and it came back clean security signed off on monday that was honestly the last real blocker"
+        }
+      ]
+    }
+  ],
+  "follow_up_email": {
+    "subject": "Following up on our call",
+    "body": "Thanks for the time today. Picking up on what you raised, I will follow up on the points we agreed and come back to you with the detail.",
+    "segment_ids": [
+      "seg_009"
+    ],
+    "verdict": "verified",
+    "support": 0,
+    "evidence": [
+      {
+        "segment_id": "seg_009",
+        "speaker": "prospect",
+        "start_ms": 63120,
+        "end_ms": 68160,
+        "text": "just cocky elena on it she's handling the vendor forms and she'll chase it if i'm slow"
+      }
+    ]
+  },
+  "key_moments": [
+    {
+      "type": "objection",
+      "segment_id": "seg_001",
+      "note": "We did and it came back clean security signed off…",
+      "evidence": {
+        "segment_id": "seg_001",
+        "speaker": "prospect",
+        "start_ms": 7360,
+        "end_ms": 14000,
+        "text": "we did and it came back clean security signed off on monday that was honestly the last real blocker"
+      }
+    },
+    {
+      "type": "pricing",
+      "segment_id": "seg_007",
+      "note": "Good send the paper over today and i'll get it…",
+      "evidence": {
+        "segment_id": "seg_007",
+        "speaker": "prospect",
+        "start_ms": 49200,
+        "end_ms": 56320,
+        "text": "good send the paper over today and i'll get it through signature by friday procurement already has the budget line reserved"
+      }
+    },
+    {
+      "type": "next_step",
+      "segment_id": "seg_008",
+      "note": "I'll have it in your inbox within the hour anything…",
+      "evidence": {
+        "segment_id": "seg_008",
+        "speaker": "rep",
+        "start_ms": 56320,
+        "end_ms": 63200,
+        "text": "i'll have it in your inbox within the hour anything you want me to flag for procurement directly"
+      }
+    },
+    {
+      "type": "objection",
+      "segment_id": "seg_009",
+      "note": "Just cocky elena on it she's handling the vendor forms…",
+      "evidence": {
+        "segment_id": "seg_009",
+        "speaker": "prospect",
+        "start_ms": 63120,
+        "end_ms": 68160,
+        "text": "just cocky elena on it she's handling the vendor forms and she'll chase it if i'm slow"
+      }
+    }
+  ],
+  "run_status": "shipped",
+  "rejections": [],
+  "extracted_by": "stub-heuristic"
+}

@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>06 · PyAI API truth · OpenGong Lite</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,500;9..144,600;9..144,700&family=JetBrains+Mono:wght@400;500;600&family=Inter+Tight:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/style.css">
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.0/dist/mermaid.min.js"></script>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-inner">
+    <a href="index.html" class="brand">
+      <div class="brand-mark">OG</div>
+      <span>OpenGong Lite</span>
+    </a>
+    <div class="topbar-right">
+      <span class="pill">Field notes</span>
+      <span>§ 06</span>
+    </div>
+  </div>
+</div>
+
+<div class="layout">
+<aside class="sidebar">
+  <button class="mobile-nav-toggle" aria-label="Toggle navigation">☰ Sections</button>
+  <div class="sidebar-section">
+    <div class="sidebar-label">Start here</div>
+    <nav>
+      <a href="index.html"><span class="nav-num">00</span>Overview</a>
+      <a href="01-what-it-does.html"><span class="nav-num">01</span>What it does</a>
+    </nav>
+  </div>
+  <div class="sidebar-section">
+    <div class="sidebar-label">How it works</div>
+    <nav>
+      <a href="02-architecture.html"><span class="nav-num">02</span>Architecture</a>
+      <a href="03-data-contract.html"><span class="nav-num">03</span>Data contract</a>
+      <a href="04-citation-gate.html"><span class="nav-num">04</span>The citation gate</a>
+      <a href="05-harness.html"><span class="nav-num">05</span>The harness</a>
+    </nav>
+  </div>
+  <div class="sidebar-section">
+    <div class="sidebar-label">Reality</div>
+    <nav>
+      <a href="06-pyai-api-truth.html" class="active"><span class="nav-num">06</span>PyAI API truth</a>
+      <a href="07-extraction-providers.html"><span class="nav-num">07</span>Extraction &amp; providers</a>
+      <a href="08-status.html"><span class="nav-num">08</span>Built vs pending</a>
+      <a href="09-run-and-verify.html"><span class="nav-num">09</span>Run &amp; verify</a>
+      <a href="10-decisions-risks.html"><span class="nav-num">10</span>Decisions &amp; risks</a>
+    </nav>
+  </div>
+</aside>
+
+<main class="content">
+
+  <div class="page-eyebrow">§ 06 · PyAI API truth</div>
+  <h1 class="page-title">What the docs <em>got wrong.</em></h1>
+  <p class="page-lede">Everything on this page was probed against the live API rather than read from documentation. Where the two disagreed, the API won and the disagreement was written down. This is the most reusable page here for anyone else building on PyAI.</p>
+
+  <div class="glance">
+    <p><strong>In one line:</strong> the sandbox key has more scopes than documented, the jobs endpoint omits the usage header everyone would build a meter on, streaming has two protocols and the published snippet lands you on the legacy one, and Hear will confidently invent sentences out of silence.</p>
+    <p>Source of truth: <code>docs/api-truth.md</code> in the repo. Six probe scripts under <code>scripts/probe/</code> reproduce all of it.</p>
+  </div>
+
+  <h2 id="method">Method</h2>
+
+  <p>The reference spec we started from asserted that there was no live PyAI access outside the hackathon sandbox. That was the first thing to check, and it was false: the docs are public and <code>POST /v1/sandbox/keys</code> mints a working key with <strong>no auth, no signup, no card</strong>. Which meant every other assumption could be tested too, rather than designed around.</p>
+
+  <div class="pull">
+    The rule for this page: an assumption that has not been probed is a <strong>risk</strong>, not a fact — and it goes in writing either way.
+  </div>
+
+  <h2 id="scopes">Scopes: the documented list is stale</h2>
+
+  <p>A freshly minted sandbox key returns:</p>
+
+  <pre style="background:var(--ink); color:var(--paper); padding:18px; border-radius:6px; overflow-x:auto; font-size:13px; font-family:var(--mono);">scopes: hear:transcribe, hear:stream, transcribe:jobs, voice:synthesize,
+        omni:session, nova:run, amd:detect, amd:configure, amd:read, cast:render</pre>
+
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>Finding</th><th>Consequence</th></tr></thead>
+      <tbody>
+        <tr><td><code>transcribe:jobs</code> <strong>is</strong> granted, though <code>authentication.md</code> lists only four scopes and the mint page advertises a shorter list</td><td>This was the single decision the whole architecture hung on. Had it been denied, ingest would have needed a stream-per-channel workaround.</td></tr>
+        <tr><td>No <code>recap:*</code> and no <code>trace:*</code></td><td>Recap and Trace are unavailable to us. So the "Recap writes your summaries" premise does not hold, and extraction is our own model call.</td></tr>
+        <tr><td><code>nova:run</code> and <code>cast:render</code> are granted but <strong>404 on every path we tried</strong></td><td>Scopes for unshipped products. Ignore them.</td></tr>
+        <tr><td><code>GET /v1/models</code> says the Speak model id is <code>pyai-voice</code></td><td>Not <code>pyai-speak</code>, which is what we guessed first and what produced confusing errors.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2 id="jobs">Batch jobs — the path we actually use</h2>
+
+  <p><code>POST /v1/transcription/jobs</code> returns <strong>202</strong> with a job id; polling completes in about one 1.5-second interval for 30 seconds of audio. The terminal result carries <code>text</code>, <code>segments</code>, <code>words</code>, <code>speakers</code> and <code>audio_seconds</code>.</p>
+
+  <div class="grid-2">
+    <div class="card accent">
+      <span class="card-eyebrow">TRAP</span>
+      <div class="card-title">No <code>x-pyai-units</code> on jobs</div>
+      <p>The header is absent on both the POST and the GET. It <em>is</em> present on the flat <code>/v1/audio/transcriptions</code>. A usage meter built purely on that header — the obvious design — would have silently displayed <strong>zero forever</strong>. Ours is driven by <code>result.audio_seconds</code>.</p>
+    </div>
+    <div class="card teal">
+      <span class="card-eyebrow">FREE BONUS</span>
+      <div class="card-title"><code>words[]</code> has per-word timing</div>
+      <p>Undocumented in what we read: every word carries <code>start</code>, <code>end</code> and <code>speaker</code>. That is word-level highlight-as-it-plays for almost no extra work.</p>
+    </div>
+  </div>
+
+  <p>Large results are offloaded to a signed <code>result_url</code> rather than inlined, so any client has to handle both shapes.</p>
+
+  <h2 id="separation">Both speaker-separation modes work</h2>
+
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>Mode</th><th>Input</th><th>Result</th></tr></thead>
+      <tbody>
+        <tr><td><code>channel: true</code></td><td>Stereo, one party per channel</td><td>6/6 segments correct, <code>speakers: 2</code>, <code>channel</code> 0/1 populated. Exact and model-free.</td></tr>
+        <tr><td><code>diarize: true</code></td><td>Mono mixdown</td><td>6/6 segments correct, <code>speakers: 2</code>, no <code>channel</code> field. Sortformer is good.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>So stereo samples use <code>channel:true</code> — where rep/prospect is deterministic from the channel integer — and real mono uploads use <code>diarize:true</code>. The "analyse a call from any dialer" claim holds up.</p>
+
+  <p>For mono there is no ground truth for <em>which</em> speaker is the rep, so we use a stated heuristic: <strong>whoever speaks first is the rep</strong>, because the rep opens the call. Right on essentially every real sales call, wrong on some. The separation mode is persisted and shown in the UI so nobody mistakes a heuristic for a measurement.</p>
+
+  <h2 id="streaming">Streaming: there are two protocols, and the default is the legacy one</h2>
+
+  <p>Not on our critical path — batch jobs own ingest — but the published snippet is wrong in a way that costs hours, so it is recorded.</p>
+
+  <p>The connect URL takes a <code>protocol</code> query parameter. <strong>Omitting it, which the published quickstart does, lands you on the legacy <code>fusion-v0</code> route.</strong> Passing <code>protocol=pyai-hear-v1</code> gives the documented one. Verified by running identical audio down both.</p>
+
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th></th><th>default / <code>fusion-v0</code></th><th><code>protocol=pyai-hear-v1</code></th></tr></thead>
+      <tbody>
+        <tr><td>Frame types</td><td><code>session.created</code>, <code>transcript.partial</code>, <code>turn.end</code>, <code>usage.delta</code>, <code>transcript.final</code></td><td><code>partial</code>, <code>partial_stable</code>, <code>speech_final</code>, <code>final</code>, <code>usage</code>, <code>config_ack</code></td></tr>
+        <tr><td>Flushing the tail</td><td><strong>Only trailing silence</strong> (~1.8s) — every control frame rejected</td><td><code>{"type":"commit"}</code> works with zero trailing silence</td></tr>
+        <tr><td>Endpointing</td><td>Fixed; turns under ~1.8s merge, hard cap ~30s</td><td><code>endpointing_ms</code> (50–5000), settable mid-session</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>So the quickstart's <code>if msg["type"] == "partial"</code> does fire — but only with the protocol parameter added. As printed, against the default route, it silently matches nothing. The docs contradict each other here; the API settled it.</p>
+
+  <p>Other measured facts on that route: <code>partial.text</code> is a rolling ~16-word window rather than the utterance so far, so accumulating partials corrupts the transcript. <code>utterance_id</code> is <strong>not</strong> a join key — partials, <code>turn.end</code> and the final each carry a different id. And <code>usage.delta</code> bills <em>active</em> audio only, so 46.4s streamed billed as 29.8s.</p>
+
+  <h2 id="fabrication">⚠ Hear fabricates fluent text from silence</h2>
+
+  <p>This is the most consequential finding in the project, and it came out of the live-mic streaming probe.</p>
+
+  <p>With nobody speaking, Hear repeatedly emitted <strong>confident finals</strong> — <code>confidence</code> 0.99+, <code>endpoint_reason: silence</code> — containing sentences that were never said. Measured input level: real speech RMS <strong>0.219</strong>; the ambience windows that produced fabricated text, RMS <strong>0.035</strong>.</p>
+
+  <div class="pull">
+    Our citation gate treats <code>segment.text</code> as the source of truth for quoted evidence. So dead air on a call — hold music, mute, a pause while someone reads — <strong>can manufacture a quotable claim that no human uttered, and it will pass the gate</strong>, because the gate only checks that the quote matches the transcript.
+  </div>
+
+  <p>The probe implements a check: <code>--silence-floor</code> (default 0.08) flags every final whose audio window never reached speech level. Any Hear-streaming ingest needs an input-level gate before segments are trusted.</p>
+
+  <p><strong>Status for us:</strong> our ingest is the <em>batch</em> path, which is <span class="chip accent">untested</span> for this behaviour. <code>scripts/probe/batch_silence_probe.py</code> is written and would settle it — it submits <em>speech · long digital silence · speech</em> and checks whether any returned segment overlaps the silent window. Full discussion in <a href="10-decisions-risks.html#silence">§10</a>.</p>
+
+  <h2 id="text">Lowercase and unpunctuated, on both models</h2>
+
+  <pre style="background:var(--ink); color:var(--paper); padding:18px; border-radius:6px; overflow-x:auto; font-size:13px; font-family:var(--mono);">hi sarah thanks for making the time today i know you've been evaluating a few options</pre>
+
+  <p>Confirmed on <strong>both</strong> <code>pyai-hear-telephony</code> (the jobs default) and <code>pyai-hear</code> — it is not a model-choice problem, it is how Hear returns text. This matters more than it looks: raw ASR casing is the difference between notes that read like a product and notes that read like a machine dump.</p>
+
+  <p>Our answer is in <a href="10-decisions-risks.html#readability">§10</a>: store verbatim, apply two deterministic display passes — casing, then spoken-digit runs — each with its own guard, and refuse to let a model insert punctuation.</p>
+
+  <p>One oddity worth knowing: "fourteen hundred" comes back as <em>"one four oh oh"</em> on the jobs endpoint while the flat endpoint rendered <em>"1400"</em>. On the stream, <code>numerals=true</code> works but applies only at finalisation — partials read "one four oh oh", the final reads "1400". Judge numerals from finals only.</p>
+
+  <p>Measured quality on synthesized audio: <strong>8.4% WER</strong> after case and punctuation normalisation. The errors are the predictable ones — <em>gong → gang</em>, <em>crm → erm</em>, <em>Q4 → q 4</em>. Proper nouns and competitor names are where it slips, which is exactly what a competitor-tracker feature depends on.</p>
+
+  <h2 id="quota">Quota behaviour, and a misleading error code</h2>
+
+  <p>Trying to regenerate sample audio on PyAI Speak produced this, and the label is wrong in both directions:</p>
+
+  <pre style="background:var(--ink); color:var(--paper); padding:18px; border-radius:6px; overflow-x:auto; font-size:13px; font-family:var(--mono);">HTTP 429  {"error":{"code":"daily_cap_exceeded",
+           "message":"Daily usage cap reached for this API key. Resets at 00:00 UTC."}}</pre>
+
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>Observation</th><th>What it rules out</th></tr></thead>
+      <tbody>
+        <tr><td>Fired after ~30 rapid <code>/audio/speech</code> calls</td><td>Not a per-day-zero from the start</td></tr>
+        <tr><td>A single call minutes later succeeded</td><td>Not a hard daily exhaustion</td></tr>
+        <tr><td>~10 calls at 250 ms spacing 429'd again; so did 6 attempts backing off to 24 s</td><td>Not a short burst limit either</td></tr>
+        <tr><td>Isolated calls kept succeeding throughout</td><td>—</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>The workable reading: <strong>Speak on a sandbox key has a small allowance that sustained generation exhausts.</strong> No <code>Retry-After</code> header is sent, so there is nothing to honour — the field is wired up in our client and simply stays undefined here.</p>
+
+  <p><strong>Hear was unaffected throughout</strong>, including while Speak was fully blocked. Transcription — the thing the product depends on, and the larger meter — was never at risk.</p>
+
+  <p>Quota is <strong>per key/org</strong>: a freshly minted sandbox key comes back with a different <code>org_id</code> and a fresh allowance. Minting is one unauthenticated call, so a blocked build is recoverable — but that is a recovery path, not a strategy.</p>
+
+  <div class="card mustard">
+    <span class="card-eyebrow">THE EXPENSIVE LESSON</span>
+    <div class="card-title">A partial regeneration is worse than none</div>
+    <p>The failed Speak run left three calls on 24 kHz PyAI audio paired with transcripts from the 16 kHz <code>say</code> audio. Everything still <em>looked</em> correct — but every citation would have jumped to the wrong moment, which is a total product failure presented as a working demo. It is now asserted by <code>npm run check:ship</code> as an audio/transcript drift check, and <code>npm run reindex:samples</code> rebuilds the manifest from disk when a run dies partway.</p>
+  </div>
+
+  <h2 id="probes">The probe scripts</h2>
+
+  <p>Six standalone Python probes under <code>scripts/probe/</code>. They need no app, and each one answers a single question.</p>
+
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>Script</th><th>Question it answers</th></tr></thead>
+      <tbody>
+        <tr><td><code>probe.py</code></td><td>The H0 gate: does a sandbox key get diarized segments with timestamps at all?</td></tr>
+        <tr><td><code>probe2.py</code></td><td>Do both separation modes work? Does model choice affect punctuation?</td></tr>
+        <tr><td><code>hear_stream_test.py</code></td><td>The streaming rig — transcript → speech → real-time stream → WER scoring, plus <code>--mic</code> for live input</td></tr>
+        <tr><td><code>eos_probe.py</code></td><td>Which end-of-stream signal actually makes Hear flush its last utterance?</td></tr>
+        <tr><td><code>batch_silence_probe.py</code></td><td><strong>Does the batch path fabricate text from silence?</strong> Written, not yet run.</td></tr>
+        <tr><td><code>batch_modes_probe.py</code></td><td>Do the two batch presets behave as documented on PyAI's own telephony samples, and does <code>numerals</code> take effect?</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>Two environment notes that cost time and are cheap to pass on: python.org's Python 3.14 ships <strong>without a CA bundle</strong>, so probes need <code>SSL_CERT_FILE=/etc/ssl/cert.pem</code>; and <code>sounddevice</code>'s macOS wheel <strong>bundles PortAudio</strong>, so live-mic capture needs no Homebrew.</p>
+
+  <div class="related">
+    <div class="related-label">Related sections</div>
+    <div class="related-grid">
+      <a href="03-data-contract.html"><strong>03 · Data contract</strong><small>Where these facts became types</small></a>
+      <a href="10-decisions-risks.html"><strong>10 · Risks</strong><small>The fabrication problem in full</small></a>
+      <a href="09-run-and-verify.html"><strong>09 · Run &amp; verify</strong><small>Running the probes</small></a>
+    </div>
+  </div>
+  <div class="page-nav">
+    <a href="05-harness.html">
+      <span class="nav-direction">← Previous</span>
+      <span class="nav-title">05 · The harness</span>
+    </a>
+    <a href="07-extraction-providers.html" class="next">
+      <span class="nav-direction">Next →</span>
+      <span class="nav-title">07 · Extraction &amp; providers</span>
+    </a>
+  </div>
+
+</main>
+
+<aside class="toc">
+  <div class="toc-label">On this page</div>
+  <ul>
+    <li><a href="#method">Method</a></li>
+    <li><a href="#scopes">Scopes: the docs are stale</a></li>
+    <li><a href="#jobs">Batch jobs</a></li>
+    <li><a href="#separation">Both separation modes work</a></li>
+    <li><a href="#streaming">Streaming: two protocols</a></li>
+    <li><a href="#fabrication">Hear fabricates text from silence</a></li>
+    <li><a href="#text">Lowercase, unpunctuated</a></li>
+    <li><a href="#quota">Quota behaviour</a></li>
+    <li><a href="#probes">The probe scripts</a></li>
+  </ul>
+</aside>
+</div>
+
+<footer class="site">
+  <span>OpenGong Lite — Documentation</span>
+  <span>§ 06 · PyAI API truth</span>
+</footer>
+<script src="assets/script.js"></script>
+
+</body>
+</html>

@@ -1,0 +1,57 @@
+[
+  {
+    "id": "clean-close",
+    "title": "Northwind Logistics — final call, closed won",
+    "audio_path": "/samples/clean-close.wav",
+    "duration_ms": 68453,
+    "segments": 10,
+    "speakers": 2,
+    "separation": "channel",
+    "run_status": "shipped",
+    "extracted_by": "stub-heuristic"
+  },
+  {
+    "id": "heavy-objections",
+    "title": "Halcyon Health — discovery, heavy objections",
+    "audio_path": "/samples/heavy-objections.wav",
+    "duration_ms": 76978,
+    "segments": 10,
+    "speakers": 2,
+    "separation": "channel",
+    "run_status": "shipped",
+    "extracted_by": "stub-heuristic"
+  },
+  {
+    "id": "competitor-named",
+    "title": "Bright Harbour Software — competitive evaluation",
+    "audio_path": "/samples/competitor-named.wav",
+    "duration_ms": 71133,
+    "segments": 10,
+    "speakers": 2,
+    "separation": "channel",
+    "run_status": "shipped",
+    "extracted_by": "stub-heuristic"
+  },
+  {
+    "id": "pricing-pushback",
+    "title": "Cobalt Freight — pricing pushback",
+    "audio_path": "/samples/pricing-pushback.wav",
+    "duration_ms": 67751,
+    "segments": 10,
+    "speakers": 2,
+    "separation": "channel",
+    "run_status": "shipped",
+    "extracted_by": "stub-heuristic"
+  },
+  {
+    "id": "no-decision",
+    "title": "Verity Partners — no decision, went quiet",
+    "audio_path": "/samples/no-decision.wav",
+    "duration_ms": 62987,
+    "segments": 10,
+    "speakers": 2,
+    "separation": "channel",
+    "run_status": "shipped",
+    "extracted_by": "stub-heuristic"
+  }
+]

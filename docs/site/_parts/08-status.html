@@ -1,0 +1,169 @@
+<!--title: 08 · Built vs pending-->
+<!--pill: Reality check-->
+<!--toc: vocabulary|The vocabulary ;; usable|Usable right now ;; matrix|The full matrix ;; blocked|What is blocked, and by what ;; unverified|Working but unverified ;; notbuilt|Deliberately not built ;; shipcheck|Ship checklist state-->
+
+  <div class="page-eyebrow">§ 08 · Built vs pending vs usable</div>
+  <h1 class="page-title">What actually <em>works.</em></h1>
+  <p class="page-lede">No status word is used loosely on this page. "Working" means there is a test or a browser check behind it. "Unverified" means the code exists and has never run against the real thing. "Blocked" means something outside the code is missing.</p>
+
+  <div class="glance">
+    <p><strong>In one line:</strong> the pipeline, the gate, the harness and the UI are built and verified. The step that <em>writes the notes</em> has never run, because it needs a model credential. Everything you see on screen today is real except the notes themselves.</p>
+    <p><strong>130 automated checks pass.</strong> The ship checklist has exactly one red line, and it is deliberately red.</p>
+  </div>
+
+  <h2 id="vocabulary">The vocabulary</h2>
+
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>Label</th><th>Means</th></tr></thead>
+      <tbody>
+        <tr><td><span class="chip teal">Working &amp; verified</span></td><td>Runs, and there is an automated check or a browser-verified interaction behind it.</td></tr>
+        <tr><td><span class="chip">Working, unverified</span></td><td>Runs, but nothing proves it beyond it not crashing.</td></tr>
+        <tr><td><span class="chip mustard">Partial</span></td><td>Works in some conditions and reliably fails in others, knowingly.</td></tr>
+        <tr><td><span class="chip accent">Blocked</span></td><td>Code is written; something outside the code is missing.</td></tr>
+        <tr><td><span class="chip accent">Untested</span></td><td>We do not know. Named as unknown rather than assumed working.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2 id="usable">Usable right now, with no setup at all</h2>
+
+  <p>Clone, <code>npm install</code>, <code>npm run dev</code>. Measured at <strong>11 seconds</strong> from copy to serving, with no key, no signup and no network calls needed for any of the following:</p>
+
+  <div class="grid-2">
+    <div class="card teal">
+      <span class="card-eyebrow">WORKS TODAY</span>
+      <div class="card-title">Five analysed calls</div>
+      <p>Real PyAI transcripts, real speaker separation, real timestamps. Clean close, heavy objections, competitor named, pricing pushback, and one that goes nowhere.</p>
+    </div>
+    <div class="card teal">
+      <span class="card-eyebrow">WORKS TODAY</span>
+      <div class="card-title">Click a claim → hear it</div>
+      <p>Citation chips seek the audio to the exact second and highlight the line. Verified in a real browser: clicking <code>seg_003 · 0:18</code> put <code>audio.currentTime</code> at 20.2s against a segment starting at 18.0s.</p>
+    </div>
+    <div class="card teal">
+      <span class="card-eyebrow">WORKS TODAY</span>
+      <div class="card-title">Test the gate, live</div>
+      <p>A button on every call page feeds fabricated claims through the real gate: 3 dropped, 2 flagged, status → <code>partial</code>, counter increments.</p>
+    </div>
+    <div class="card teal">
+      <span class="card-eyebrow">WORKS TODAY</span>
+      <div class="card-title">See where display ≠ ASR</div>
+      <p>The one transform that changes words — a spoken digit run collapsed to <code>1400</code> — is underlined, and hovering names what was actually said. The Markdown export footnotes every substitution.</p>
+    </div>
+    <div class="card teal">
+      <span class="card-eyebrow">WORKS TODAY</span>
+      <div class="card-title">Export and share</div>
+      <p>Markdown (readable, with quotes and timestamps inline, plus a rejections table), JSON (verbatim), and a read-only share link per call.</p>
+    </div>
+  </div>
+
+  <p>And with a PyAI sandbox key — which mints itself automatically on first use, no signup — you can also <strong>upload your own call</strong> and watch it transcribe, and watch the usage counter move. One caveat on that key: the free mint allowance is budgeted <strong>per network</strong>, not per account, and it can run out — see <a href="10-decisions-risks.html#other-risks">§10, open risks</a>. It has already run out once from this machine. Nothing above this paragraph depends on it.</p>
+
+  <h2 id="matrix">The full matrix</h2>
+
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>Area</th><th>Status</th><th>Evidence, or what is missing</th></tr></thead>
+      <tbody>
+        <tr><td>Transcription — PyAI Hear batch jobs</td><td><span class="chip teal">Working &amp; verified</span></td><td>All 5 samples transcribed for real; ids contiguous and ordered, ms timestamps, rep/prospect mapped</td></tr>
+        <tr><td>Stereo separation (<code>channel</code>)</td><td><span class="chip teal">Working &amp; verified</span></td><td>6/6 segments correct on a two-speaker probe</td></tr>
+        <tr><td>Mono diarization (<code>diarize</code>)</td><td><span class="chip teal">Working &amp; verified</span></td><td>6/6 correct; rep identity is a stated heuristic, shown in the UI</td></tr>
+        <tr><td>Segment-id assignment</td><td><span class="chip teal">Working &amp; verified</span></td><td>Asserted contiguous, ordered, never model-authored</td></tr>
+        <tr><td><strong>The citation gate</strong></td><td><span class="chip teal">Working &amp; verified</span></td><td>23 checks; drops fabricated ids, flags unsupported claims, downgrades status</td></tr>
+        <tr><td>Seven-part harness</td><td><span class="chip teal">Working &amp; verified</span></td><td>39 forced-failure checks including a real budget <code>deadline</code></td></tr>
+        <tr><td>Readability pass</td><td><span class="chip teal">Working &amp; verified</span></td><td>46 checks, incl. property tests that all 50 real segments render saying the same words <em>and</em> numbers as the verbatim text, and that the marked spans re-join to exactly that rendering</td></tr>
+        <tr><td>Transcript viewer + audio sync</td><td><span class="chip teal">Working &amp; verified</span></td><td>Playwright: seek correct, page does not scroll, no console errors</td></tr>
+        <tr><td>Usage counter</td><td><span class="chip teal">Working &amp; verified</span></td><td>Driven by <code>audio_seconds</code> and real tokens; reads 0.0 on a fresh clone by design</td></tr>
+        <tr><td>Export (MD / JSON) + share links</td><td><span class="chip teal">Working &amp; verified</span></td><td>Downloads with correct filenames; MD read cold end-to-end</td></tr>
+        <tr><td>Zero-setup demo path</td><td><span class="chip teal">Working &amp; verified</span></td><td>Clean-copy test: 11s to running, 5 calls loaded, no key minted</td></tr>
+        <tr><td>Sandbox key auto-mint</td><td><span class="chip teal">Working &amp; verified</span></td><td>Unauthenticated mint, cached, expiry-checked</td></tr>
+        <tr><td>Upload / paste-a-link ingest</td><td><span class="chip">Working, unverified</span></td><td>Exercised via the loop's tests and a stub upload; no end-to-end browser upload of a real file yet</td></tr>
+        <tr><td>Uploaded audio playback in production</td><td><span class="chip teal">Working &amp; verified</span></td><td>Was <strong>broken and invisible locally</strong>: a file written to <code>public/</code> after <code>next build</code> 404s under <code>next start</code> while <code>next dev</code> serves it, so an uploaded call would have played silence on the hosted app only. Uploads now live in <code>data/uploads/</code> behind <code>/api/audio</code>. Verified against a production build: 200 full, 206 range, traversal attempts refused</td></tr>
+        <tr><td><strong>Note generation — <code>claude</code></strong></td><td><span class="chip accent">Blocked</span></td><td>Written, typechecked, <strong>never executed</strong>. Needs <code>ANTHROPIC_API_KEY</code></td></tr>
+        <tr><td><strong>Note generation — <code>bedrock</code></strong></td><td><span class="chip accent">Blocked</span></td><td>Written; client surface verified by inspection. Needs AWS creds + Bedrock model access</td></tr>
+        <tr><td>PyAI Speak sample audio</td><td><span class="chip mustard">Partial</span></td><td>Works for single calls; sandbox quota blocks a full 50-turn regeneration. Sample audio is macOS <code>say</code></td></tr>
+        <tr><td>Silence fabrication on our batch path</td><td><span class="chip accent">Untested</span></td><td>Proven on streaming. <code>batch_silence_probe.py</code> written, not run — see <a href="10-decisions-risks.html#silence">§10</a></td></tr>
+        <tr><td>Hear streaming ingest</td><td><span class="chip">Not used</span></td><td>Heavily probed and documented, but batch owns ingest. No product code depends on it</td></tr>
+        <tr><td>Demo rehearsal</td><td><span class="chip accent">Pending</span></td><td>Script written (<code>docs/demo-script.md</code>); the two timed run-throughs need a human</td></tr>
+        <tr><td>Public git repo</td><td><span class="chip accent">Pending</span></td><td>MIT licence present; the repo is not yet initialised or pushed</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2 id="blocked">What is blocked, and by exactly what</h2>
+
+  <div class="card accent">
+    <span class="card-eyebrow">THE ONE BLOCKER THAT MATTERS</span>
+    <div class="card-title">Note generation has never run</div>
+    <p>Both model providers are written and typechecked. Neither has made a single call, because there is no credential on the machine. This is the riskiest unverified integration in the build — the code is <em>believed</em> correct, not <em>known</em> correct.</p>
+    <p><strong>What unblocks it:</strong> either <code>ANTHROPIC_API_KEY</code>, or the three AWS variables plus Anthropic model access enabled in the Bedrock console. Then one command — <code>npm run extract:samples</code> — regenerates all five sets of notes without re-recording audio or re-burning PyAI minutes.</p>
+  </div>
+
+  <p>Until then the notes come from keyword rules, and the app says so in three places: a banner on the home page, a <code>STUB EXTRACTOR</code> badge in the header, and the summary text itself. <code>check:ship</code> refuses to pass.</p>
+
+  <h2 id="unverified">Working but unverified — and why that distinction matters</h2>
+
+  <p>Two things run and appear correct but have no proof behind them, and it would be easy to let them pass as "working":</p>
+
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>Thing</th><th>What is missing</th></tr></thead>
+      <tbody>
+        <tr><td>Browser upload of a real audio file</td><td>The route and loop are tested, but nobody has dragged a real file into the form in a browser and watched it complete. That is demo beat 2, and it needs doing before Friday.</td></tr>
+        <tr><td>Bedrock end-to-end</td><td>Client surface confirmed by inspection; the actual request has never been made. Two specific unknowns: whether <code>messages.parse()</code> behaves identically on Mantle, and whether <code>output_config.effort</code> is accepted there.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2 id="notbuilt">Deliberately not built</h2>
+
+  <p>These are absent by choice. Adding any of them would have come out of the citation loop, which is the product.</p>
+
+  <div class="chips">
+    <span class="chip">CRM sync</span>
+    <span class="chip">deal scoring</span>
+    <span class="chip">forecasting</span>
+    <span class="chip">multi-tenant auth</span>
+    <span class="chip">billing</span>
+    <span class="chip">live on-stage transcription</span>
+    <span class="chip">PyAI Trace</span>
+    <span class="chip">PyAI Recap</span>
+    <span class="chip">coaching dashboards</span>
+    <span class="chip">the stream-per-channel ingest fallback</span>
+  </div>
+
+  <p style="margin-top:18px;">The last one is worth a note: it was fully designed as a contingency in case <code>transcribe:jobs</code> turned out to be denied. It was not, so the design was dropped and recorded in <code>docs/api-truth.md</code> so nobody rebuilds it.</p>
+
+  <h2 id="shipcheck">Ship checklist state</h2>
+
+  <p><code>npm run check:ship</code> automates the pass/fail gates. Current output, honestly:</p>
+
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>Check</th><th>State</th></tr></thead>
+      <tbody>
+        <tr><td>MIT licence present</td><td><span class="chip teal">pass</span></td></tr>
+        <tr><td>README with real screenshot, setup commands, PyAI link, stated limitations</td><td><span class="chip teal">pass</span></td></tr>
+        <tr><td>Five sample calls with committed audio, transcripts and notes</td><td><span class="chip teal">pass</span></td></tr>
+        <tr><td><strong>Audio and transcript agree</strong> (citations point at the right moment)</td><td><span class="chip teal">pass</span></td></tr>
+        <tr><td><strong>Notes produced by a real model, not the keyword stub</strong></td><td><span class="chip accent">FAIL — by design</span></td></tr>
+        <tr><td>Sandbox key self-mints, no manual step</td><td><span class="chip teal">pass</span></td></tr>
+        <tr><td>No credentials would be committed; minted key is gitignored</td><td><span class="chip teal">pass</span></td></tr>
+        <tr><td>All seven harness parts present</td><td><span class="chip teal">pass</span></td></tr>
+        <tr><td>No vendor SDK imported outside the providers directory</td><td><span class="chip teal">pass</span></td></tr>
+        <tr><td><code>.env.example</code> documents every option</td><td><span class="chip teal">pass</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>Three things the script explicitly says it does <em>not</em> cover, so they are not mistaken for covered: running the test suites, timing the setup on a machine nobody has touched, and rehearsing the demo twice on the real path.</p>
+
+  <div class="related">
+    <div class="related-label">Related sections</div>
+    <div class="related-grid">
+      <a href="09-run-and-verify.html"><strong>09 · Run &amp; verify</strong><small>Reproduce all of this</small></a>
+      <a href="07-extraction-providers.html"><strong>07 · Providers</strong><small>Unblock note generation</small></a>
+      <a href="10-decisions-risks.html"><strong>10 · Risks</strong><small>The untested unknown</small></a>
+    </div>
+  </div>

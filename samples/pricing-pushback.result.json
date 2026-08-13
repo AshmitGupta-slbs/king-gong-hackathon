@@ -1,0 +1,117 @@
+{
+  "summary": "[Heuristic stub — no model was involved] 10-segment call. 1 concern(s) detected by keyword, 1 action(s), 3 flagged moment(s). Intent classified as \"high interest\". Replace by running extraction against a real model before showing this to anyone.",
+  "intent": {
+    "label": "high interest",
+    "segment_ids": [
+      "seg_009"
+    ],
+    "verdict": "verified",
+    "support": 0,
+    "evidence": [
+      {
+        "segment_id": "seg_009",
+        "speaker": "prospect",
+        "start_ms": 60560,
+        "end_ms": 67440,
+        "text": "do that if the first year comes in under five oh oh oh i can approve it myself and that changes the whole conversation"
+      }
+    ]
+  },
+  "objections": [
+    {
+      "claim": "Prospect raised a concern: The product is not the issue the number is one four oh oh a seat is…",
+      "segment_ids": [
+        "seg_001"
+      ],
+      "verdict": "verified",
+      "support": 0.6666666666666666,
+      "evidence": [
+        {
+          "segment_id": "seg_001",
+          "speaker": "prospect",
+          "start_ms": 4720,
+          "end_ms": 12400,
+          "text": "the product is not the issue the number is one four oh oh a seat is more than we spend on our entire sales tooling stack right now"
+        }
+      ]
+    }
+  ],
+  "next_steps": [
+    {
+      "claim": "Agreed action: Then let me do two things a ten seat starting tire so the first year is…",
+      "segment_ids": [
+        "seg_008"
+      ],
+      "verdict": "verified",
+      "support": 0.8181818181818182,
+      "evidence": [
+        {
+          "segment_id": "seg_008",
+          "speaker": "rep",
+          "start_ms": 51360,
+          "end_ms": 60560,
+          "text": "then let me do two things a ten seat starting tire so the first year is under the committee threshold and a written comparison of what it retires"
+        }
+      ]
+    }
+  ],
+  "follow_up_email": {
+    "subject": "Following up on our call",
+    "body": "Thanks for the time today. Picking up on what you raised, I will follow up on the points we agreed and come back to you with the detail.",
+    "segment_ids": [
+      "seg_009"
+    ],
+    "verdict": "verified",
+    "support": 0,
+    "evidence": [
+      {
+        "segment_id": "seg_009",
+        "speaker": "prospect",
+        "start_ms": 60560,
+        "end_ms": 67440,
+        "text": "do that if the first year comes in under five oh oh oh i can approve it myself and that changes the whole conversation"
+      }
+    ]
+  },
+  "key_moments": [
+    {
+      "type": "pricing",
+      "segment_id": "seg_001",
+      "note": "The product is not the issue the number is one…",
+      "evidence": {
+        "segment_id": "seg_001",
+        "speaker": "prospect",
+        "start_ms": 4720,
+        "end_ms": 12400,
+        "text": "the product is not the issue the number is one four oh oh a seat is more than we spend on our entire sales tooling stack right now"
+      }
+    },
+    {
+      "type": "pricing",
+      "segment_id": "seg_003",
+      "note": "Twenty five to start at that volume it is a…",
+      "evidence": {
+        "segment_id": "seg_003",
+        "speaker": "prospect",
+        "start_ms": 14720,
+        "end_ms": 27840,
+        "text": "twenty five to start at that volume it is a six figure line item and it goes to the finance committee not just to me and our cfo has been very clear this year that anything new has to display something existing not add to it"
+      }
+    },
+    {
+      "type": "next_step",
+      "segment_id": "seg_008",
+      "note": "Then let me do two things a ten seat starting…",
+      "evidence": {
+        "segment_id": "seg_008",
+        "speaker": "rep",
+        "start_ms": 51360,
+        "end_ms": 60560,
+        "text": "then let me do two things a ten seat starting tire so the first year is under the committee threshold and a written comparison of what it retires"
+      }
+    }
+  ],
+  "run_status": "shipped",
+  "rejections": [],
+  "extracted_by": "stub-heuristic"
+}

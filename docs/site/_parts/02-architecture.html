@@ -1,0 +1,148 @@
+<!--title: 02 · Architecture-->
+<!--pill: Architecture-->
+<!--toc: shape|The shape of it ;; request-path|The request path ;; file-map|The file map ;; stack-choices|Stack choices that mattered ;; storage|Storage-->
+
+  <div class="page-eyebrow">§ 02 · Architecture</div>
+  <h1 class="page-title">How it is <em>put together.</em></h1>
+  <p class="page-lede">One Next.js application, one SQLite file, no other services. Audio goes in at one end; verified, cited notes come out at the other. Everything between is four steps and a gate.</p>
+
+  <div class="glance">
+    <p><strong>In one line:</strong> audio → PyAI Hear (transcript with speakers) → Claude (draft notes citing segment ids) → the citation gate (deletes or flags anything unprovable) → notes with receipts.</p>
+    <p>The only external service on the request path is PyAI. There is no database server, no queue, no worker, and — deliberately — <strong>no native dependency anywhere</strong>. A clone runs with <code>npm install &amp;&amp; npm run dev</code> and nothing else.</p>
+  </div>
+
+  <h2 id="shape">The shape of it</h2>
+
+  <div class="diagram-frame">
+    <div class="mermaid">
+flowchart LR
+  Audio["🎙️ Call recording<br/>upload or https URL"]:::input
+  Hear["PyAI Hear<br/>POST /v1/transcription/jobs"]:::ext
+  Segs["Segments<br/>seg_000 … seg_009<br/><i>speaker · start_ms · end_ms · text</i>"]:::data
+  Model["Claude<br/>schema-forced output"]:::ext
+  Draft["ExtractionDraft<br/><i>untrusted</i>"]:::data
+  Gate{{"CITATION GATE<br/>tier 1: does it resolve?<br/>tier 2: does it support?"}}:::gate
+  Result["ExtractionResult<br/><i>+ run_status + rejections</i>"]:::data
+  UI["Transcript · notes · receipts<br/>Markdown / JSON / share link"]:::out
+  DB[("SQLite<br/>node:sqlite")]:::store
+
+  Audio --> Hear --> Segs --> Model --> Draft --> Gate
+  Gate -->|verified / flagged| Result --> UI
+  Gate -.->|dropped, with reason| Rej["gate_rejections<br/><i>shown in the UI</i>"]:::rej
+  Segs --> DB
+  Result --> DB
+  Rej --> DB
+
+  classDef input fill:#fdf6e9,stroke:#a16207,color:#1c1917
+  classDef ext fill:#e0f2f1,stroke:#0f766e,color:#1c1917
+  classDef data fill:#fffaf2,stroke:#78716c,color:#1c1917
+  classDef gate fill:#fbe9e0,stroke:#c2410c,color:#1c1917,font-weight:bold
+  classDef out fill:#ece6db,stroke:#57534e,color:#1c1917
+  classDef store fill:#f5f1ea,stroke:#57534e,color:#1c1917
+  classDef rej fill:#fde8e8,stroke:#b91c1c,color:#1c1917
+    </div>
+    <div class="diagram-caption">Fig. 2.1 — The pipeline. Note that rejected claims are persisted and surfaced, not discarded.</div>
+  </div>
+
+  <p>Two things about this diagram are load-bearing.</p>
+
+  <p>First, <strong>the model never talks to the user</strong>. Its output is a draft that goes to the gate, and only the gate's output reaches a screen. That is why §03 makes such a point of <code>ExtractionDraft</code> and <code>ExtractionResult</code> being different types.</p>
+
+  <p>Second, <strong>rejections are a product surface</strong>, not a log line. They go into the database, into the UI, and into the Markdown export.</p>
+
+  <h2 id="request-path">The request path</h2>
+
+  <p>One function orchestrates everything: <code>processCall()</code> in <code>lib/harness/loop.ts</code>. It is the only place the seven harness parts meet, and it always ends in exactly one of four statuses.</p>
+
+  <ol class="steps">
+    <li data-step="1">
+      <span class="step-title">Open a run record — <em>before</em> any work</span>
+      <p><code>openRun()</code> writes a row immediately. If the process is killed two lines later, that row still exists and gets reconciled to <code>failed</code> on next boot. This ordering is the whole failure invariant.</p>
+    </li>
+    <li data-step="2">
+      <span class="step-title">Transcribe via the registry</span>
+      <p><code>getSTT()</code> returns whichever provider is configured — real PyAI, or the <code>fixture</code> provider that replays committed sample transcripts with no network. Wrapped in a bounded retry that treats 4xx as fatal and 429/5xx as retryable.</p>
+    </li>
+    <li data-step="3">
+      <span class="step-title">Persist the call and its segments</span>
+      <p>Segment ids are assigned here, once, and never regenerated. Usage is recorded from <code>result.audio_seconds</code>.</p>
+    </li>
+    <li data-step="4">
+      <span class="step-title">Extract, then gate — with the gate's complaint feeding the retry</span>
+      <p>The budget governor runs <code>preflight()</code> <em>before</em> the model call. The model returns a draft; the gate verifies it. If the gate had to delete claims for citing segments that do not exist, that exact complaint is passed into the next attempt's prompt. This is what makes the retry <em>aimed</em> rather than hopeful.</p>
+    </li>
+    <li data-step="5">
+      <span class="step-title">Close the run with one terminal status</span>
+      <p><code>shipped</code>, <code>partial</code>, <code>failed</code>, or <code>deadline</code> — written in a <code>finally</code> block, so it happens whether the body succeeded or threw.</p>
+    </li>
+  </ol>
+
+  <h2 id="file-map">The file map</h2>
+
+  <p>43 source files, about 5,900 lines. The interesting quarter of it:</p>
+
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>Path</th><th>Role</th></tr></thead>
+      <tbody>
+        <tr><td><code>lib/types.ts</code></td><td><strong>The data contract.</strong> Zod schemas with TypeScript types inferred from them, so the validator and the type cannot drift. Nothing else defines a segment or a claim.</td></tr>
+        <tr><td><code>lib/harness/gate.ts</code></td><td>The citation gate. The product.</td></tr>
+        <tr><td><code>lib/harness/loop.ts</code></td><td><code>processCall()</code> — the named loop, and the only place all seven parts meet.</td></tr>
+        <tr><td><code>lib/harness/{retry,budget,parallel}.ts</code></td><td>Aimed retry · budget governor · per-call write lock.</td></tr>
+        <tr><td><code>lib/registry/index.ts</code></td><td>The capability registry. <strong>The one file you edit to swap a provider.</strong></td></tr>
+        <tr><td><code>lib/registry/providers/</code></td><td>The only directory allowed to import a vendor SDK. Eight providers across STT, extraction and TTS.</td></tr>
+        <tr><td><code>lib/db.ts</code></td><td>Six tables via <code>node:sqlite</code>. Calls, segments, extractions, runs, gate rejections, usage events.</td></tr>
+        <tr><td><code>lib/readability.ts</code></td><td>Casing-only transcript display pass, with a word-preservation guard.</td></tr>
+        <tr><td><code>components/CallWorkspace.tsx</code></td><td>The workspace: player, transcript, notes, citation chips. One client component because they share audio state.</td></tr>
+        <tr><td><code>app/api/</code></td><td>Six routes: ingest, fetch, export, usage, sample-load, and the live gate demo.</td></tr>
+        <tr><td><code>scripts/</code></td><td>Sample generation, three test suites, the ship checklist, and six Python probes.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>One rule is enforced automatically: <code>npm run check:ship</code> fails if any file outside <code>lib/registry/providers/</code> imports <code>@anthropic-ai/*</code>. The registry stops being useful the moment something bypasses it, so that is a test rather than a convention.</p>
+
+  <h2 id="stack-choices">Stack choices that mattered</h2>
+
+  <div class="grid-2">
+    <div class="card accent">
+      <span class="card-eyebrow">STORAGE</span>
+      <div class="card-title">node:sqlite, not better-sqlite3</div>
+      <p>Node ships SQLite built in. That means <strong>no node-gyp, no compiler, no prebuilt-binary roulette</strong> on a stranger's laptop — a failed native build is the classic way a five-minute setup becomes forty.</p>
+      <span class="meta">cost: null-prototype rows, see below</span>
+    </div>
+    <div class="card teal">
+      <span class="card-eyebrow">FRAMEWORK</span>
+      <div class="card-title">Next.js 16, one process</div>
+      <p>API routes and UI in one app, so <code>npm run dev</code> is the entire runtime. Server components read SQLite directly; the workspace is the one client component.</p>
+      <span class="meta">React 19 · Tailwind 4 · Turbopack</span>
+    </div>
+  </div>
+
+  <p>Choosing the built-in SQLite had a real cost, found by running it rather than by reading about it: <code>node:sqlite</code> returns rows with a <strong>null prototype</strong>, and React Server Components refuse to serialize those to client components. Every call page returned a 500 until <code>lib/db.ts</code> was changed to rebuild plain objects explicitly instead of casting the driver row.</p>
+
+  <p>That turned out to be better practice anyway — a schema change now surfaces as a TypeScript error in one file, rather than as <code>undefined</code> in the UI.</p>
+
+  <h2 id="storage">Storage</h2>
+
+  <p>Six tables, one file at <code>data/opengong.db</code> (gitignored). The two that are less obvious:</p>
+
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>Table</th><th>Why it exists</th></tr></thead>
+      <tbody>
+        <tr><td><code>runs</code></td><td>The failure invariant. A row is written before work starts and updated on exit, so a crashed process leaves a reconcilable record rather than a mystery.</td></tr>
+        <tr><td><code>gate_rejections</code></td><td>Every claim the gate dropped or flagged, with a reason. Read by the UI and the export — a silently discarded claim is indistinguishable from one never made.</td></tr>
+        <tr><td><code>usage_events</code></td><td>Audio seconds and model tokens, from real work only. Replaying a committed sample records nothing.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="related">
+    <div class="related-label">Related sections</div>
+    <div class="related-grid">
+      <a href="03-data-contract.html"><strong>03 · Data contract</strong><small>The types this all moves</small></a>
+      <a href="04-citation-gate.html"><strong>04 · The citation gate</strong><small>The box in the middle</small></a>
+      <a href="05-harness.html"><strong>05 · The harness</strong><small>The seven parts, proven</small></a>
+    </div>
+  </div>

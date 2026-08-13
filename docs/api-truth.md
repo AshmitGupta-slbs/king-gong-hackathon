@@ -1,0 +1,432 @@
+# PyAI API truth — verified H0, Thu 13 Aug 2026 ~11:50 IST
+
+Everything below was **probed against the live API**, not read from docs. Where the docs and the
+API disagree, the API wins and the disagreement is recorded. Probe scripts: `scripts/probe/`.
+
+## Sandbox key: mints with no auth, and has more scopes than documented
+
+`POST https://api.pyai.com/v1/sandbox/keys` with `{"label":"..."}` → **201**, no auth header needed.
+
+```
+scopes: hear:transcribe, hear:stream, transcribe:jobs, voice:synthesize,
+        omni:session, nova:run, amd:detect, amd:configure, amd:read, cast:render
+base_url: https://api.pyai.com/v1     environment: test     expires: +7 days
+```
+
+- **`transcribe:jobs` IS granted.** `authentication.md` lists only four scopes and omits it, and
+  `sandbox/mint-a-sandbox-key` advertises a shorter list. Both are stale. This was the single
+  decision the architecture hung on, and it went our way.
+- **No `recap:*` and no `trace:*`.** Recap and Trace are confirmed unavailable to us — Recap
+  additionally requires the "Recap add-on enabled" per its own docs. We do extraction with Claude.
+- `nova:run` and `cast:render` are granted but **have no reachable endpoint** (404 on
+  `/cast/render`, `/audio/cast`, `/cast`, `/nova/run`). Scopes for unshipped products. Ignore.
+- Key expires **Thu 20 Aug**, comfortably past Friday's demo. Re-mint is one unauthenticated call,
+  so first-run auto-mint is safe.
+
+`GET /v1/models` → the real product surface: `pyai-hear` (transcription, diarization, batch,
+stream), `pyai-voice` (speech, clone, design), `pyai-omni-realtime`, `pyai-amd`.
+**The Speak model id is `pyai-voice`, not `pyai-speak`.**
+
+## Hear batch jobs — the primary path, confirmed working
+
+`POST /v1/transcription/jobs` (multipart, `audio` part) → **202** `{job_id, status:"queued"}`.
+`GET /v1/transcription/jobs/{id}` → `completed` after **one 1.5s poll** for 30s of audio. Fast.
+
+Terminal `result` keys: `text`, `segments`, `words`, `speakers`, `audio_seconds`.
+
+```json
+{ "id": 0, "start": 0.0, "end": 6.16, "speaker": "speaker_1", "channel": 0,
+  "text": "hi sarah thanks for making the time today ..." }
+```
+
+Four shape facts that make the ingest mapper real work, not a passthrough:
+
+| API gives | Our contract wants | Mapping |
+|---|---|---|
+| `id` **integer** 0-based | `seg_000` **string** | zero-pad index, assigned once at ingest |
+| `start`/`end` **float seconds** | `start_ms`/`end_ms` **int ms** | `round(x * 1000)` |
+| `speaker: "speaker_1"` | `rep` \| `prospect` | via `channel` (stereo) or first-speaker heuristic (mono) |
+| `channel` present only when `channel:true` | — | absent on diarized mono |
+
+- **`words[]` carries per-word `start`/`end`/`speaker`.** Unasked-for bonus — enables word-level
+  highlight-as-it-plays in the transcript viewer for near-zero extra work.
+- **`x-pyai-units` is NOT returned by the jobs endpoints** (absent on both POST and GET). It *is*
+  returned by flat `/audio/transcriptions` (`x-pyai-units: 1`). So the usage counter must be driven
+  by **`result.audio_seconds`**, with the header read opportunistically where present. Anything
+  built purely on the header would have silently displayed zero.
+- `formats` is null unless `output_formats` asks for `srt`/`vtt`.
+
+### Both speaker-separation modes work
+
+| Mode | Input | Result |
+|---|---|---|
+| `channel: true` | stereo, one party per channel | 6/6 segments correct, `speakers: 2`, `channel` 0/1 populated. Exact and model-free. |
+| `diarize: true` | mono mixdown | 6/6 segments correct, `speakers: 2`, no `channel` field. Sortformer is good. |
+
+So: **stereo samples use `channel:true`** (deterministic rep/prospect from the channel int) and
+**real mono uploads use `diarize:true`**. The "analyze a call from any dialer" claim holds up.
+
+The **fallback stream-per-channel design is not needed** and is dropped from scope. Recorded here
+so nobody rebuilds it: `hear:stream` finals carry `utterance_id`/`t_ms`/`audio_ms`, which would have
+been segment-shaped, if `transcribe:jobs` had ever been denied.
+
+## Hear streaming (`wss://…/v1/audio/transcriptions/stream`) — probed Thu 13 Aug, ~13:00 IST
+
+Probe: `scripts/probe/hear_stream_test.py` (transcript → macOS `say` → real-time PCM16 stream →
+scored against the source text) and `scripts/probe/eos_probe.py`. Model self-reports as
+**`hear-realtime-1`**. Not on the critical path — batch jobs still own ingest — but the published
+doc snippet is wrong in ways that cost hours, so it is written down.
+
+### ⚠ There are TWO stream protocols, and the default is the legacy one
+
+**This corrects an earlier version of this section.** The connect URL takes a `protocol` query
+parameter. Omitting it — which the published quickstart snippet does — lands you on the **legacy
+`fusion-v0`** route. Passing `protocol=pyai-hear-v1` gives the documented one. Verified by running
+the same audio down both routes (`hear_stream_test.py --protocol pyai-hear-v1`).
+
+| | default / `fusion-v0` (legacy) | `protocol=pyai-hear-v1` (documented) |
+|---|---|---|
+| frame types | `session.created`, `transcript.partial`, `turn.end`, `usage.delta`, `transcript.final` | `partial`, `partial_stable`, `speech_final`, `final`, `usage`, `config_ack` |
+| flush the tail | **only trailing silence** (~1.8s) — every control frame rejected | `{"type":"commit"}` → `endpoint_reason: "client_commit"`, works with **zero** trailing silence |
+| endpointing | fixed; turns below ~1.8s merge, hard cap ~30s | `endpointing_ms` (50–5000) at connect **or** mid-session via `{"type":"config","endpointing_ms":N}` |
+| turn-taking signal | `turn.end` with `confidence` / `backchannel_prob` | none seen; `partial_stable` instead |
+
+So the quickstart snippet's `if msg["type"] == "partial"` **does** fire — but only if you add
+`protocol=pyai-hear-v1`. As printed, against the default route, it silently matches nothing. The
+docs themselves disagree on this: `api-reference/hear/stream-transcription-websocket` says the
+default is `fusion-v0`, while `guides/streaming-stt` claims *"omitting the parameter uses the same
+`pyai-hear-v1` default"* and that no legacy protocol exists. The API says otherwise; the API wins.
+
+**On `pyai-hear-v1`, `final` repeats `speech_final` verbatim for the same utterance** (same
+`utterance_id`, same `text`, same `t_ms`). Handle one and ignore the other or every line is
+duplicated — `hear_stream_test.py` dedupes by comparing against the previous final.
+
+The findings below were all measured on the **legacy** route and are marked accordingly. They are
+kept because that is what you get if you follow the published snippet literally, which is the
+mistake worth documenting.
+
+Legacy-route frame types: `session.created`, `transcript.partial`, `turn.end`, `usage.delta`,
+`transcript.final`. Errors come back as `{"type":"error","error":{"code":…}}` on both routes.
+
+| Finding (legacy route unless noted) | Consequence |
+|---|---|
+| **Only trailing silence flushes the last utterance** (~1.8s). `eos`, `flush`, `input_audio.commit`, `transcript.finalize`, `session.close` all → `unknown_message_type`; `{"type":"end"}` is accepted but flushes nothing; closing the socket drops the tail. **Fixed on `pyai-hear-v1` by `{"type":"commit"}`.** | Pad silence before hanging up, or move to `pyai-hear-v1`. |
+| `partial.text` is a **rolling ~16-word window**, not the utterance so far — leading words fall off. | Accumulating partials corrupts the transcript. Render `stable_text` + `active_text`; treat `transcript.final` as the record. |
+| **`utterance_id` is not a join key** — the partials, the `turn.end`, and the `transcript.final` for one spoken turn each carry a *different* id. | Corrects the note above: stream finals are segment-*shaped* but not id-joinable. Pair by arrival order. |
+| Utterances force-finalize at **~30s**; inter-turn gaps below the endpoint threshold do **not** split them (350ms merged five turns into one). **Tunable on `pyai-hear-v1` via `endpointing_ms`.** | On legacy, turn-level segments need ≥~1.8s of silence between turns. |
+| `turn.end` carries `endpoint_reason` (`silence` / `peak_te_early`), `confidence`, `backchannel_prob`, and lands **~370ms before** the text. | This is the barge-in / turn-taking signal, and it is free. Undocumented. |
+
+`t_ms` is the server's audio-stream clock; on a final it is when text was produced, and
+`audio_ms` is the utterance's **duration**, not its end offset. Honest latency is
+`final.t_ms − turn.end.t_ms`: **369ms mean** (min 361, max 379) over six turns. First partial
+lands at **~490ms** on both routes from here — the docs advertise 185–205ms "in-region", and we
+are not in-region, so treat that gap as network, not model.
+
+`usage.delta` gives `active_audio_seconds` and `billed_micros` live, and bills **active** audio
+only — 46.4s streamed (padding included) billed as 29.8s = 1490 micros ($0.0015). So the stream
+path does carry usage in-band, unlike the jobs endpoints.
+
+**`numerals=true` works here and applies at finalization, not on partials**: partials read
+"one four oh oh", the final reads "1400" (and "12", "15"). This is the counterpart to the jobs-
+endpoint numerals problem noted below — on the stream, judge numerals from finals only.
+
+Quality on `say`-synthesized audio: **8.4% WER** after case/punctuation normalization. Errors are
+the predictable ones — "gong" → "gang"/"gong in", "crm" → "erm", "Q4" → "q 4". Proper nouns and
+competitor names are where it slips, which is exactly what a tracker feature depends on.
+
+### Live mic works, and exposed the one finding with product consequences
+
+`hear_stream_test.py --mic` streams the default input device (`sounddevice`, whose macOS wheel
+**bundles PortAudio — no Homebrew needed**, which matters on this machine). Verified end to end by
+acoustic loopback: `afplay` a `say` clip through the speakers, capture it on the built-in mic, and
+Hear returned `the pricing came in around 1400 a seat which is hard to justify` — clean, through
+the air, at 650–750ms endpoint→text.
+
+**⚠ Hear fabricates fluent text from silence and room ambience.** Repeatedly, with nobody
+speaking, it emitted confident finals (`confidence` 0.99+, `endpoint_reason` `silence`) containing
+sentences that were never said. Measured input RMS: real speech **0.219**, the ambience windows
+that produced fabricated text **0.035**.
+
+This is not cosmetic. Our citation gate treats `segment.text` as the source of truth for quoted
+evidence, so dead air on a call — hold music, mute, a pause while someone reads — can manufacture
+a quotable claim that no human uttered, and it will pass the gate because the gate only checks
+that the quote matches the transcript. **Any Hear-streaming ingest needs an input-level gate
+before segments are trusted.** `--silence-floor` (default 0.08) implements the check for the
+probe: it flags every final whose audio window never reached speech level.
+
+### Batch jobs on silence: clean on exact zeroes, unresolved on room tone
+
+`scripts/probe/batch_silence_probe.py` builds `speech | gap | speech` and checks whether any
+returned segment lands inside the gap.
+
+- **25s of digital silence (exact zeroes): CLEAN.** `speakers: 2`, exactly 2 segments, both real
+  speech, nothing in the gap. `audio_seconds` still billed the full 30.8s.
+- **The RMS-0.035 room-tone version — the one that actually fooled the stream — is unresolved.**
+  Every attempt returned `504 upstream request timeout` or `500 Unexpected server error`, and a
+  digital-silence control run failed the same way minutes after succeeding, so this is upstream
+  instability rather than a noise-specific defect. `GET /v1/models` stayed 200 and streaming kept
+  working throughout, so the flakiness is specific to `POST /v1/transcription/jobs` **uploads**.
+  Re-run `--noise 0.035` when the endpoint is healthy; **do not treat batch as proven safe yet.**
+
+`audio_url` submission worked reliably while multipart upload was 500ing, which is a useful
+fallback to know about: `pyai-jobs.ts` uses multipart.
+
+## Operational findings that can kill a demo
+
+**Correction to "Sandbox quota: Speak is rate-limited hard, Hear is not" below: Hear *can* exhaust
+the cap, and when it does it blocks Hear.** That section's conclusion — *"Transcription … was never
+at risk"* — held for a cap triggered by Speak. It is not true in general. Streaming and batch probe
+runs exhausted the cap on their own, and the result blocked everything on the key:
+
+```
+429  {"error":{"code":"daily_cap_exceeded",
+      "message":"Daily usage cap reached for this API key. Resets at 00:00 UTC.",
+      "type":"requests_too_many"}}
+```
+
+`GET /v1/models` returned it too, and the streaming WebSocket upgrade failed with a bare `HTTP 429`
+at handshake — no JSON body, so a client that only parses error payloads learns nothing.
+
+**⚠ And the re-mint escape hatch runs out.** Minting *once* worked (fresh key, fresh allowance,
+identical scopes). The next attempt, minutes later, did not:
+
+```
+429  {"type":"…/problems/sandbox_limit_reached","title":"Too Many Requests",
+      "detail":"The sandbox-key limit for this network has been reached.
+                Create a full account at https://console.pyai.com."}
+```
+
+So the limit is **per network, not per key** — auto-minting is not an unlimited recovery path, and
+the advice below ("a blocked build is recoverable") only holds until the network budget is spent.
+On this machine it is now spent. Current state: one working key, cached in `.pyai-key.json`; the
+previous key capped until 00:00 UTC; no new keys available from this network.
+
+**What this means for demo day, concretely.** If the key on the demo machine caps out mid-demo,
+you cannot mint your way out from the venue's network — and every laptop on that network shares the
+budget, so a room full of teammates minting keys is a real failure mode. Two mitigations, both
+cheap: run the demo off the **committed sample data** (which needs no API calls at all — that is
+already the design), and get a real account key from `console.pyai.com` as the live-path backup
+rather than relying on sandbox minting.
+
+The consequence worth acting on: **`lib/pyai.ts` `getPyaiKey()` re-mints only when `expires_at`
+passes.** A `daily_cap_exceeded` 429 leaves a live, unexpired, useless cached key and surfaces as a
+hard failure. A fresh clone is fine because it mints; **the demo machine, with a cached key, is
+exactly the case that breaks.** Teaching the resolver to re-mint on `daily_cap_exceeded` is a few
+lines and removes a whole class of demo-day failure.
+
+## MP3 and other compressed formats
+
+**The jobs endpoint decodes them server-side — upload the file as-is, no local conversion.**
+Verified with a real MP3: uploaded byte-for-byte with `Content-Type: audio/mpeg`, `audio_seconds`
+came back exact (32.731 vs the file's 32.703), and the transcript was character-identical to a
+locally decoded 16 kHz WAV of the same audio. `mic_diarize_test.py --file x.mp3` does this.
+Known-good extensions are mapped in that script: wav, mp3, m4a, mp4, flac, ogg, aac, aiff.
+
+**Streaming is the exception.** The WebSocket takes raw PCM16 only, so an MP3 has to be decoded
+locally first. `hear_stream_test.py --audio x.mp3` now does that via `afconvert`, which ships with
+macOS and needs no ffmpeg (there is none on this machine).
+
+**macOS can decode MP3 but not encode it.** `afconvert -f MPG3 -d .mp3` fails with
+`ExtAudioFileSetProperty ('cfmt') failed ('fmt?')` on every input and sample rate tried, including
+a 44.1 kHz mono intermediate. `MPG3` is listed by `afconvert -hf` but is decode-only in practice.
+So you cannot generate a test MP3 on this machine — find a real one. (There are two under
+`/System/Library/PrivateFrameworks/PersonalAudio.framework/…/Enrollment_1.mp3`.)
+
+## ⚠ The `diarize` step 500s intermittently, in multi-minute windows
+
+`{"status":"failed","error":"diarize: HTTP 500: Internal Server Error"}` — the job is accepted
+(202), transcription succeeds, and only the diarization stage fails.
+
+Ruled out, each by direct experiment:
+
+| Suspected cause | Result |
+|---|---|
+| MP3 vs WAV | Both fail in a bad window; both succeed in a good one |
+| `numerals: true` alongside `diarize` | `diarize` alone fails too |
+| Multipart field order (audio part before vs after the flags) | **No effect** — interleaved A/B/A/B, identical failures |
+| Our multipart encoder | Same body with `diarize` omitted completes, returning exact `audio_seconds` and byte-identical text |
+
+So it is time, not payload. Windows observed lasting several minutes, with the identical bytes
+succeeding immediately before and after. Do not debug your audio when you see this.
+
+Beware the trap this sets: because the windows are minutes long, an A/B test run sequentially will
+show whichever variant you happened to try during a good window as "the fix". Two of those false
+conclusions were reached and discarded here before interleaving settled it. Interleave, or wait.
+
+`mic_diarize_test.py` retries 4 times with 5/15/30s backoff, which spans ~50s and is **not** always
+enough. `lib/harness/retry.ts` caps at 2 attempts, so a demo-time ingest can lose to this — the
+mitigation that matters is that the five committed samples need no API call at all.
+
+**`POST /v1/transcription/jobs` was intermittently 500/504 on multipart uploads** for ~20 minutes,
+recovering on its own; `audio_url` submissions kept working throughout, as did streaming and
+`GET /v1/models`. So the blast radius was uploads specifically. `retryAimed` in
+`lib/harness/loop.ts` plus `PyaiError.retryable` (5xx → retryable) already cover it — worth
+confirming the demo path actually exercises that retry rather than surfacing the error, since this
+is the ingest path.
+
+## ⚠ `numerals: true` does NOT work on the jobs endpoint — and it is visible in the demo
+
+Tested two ways, two audio sources, both with `numerals` explicitly on:
+
+| Submission | Audio said | Came back as |
+|---|---|---|
+| multipart upload, `numerals="true"` | "fourteen hundred" | `one four oh oh` |
+| `audio_url` JSON, `"numerals": true` (real boolean), PyAI's own `original-interview.wav` | "ten thirty" | `ten thirty` |
+
+So it is not a form-encoding problem — the flag is accepted and ignored. The streaming path renders
+the same phrase as **`1400`**, and the flat sync `/v1/audio/transcriptions` also renders `1400` —
+but that endpoint has **no diarization**, so we cannot simply switch to it.
+
+All five committed samples are affected. Zero digits across the whole set; 30 spelled-out numbers:
+
+| sample | spelled-out | digits |
+|---|---|---|
+| `pricing-pushback` | 13 | 0 |
+| `clean-close` | 8 | 0 |
+| `heavy-objections` | 6 | 0 |
+| `competitor-named` | 2 | 0 |
+| `no-decision` | 1 | 0 |
+
+The damage is concentrated exactly where the product's pitch lives:
+
+```
+pricing-pushback: "the number is one four oh oh a seat is more than we spend on our entire…"
+pricing-pushback: "do that if the first year comes in under five oh oh oh i can approve it…"
+clean-close:      "we landed on forty seats across the two sales pods"
+```
+
+The README sells against Gong at "$1,400/seat" and the flagship sample is *about* that number.
+A judge reading "one four oh oh" reads a broken product — this is Product-pull damage (30%), not a
+cosmetic nit.
+
+**Fixed, in `lib/readability.ts`.** The presentation layer now runs **two passes with two separate
+guards**, rather than one guard loosened to cover both:
+
+| Pass | Permitted change | Guard |
+|---|---|---|
+| `readable()` | letter case, one terminal full stop | `sameWords()` — same words, same order, ignoring case and punctuation. **Unchanged.** |
+| `spokenDigitsToNumber()` | a run of spoken digits → the number it spells | `sameSpokenNumbers()` — same words *and* the same numbers, whichever way written |
+
+Keeping them separate matters: `sameWords()` is the thing that lets us claim the display layer
+cannot alter evidence, and it is asserted over all 50 committed segments. Relaxing it to accept
+`"one four oh oh" ≡ "1400"` would have surrendered that proof for *every* transform in order to buy
+digits. Instead the digit pass proves a different, weaker, honestly-labelled property, and only
+`readableFor()` — the boundary the UI and Markdown export both go through — composes the two.
+
+The digit pass is deliberately conservative: a run must be **four or more** words long **and**
+contain at least one unambiguous digit word (`zero`/`one`…`nine`). Both bars come from measured
+false positives — `"oh oh oh that is a problem"` → `"000 that is a problem"` (`oh` is an
+interjection far more often than a zero) and `"we counted one two three items"` → `"123 items"`.
+Where the two error directions trade off, prefer the false negative: an unconverted "one four oh oh"
+is ugly and honest; a wrong "000" is neither, and it would be invisible because the gate reads
+`text`, not `display_text`. Ordinary English is untouched — "forty seats" and "the two sales pods"
+stay words, because "40 seats" and "the 2 sales pods" read worse.
+
+Result on real data: 2 of 50 segments convert, both in `pricing-pushback`, which is exactly the
+sample the pitch depends on:
+
+```
+before: the number is one four oh oh a seat is more than we spend on our entire sales tooling stack
+after:  The number is 1400 a seat is more than we spend on our entire sales tooling stack.
+before: do that if the first year comes in under five oh oh oh i can approve it myself
+after:  Do that if the first year comes in under 5000 I can approve it myself.
+```
+
+`npm run test:readability` covers both passes — the casing contract, both real conversions, both
+false positives, a 13-input round-trip sweep, and a whole-corpus invariant asserting every rendered
+segment says the same words and numbers as the verbatim text the gate reads. The citation gate still
+quotes verbatim `segment.text`, so evidence integrity is untouched either way.
+
+## Known issue: Hear returns lowercase, unpunctuated text
+
+```
+hi sarah thanks for making the time today i know you've been evaluating a few options
+```
+
+Confirmed on **both** `pyai-hear-telephony` (the jobs default) and `pyai-hear` — not a model-choice
+problem, it's how Hear returns text. This matters: it's 30% Product pull, and raw ASR casing is the
+difference between "notes worth $1,400/seat" and "a machine dump".
+
+**Decision — verbatim is the source of truth.** `segment.text` stores exactly what Hear returned and
+is the only thing the citation gate and any quoted evidence ever read. Readability is applied at the
+**presentation boundary** instead, and falls back to verbatim whenever its guard trips.
+
+Two corrections to an earlier version of this paragraph, both worth knowing:
+
+- **It is no longer "punctuation and casing only."** That was true until the spoken-digit pass
+  landed; there are now two passes with two separate guards. See "`numerals: true` does NOT work on
+  the jobs endpoint" above for the full rules — that section is the authority, not this one.
+- **`display_text` is reserved, not live.** Nothing writes it. The schema field exists
+  (`TranscriptSegmentSchema`) and the DB column exists, but the UI and the Markdown export both call
+  `readableFor(call.title)` per segment at render time rather than reading a stored value. So the
+  guard runs on every render and there is no persisted rendering to drift out of sync — which is
+  the safer arrangement. Treat the field as a placeholder for a future ingest-time cache, and do not
+  describe it as populated.
+
+Also seen: "fourteen hundred" transcribed as "one four oh oh" on the jobs endpoint, while flat
+`/audio/transcriptions` rendered "1400". **`numerals: true` does not fix this** — that was worth
+trying and it was tested; see the dedicated section above.
+
+## Sandbox quota: Speak is rate-limited hard, Hear has a larger allowance (not immunity)
+
+Later in the build Speak recovered, and we tried to regenerate the sample audio on PyAI. What we
+learned, in order, because the error message is actively misleading:
+
+```
+HTTP 429  {"error":{"code":"daily_cap_exceeded",
+           "message":"Daily usage cap reached for this API key. Resets at 00:00 UTC."}}
+```
+
+- It first fired after roughly **30 rapid `/audio/speech` calls**.
+- A single call minutes later **succeeded** — so it looked like a recoverable burst limit.
+- A fresh run of ~10 calls at 250 ms spacing **429'd again**, and so did 6 attempts with backoff up
+  to 24 s. Single calls kept succeeding throughout.
+
+So the label is wrong in both directions: it is not purely a burst limit (sustained runs fail for
+hours) and not a hard daily zero (isolated calls still pass). Treat **Speak on a sandbox key as
+having a small allowance that sustained generation exhausts.** No `Retry-After` header is sent, so
+there is nothing to honour — `PyaiError.retryAfterSec` is wired up and simply stays undefined here.
+
+**Hear was unaffected *by the Speak-triggered cap*.** `/v1/transcription/jobs` kept returning 202
+throughout, including after Speak was fully blocked. But this does **not** generalise: sustained
+Hear probing later exhausted the cap on its own and blocked Hear itself, including the streaming
+handshake and `GET /v1/models`. See "Operational findings that can kill a demo" above. Transcription
+is not exempt — it just has a larger allowance than Speak.
+
+**Quota is per key/org.** A freshly minted sandbox key comes back with a *different* `org_id` and a
+fresh allowance. Minting one is a single unauthenticated call, so a blocked build is recoverable —
+but do not lean on it as a strategy. **Update: this is now measured, and the ceiling is real —**
+minting itself 429s with `sandbox_limit_reached` ("the sandbox-key limit for this **network** has
+been reached") once you have taken a few. See "Operational findings that can kill a demo" above.
+Treat minting as a one-shot recovery, not a strategy, exactly as this paragraph warned.
+
+**Consequences for us.** Sample audio stays on macOS `say`, all five voice-consistent. A partial
+regeneration is worse than none: it left three calls on 24 kHz PyAI audio paired with transcripts
+from the 16 kHz `say` audio, which silently points every citation at the wrong moment. That failure
+is now asserted in `npm run check:ship` (audio/transcript drift) and `npm run reindex:samples`
+rebuilds the manifest from disk when a run dies partway.
+
+```
+HTTP 503  {"error":{"type":"server_error","code":"upstream_error",
+           "message":"Speech synthesis is unavailable."},"service":"voice"}
+```
+
+Reproduced across `pyai-speak` / `pyai-voice` / no model field, `wav` and `mp3`, three attempts over
+~15 minutes. `GET /v1/voices` works fine (144 stock voices), so it's the synthesis backend.
+Per `errors-and-limits.md`, 503 is not in the retryable-code list but `upstream_error` is transient
+by nature — worth re-probing before freeze.
+
+**Impact and mitigation.** Sample-call audio comes from macOS `say` (16kHz PCM16 WAV, proven in the
+probes above) behind the registry's `tts` capability, with `pyai-speak` registered and ready to swap
+in one config line if the service recovers. The generated WAVs are committed, so **nobody cloning
+the repo needs `say`, PyAI Speak, or any TTS at all** — the zero-setup demo is unaffected. What we
+lose is Speak minute-burn; Hear minutes, which are the far larger burn, are unaffected.
+
+## Environment notes
+
+- **No Homebrew on this machine.** Node was installed from the official tarball into `~/.local`
+  (`node v24.19.0`, `npm 11.17.0`). Add `~/.local/bin` to `PATH`.
+- python.org Python 3.14 ships **without a CA bundle** — probe scripts need
+  `SSL_CERT_FILE=/etc/ssl/cert.pem`. Node is unaffected; this never touches the app.
+- No `ffmpeg`, and none needed: stereo interleaving and mono mixdown of 16-bit PCM are ~10 lines of
+  `wave` + byte slicing, verified working in the probes.

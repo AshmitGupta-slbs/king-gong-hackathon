@@ -1,0 +1,82 @@
+@import "tailwindcss";
+
+/*
+ * OpenGong Lite design tokens.
+ *
+ * Dark by default: this is a tool a rep opens straight after a call, next to a CRM, and the
+ * screenshot has to look like a product rather than a demo. Emerald is the accent (it echoes
+ * PyAI's own green); amber means "shipped but unverified"; red means "the gate dropped this".
+ * Those three colours carry the entire trust story, so they are tokens, not ad-hoc classes.
+ */
+:root {
+  --bg: #0a0d12;
+  --bg-raised: #11161d;
+  --bg-inset: #0d1117;
+  --border: #1e2530;
+  --border-strong: #2a3441;
+  --fg: #e8ecf1;
+  --fg-muted: #94a3b8;
+  --fg-dim: #64748b;
+
+  --accent: #34d399;
+  --accent-dim: #065f46;
+  --warn: #fbbf24;
+  --warn-dim: #78350f;
+  --bad: #f87171;
+  --bad-dim: #7f1d1d;
+
+  --rep: #60a5fa;
+  --prospect: #c084fc;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-bg-raised: var(--bg-raised);
+  --color-bg-inset: var(--bg-inset);
+  --color-border-subtle: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-fg: var(--fg);
+  --color-fg-muted: var(--fg-muted);
+  --color-fg-dim: var(--fg-dim);
+  --color-accent: var(--accent);
+  --color-accent-dim: var(--accent-dim);
+  --color-warn: var(--warn);
+  --color-warn-dim: var(--warn-dim);
+  --color-bad: var(--bad);
+  --color-bad-dim: var(--bad-dim);
+  --color-rep: var(--rep);
+  --color-prospect: var(--prospect);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
+}
+
+/* Scrollbars that don't look like 2009 in a dark UI. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 6px;
+  border: 3px solid var(--bg);
+}
+
+/* The moment a citation is clicked, the target line pulses once. Small, but it is what makes
+   "click a claim, land on the proof" legible instead of a silent scroll. */
+@keyframes cite-pulse {
+  0%   { background-color: color-mix(in oklab, var(--accent) 26%, transparent); }
+  100% { background-color: color-mix(in oklab, var(--accent) 7%, transparent); }
+}
+.cite-pulse { animation: cite-pulse 1.1s ease-out; }
+
+@media (prefers-reduced-motion: reduce) {
+  .cite-pulse { animation: none; }
+}

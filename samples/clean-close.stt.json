@@ -1,0 +1,86 @@
+{
+  "segments": [
+    {
+      "id": "seg_000",
+      "speaker": "rep",
+      "start_ms": 0,
+      "end_ms": 7440,
+      "text": "hi marcus good to see you again last time we left it that you'd work the security review through with your team",
+      "channel": 0
+    },
+    {
+      "id": "seg_001",
+      "speaker": "prospect",
+      "start_ms": 7360,
+      "end_ms": 14000,
+      "text": "we did and it came back clean security signed off on monday that was honestly the last real blocker",
+      "channel": 1
+    },
+    {
+      "id": "seg_002",
+      "speaker": "rep",
+      "start_ms": 14000,
+      "end_ms": 22160,
+      "text": "that is great news so on scope we landed on forty seats across the two sales pods starting month",
+      "channel": 0
+    },
+    {
+      "id": "seg_003",
+      "speaker": "prospect",
+      "start_ms": 22240,
+      "end_ms": 28480,
+      "text": "forty is right i would want the option to add ten more in the second quarter without renegotiating the whole thing",
+      "channel": 1
+    },
+    {
+      "id": "seg_004",
+      "speaker": "rep",
+      "start_ms": 28560,
+      "end_ms": 37520,
+      "text": "we can write that in as a preagreed expansion at the same proceed rate it just needs to be exercised inside the first twelve months",
+      "channel": 0
+    },
+    {
+      "id": "seg_005",
+      "speaker": "prospect",
+      "start_ms": 37520,
+      "end_ms": 41920,
+      "text": "that works and the onboarding you said your team runs that not us",
+      "channel": 1
+    },
+    {
+      "id": "seg_006",
+      "speaker": "rep",
+      "start_ms": 42000,
+      "end_ms": 49120,
+      "text": "correct two sessions in week one then i check in at day thirty your managers do not have to build anything",
+      "channel": 0
+    },
+    {
+      "id": "seg_007",
+      "speaker": "prospect",
+      "start_ms": 49200,
+      "end_ms": 56320,
+      "text": "good send the paper over today and i'll get it through signature by friday procurement already has the budget line reserved",
+      "channel": 1
+    },
+    {
+      "id": "seg_008",
+      "speaker": "rep",
+      "start_ms": 56320,
+      "end_ms": 63200,
+      "text": "i'll have it in your inbox within the hour anything you want me to flag for procurement directly",
+      "channel": 0
+    },
+    {
+      "id": "seg_009",
+      "speaker": "prospect",
+      "start_ms": 63120,
+      "end_ms": 68160,
+      "text": "just cocky elena on it she's handling the vendor forms and she'll chase it if i'm slow",
+      "channel": 1
+    }
+  ],
+  "audio_seconds": 68.453,
+  "speakers": 2
+}

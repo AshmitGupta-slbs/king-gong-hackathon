@@ -1,0 +1,86 @@
+{
+  "segments": [
+    {
+      "id": "seg_000",
+      "speaker": "rep",
+      "start_ms": 0,
+      "end_ms": 4800,
+      "text": "you have had the proposal a few days now what is the reaction internally",
+      "channel": 0
+    },
+    {
+      "id": "seg_001",
+      "speaker": "prospect",
+      "start_ms": 4720,
+      "end_ms": 12400,
+      "text": "the product is not the issue the number is one four oh oh a seat is more than we spend on our entire sales tooling stack right now",
+      "channel": 1
+    },
+    {
+      "id": "seg_002",
+      "speaker": "rep",
+      "start_ms": 12480,
+      "end_ms": 14720,
+      "text": "how many seats were you modeling",
+      "channel": 0
+    },
+    {
+      "id": "seg_003",
+      "speaker": "prospect",
+      "start_ms": 14720,
+      "end_ms": 27840,
+      "text": "twenty five to start at that volume it is a six figure line item and it goes to the finance committee not just to me and our cfo has been very clear this year that anything new has to display something existing not add to it",
+      "channel": 1
+    },
+    {
+      "id": "seg_004",
+      "speaker": "rep",
+      "start_ms": 27760,
+      "end_ms": 31200,
+      "text": "what would it displace if it displaced anything",
+      "channel": 0
+    },
+    {
+      "id": "seg_005",
+      "speaker": "prospect",
+      "start_ms": 31360,
+      "end_ms": 38880,
+      "text": "possibly the recording tool and may be part of what we pay for conversation analytics that is maybe half the cost not all of it",
+      "channel": 1
+    },
+    {
+      "id": "seg_006",
+      "speaker": "rep",
+      "start_ms": 38880,
+      "end_ms": 44640,
+      "text": "so we need to close a gap of roughly half either on price or on what it replaces",
+      "channel": 0
+    },
+    {
+      "id": "seg_007",
+      "speaker": "prospect",
+      "start_ms": 44720,
+      "end_ms": 51200,
+      "text": "yes and i would rather not go to committee twice so i need the number to be right the first time i take it in",
+      "channel": 1
+    },
+    {
+      "id": "seg_008",
+      "speaker": "rep",
+      "start_ms": 51360,
+      "end_ms": 60560,
+      "text": "then let me do two things a ten seat starting tire so the first year is under the committee threshold and a written comparison of what it retires",
+      "channel": 0
+    },
+    {
+      "id": "seg_009",
+      "speaker": "prospect",
+      "start_ms": 60560,
+      "end_ms": 67440,
+      "text": "do that if the first year comes in under five oh oh oh i can approve it myself and that changes the whole conversation",
+      "channel": 1
+    }
+  ],
+  "audio_seconds": 67.751,
+  "speakers": 2
+}

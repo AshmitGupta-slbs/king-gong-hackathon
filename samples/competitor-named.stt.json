@@ -1,0 +1,86 @@
+{
+  "segments": [
+    {
+      "id": "seg_000",
+      "speaker": "rep",
+      "start_ms": 240,
+      "end_ms": 8080,
+      "text": "before we get into the demo help me understand what else you are looking at so i do not waste your time on the wrong things",
+      "channel": 0
+    },
+    {
+      "id": "seg_001",
+      "speaker": "prospect",
+      "start_ms": 8160,
+      "end_ms": 15840,
+      "text": "we are down to three u gong and chorus we looked at fireflies early on but it did not have the coaching side we wanted",
+      "channel": 1
+    },
+    {
+      "id": "seg_002",
+      "speaker": "rep",
+      "start_ms": 15760,
+      "end_ms": 18720,
+      "text": "what is pulling you toward gong at the moment",
+      "channel": 0
+    },
+    {
+      "id": "seg_003",
+      "speaker": "prospect",
+      "start_ms": 18800,
+      "end_ms": 34000,
+      "text": "honestly our vp came from a company that used gong and he trusts it it is the safe choice internally nobody gets fired for picking gong the thing that bothers me about gong is the price and that we would be paying for a whole revenue suite when we want maybe a third of it",
+      "channel": 1
+    },
+    {
+      "id": "seg_004",
+      "speaker": "rep",
+      "start_ms": 33920,
+      "end_ms": 34560,
+      "text": "and corres",
+      "channel": 0
+    },
+    {
+      "id": "seg_005",
+      "speaker": "prospect",
+      "start_ms": 34960,
+      "end_ms": 41040,
+      "text": "chorus was cheaper but the summaries were noticeably worse in our pilot my rep stopped reading them by week two",
+      "channel": 1
+    },
+    {
+      "id": "seg_006",
+      "speaker": "rep",
+      "start_ms": 41120,
+      "end_ms": 47920,
+      "text": "so the barrier is summer is good enough that reps actually read them without buying a whole suite to get there",
+      "channel": 0
+    },
+    {
+      "id": "seg_007",
+      "speaker": "prospect",
+      "start_ms": 48000,
+      "end_ms": 54880,
+      "text": "that is exactly it and i need to be able to show my vp why this is not a downgrade from the thing he already trusts",
+      "channel": 1
+    },
+    {
+      "id": "seg_008",
+      "speaker": "rep",
+      "start_ms": 54960,
+      "end_ms": 64000,
+      "text": "then the piece i want to show you is where every line in the notes links back to the moment in the call it came from that is the part gong does not do",
+      "channel": 0
+    },
+    {
+      "id": "seg_009",
+      "speaker": "prospect",
+      "start_ms": 63920,
+      "end_ms": 70960,
+      "text": "that would help send me something i can put in front of him side by side before our decision meeting on the twentieth",
+      "channel": 1
+    }
+  ],
+  "audio_seconds": 71.133,
+  "speakers": 2
+}
