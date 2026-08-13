@@ -79,7 +79,7 @@ export const REGISTRY_CONFIG = {
   <ol class="steps">
     <li data-step="1">
       <span class="step-title">Use the Mantle client, not the legacy path</span>
-      <p>There are two Bedrock integrations and only one works here. Claude Opus 5 has <strong>no ARN-versioned model id</strong>, so it does not appear in the legacy <code>InvokeModel</code> model table at all. The working path is <code>AnthropicBedrockMantle</code> with the bare prefixed id <code>anthropic.claude-opus-5</code>.</p>
+      <p>There are two AWS integrations and only one works here. Legacy <code>InvokeModel</code>/<code>Converse</code> uses ARN-versioned, <code>anthropic.</code>-prefixed ids, and Claude Opus 5 has no such id at all. The working path is <code>AnthropicBedrockMantle</code>, an Anthropic <strong>Messages API</strong> surface, whose ids are the plain first-party strings — <code>claude-opus-5</code>, <strong>with no provider prefix</strong>.</p>
     </li>
     <li data-step="2">
       <span class="step-title">Structured outputs are supported</span>
@@ -98,13 +98,20 @@ export AWS_REGION=us-east-1
 
 npm run extract:samples      # regenerates all five sets of notes</pre>
 
-  <p>One thing no code can arrange: <strong>Anthropic model access must be enabled in the Bedrock console for that region.</strong> The provider detects that failure and says so, rather than letting you debug the prompt:</p>
+  <p>One thing no code can arrange: <strong>Anthropic model access must be enabled in the Bedrock console for that region.</strong> The provider distinguishes that from a wrong model id, because both arrive as an HTTP error and the instinct on either is to re-check the keys:</p>
 
-  <pre style="background:var(--ink); color:var(--paper); padding:18px; border-radius:6px; overflow-x:auto; font-size:13px; font-family:var(--mono);">Bedrock denied access to anthropic.claude-opus-5 in us-east-1.
+  <pre style="background:var(--ink); color:var(--paper); padding:18px; border-radius:6px; overflow-x:auto; font-size:13px; font-family:var(--mono);">Bedrock denied access to claude-opus-5 in us-east-1.
 Enable Anthropic model access in the Bedrock console for this region,
 and check the IAM principal can call bedrock:InvokeModel.</pre>
 
-  <p>Two things remain genuinely unverifiable until credentials exist, and are flagged as such rather than assumed: whether <code>messages.parse()</code> behaves identically end-to-end on Mantle, and whether <code>output_config.effort</code> is accepted there.</p>
+  <div class="card accent">
+    <span class="card-eyebrow">WHAT THE FIRST REAL CREDENTIAL FOUND</span>
+    <div class="card-title">This provider was written wrong, and the comment above it was confident</div>
+    <p>Until a real key existed, this page and the code both said the id carried an <code>anthropic.</code> prefix, and <code>bedrockModelId()</code> added one to every request. The first live call returned <code>404 not_found_error: The model 'anthropic.claude-opus-5' does not exist</code> — an <em>authenticated</em> response in Anthropic's own error envelope, rejecting only the model string. The prefix rule had been carried over from legacy Bedrock and written into a comment without the path ever running.</p>
+    <p>Two lessons are now enforced rather than remembered. The id is passed <strong>verbatim</strong>, so <code>OPENGONG_MODEL</code> is genuinely authoritative — while the code silently prefixed, that documented override could not even work around the bug. And <code>npm run check:model</code> now answers the question empirically: it sends a one-token request per candidate id in <em>both</em> forms and reports which the endpoint resolves, distinguishing "id not recognised" from "id fine, account cannot use it". §08 had this provider marked <em>Blocked · never executed</em> the whole time; that label was carrying real weight.</p>
+  </div>
+
+  <p>Still unverified end-to-end until a model call actually succeeds: whether <code>messages.parse()</code> behaves identically on Mantle, and whether <code>output_config.effort</code> is accepted there. Flagged rather than assumed — which is exactly the habit that made the id bug survive as long as it did.</p>
 
   <h2 id="provenance">Provenance enforcement</h2>
 

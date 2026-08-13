@@ -19,6 +19,7 @@
     "test:harness": "tsx scripts/test-harness.ts",
     "extract:samples": "tsx scripts/extract-samples.ts",
     "check:ship": "tsx scripts/check-ship.ts",
+    "check:model": "tsx scripts/check-model.ts",
     "verify": "tsx scripts/test-gate.ts && tsx scripts/test-harness.ts && tsx scripts/test-readability.ts && tsx scripts/check-ship.ts",
     "test:readability": "tsx scripts/test-readability.ts",
     "reindex:samples": "tsx scripts/reindex-samples.ts"
