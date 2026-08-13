@@ -34,7 +34,10 @@ claims.
 
 ## Five-minute setup
 
-**Requires Node 20.9+. Nothing else — no API key, no signup, no database server, no native builds.**
+**Requires Node 22.5+** (for the built-in `node:sqlite`, which is why there is no database to install
+and nothing to compile). **Nothing else — no API key, no signup, no database server, no native
+builds.** The version is declared in `engines` and `.nvmrc` so a host cannot silently pick an older
+one; on an older Node the app boots and then fails on the first query.
 
 ```bash
 git clone <this repo> && cd opengong-lite
@@ -117,7 +120,7 @@ real, all verified by forcing the failure rather than reading the code:
 
 ```bash
 npm run test:gate         # 23 checks — the citation gate blocks, logs, and downgrades status
-npm run test:harness      # 52 checks — budgets stop runs, retries bound, no run vanishes, formats sniffed
+npm run test:harness      # 55 checks — budgets stop runs, retries bound, no run vanishes, formats sniffed
 npm run test:readability  # 46 checks — the display layer never changes what was said
 npm run check:ship        # the pass/fail ship checklist
 npm run verify            # all of the above, in order
@@ -138,9 +141,12 @@ Things a demo would normally hide:
   terminal stop. Inserting commas would need a model, and a model rewriting evidence is the one
   thing this product exists to prevent. So it reads better than raw ASR and still not like prose.
   Markdown export is readable; JSON export is verbatim.
-- **One display pass does change words, deliberately, and is fenced in.** Hear ignores `numerals`
-  and reads figures out digit by digit, so the flagship sample says "the number is one four oh oh a
-  seat". A second pass collapses a run of four or more spoken digits into `1400` — but only if the
+- **One display pass does change words, deliberately, and is fenced in.** Hear's digit rendering is
+  unreliable and not controllable from the request — the flagship sample comes back as "the number is
+  one four oh oh a seat", and setting `numerals: true` does not change it (tested across three
+  formats, and against the committed bytes). It is deterministic per file; the flag just is not the
+  variable, so the fix has to be deterministic on our side.
+  A second pass collapses a run of four or more spoken digits into `1400` — but only if the
   run contains an unambiguous digit word, so a stutter ("oh oh oh that is a problem") and counting
   ("one two three items") are both left alone. Every conversion must round-trip to the same digits
   or it is discarded. Where the two error directions trade off we take the false negative: an

@@ -187,6 +187,14 @@
 
   <p>One oddity worth knowing: "fourteen hundred" comes back as <em>"one four oh oh"</em> on the jobs endpoint while the flat endpoint rendered <em>"1400"</em>. On the stream, <code>numerals=true</code> works but applies only at finalisation — partials read "one four oh oh", the final reads "1400". Judge numerals from finals only.</p>
 
+  <div class="card mustard">
+    <span class="card-eyebrow">CORRECTED — AN EARLIER CLAIM HERE WAS TOO STRONG</span>
+    <div class="card-title">The request cannot control digit rendering</div>
+    <p>This page previously said <code>numerals: true</code> is <em>silently ignored</em> by the jobs endpoint. That overstated it. A counter-example turned up: a short clean mono clip of "the pricing came in around fourteen hundred a seat" returns <strong>"1400"</strong> — with no flag set at all. Running the matrix (WAV 16k, WAV 22k, AIFC 22k, each with the flag and without) returned "1400" in all six cases.</p>
+    <p>So the flag is not being ignored so much as it is <strong>not the variable</strong>. Re-running the committed <code>pricing-pushback.wav</code> bytes — stereo, <code>channel:true</code> — reproduces "one four oh oh" and "five oh oh oh" exactly as committed, flag or no flag. It is deterministic per file; something about length, mono vs stereo, <code>channel:true</code> or surrounding context decides it, and <strong>which one is untested</strong>.</p>
+    <p>The honest statement is therefore: digit rendering is unreliable and not controllable from the request, so it has to be normalised deterministically at the display boundary — which is what <a href="10-decisions-risks.html#readability">§10</a> describes. <strong>Do not try to "fix" the samples by enabling <code>numerals</code> and regenerating</strong>; that has been tested against the committed bytes and changes nothing.</p>
+  </div>
+
   <p>Measured quality on synthesized audio: <strong>8.4% WER</strong> after case and punctuation normalisation. The errors are the predictable ones — <em>gong → gang</em>, <em>crm → erm</em>, <em>Q4 → q 4</em>. Proper nouns and competitor names are where it slips, which is exactly what a competitor-tracker feature depends on.</p>
 
   <h2 id="quota">Quota behaviour, and a misleading error code</h2>

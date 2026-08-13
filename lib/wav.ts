@@ -40,8 +40,12 @@ export function sniffAudioFormat(bytes: Uint8Array): { mime: string; ext: string
   if (ascii(bytes, 4, 4) === 'ftyp') return { mime: 'audio/mp4', ext: 'm4a' };
   if (ascii(bytes, 0, 4) === 'OggS') return { mime: 'audio/ogg', ext: 'ogg' };
   if (ascii(bytes, 0, 4) === 'fLaC') return { mime: 'audio/flac', ext: 'flac' };
-  if (ascii(bytes, 0, 4) === 'FORM' && ascii(bytes, 8, 4) === 'AIFF') {
-    return { mime: 'audio/aiff', ext: 'aiff' };
+  // Both AIFF brands occur on a Mac and both are served as audio/aiff: `say -o out.aiff` with no
+  // format flags emits AIFF-C (`FORM…AIFC`), while /System/Library/Sounds/*.aiff are plain AIFF.
+  // Recognising only AIFF would have missed the one macOS produces by default.
+  if (ascii(bytes, 0, 4) === 'FORM') {
+    const brand = ascii(bytes, 8, 4);
+    if (brand === 'AIFF' || brand === 'AIFC') return { mime: 'audio/aiff', ext: 'aiff' };
   }
   return null;
 }
