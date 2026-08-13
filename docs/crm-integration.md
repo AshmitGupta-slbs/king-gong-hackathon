@@ -30,7 +30,7 @@ Two options, and the choice depends on who runs the app.
 *Settings → Integrations → Private Apps*. Simplest, no OAuth dance, right for an internal tool or a
 demo against a sandbox. Sent as `Authorization: Bearer <token>`.
 
-**OAuth 2.0 public app** — needed if OpenGong is installed by other companies. Standard
+**OAuth 2.0 public app** — needed if King Gong is installed by other companies. Standard
 authorization-code flow, refresh tokens stored per portal, `hub_id` becomes a tenant key. Materially
 more work: token refresh, per-tenant storage, an install/uninstall lifecycle.
 
@@ -86,12 +86,12 @@ adopt this, because it puts cited notes where the deal already lives.
 
 **The citation problem is the interesting design question here.** HubSpot renders a note as HTML with
 no concept of a segment id, so the receipts have to survive the trip. The honest option is to make
-every claim a link back to `/{share_id}#seg_014` on the OpenGong instance, so a reader in HubSpot can
+every claim a link back to `/{share_id}#seg_014` on the King Gong instance, so a reader in HubSpot can
 still click through to the moment that proves it. Writing the claims into HubSpot *without* their
 citations would strip out precisely the property this product exists to provide — it should be
 treated as a non-option rather than a v1 simplification.
 
-## 4. Surfacing OpenGong inside HubSpot
+## 4. Surfacing King Gong inside HubSpot
 
 A **CRM card / UI extension** renders custom content directly on a deal or contact record. That is
 where cited notes belong for a rep who lives in HubSpot: the record page shows the latest analysed
@@ -103,7 +103,7 @@ This requires a public app built with HubSpot's developer projects tooling, not 
 
 - **Webhooks** for `deal.propertyChange`, `contact.creation` and similar, so cached context does not
   go stale. Requires a public app and a publicly reachable endpoint.
-- **Workflow actions** — a HubSpot workflow could call OpenGong when a call recording is attached,
+- **Workflow actions** — a HubSpot workflow could call King Gong when a call recording is attached,
   making analysis automatic rather than an upload someone remembers to do.
 
 ## 6. A sensible order of work

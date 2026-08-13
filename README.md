@@ -1,10 +1,10 @@
-# OpenGong Lite
+# King Gong
 
 **Deal notes with receipts.** Upload a sales call, get back a transcript with speaker names, a
 summary, objections, intent, next steps and a follow-up email — where every claim points at the
 exact line in the call that proves it. Click a claim, hear the moment.
 
-![OpenGong Lite — transcript on the left, cited deal notes on the right](docs/hero.png)
+![King Gong — transcript on the left, cited deal notes on the right](docs/hero.png)
 
 Gong charges around $1,400 a seat. The actual job after a call is three questions: what happened,
 what did they push back on, what do I do next. This does that job, in a repo you can clone.

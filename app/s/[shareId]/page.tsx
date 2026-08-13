@@ -10,11 +10,12 @@
  * see the call and one honest way in — not somebody else's workspace.
  */
 import { notFound } from 'next/navigation';
-import { AudioLines, Share2 } from 'lucide-react';
+import { Share2 } from 'lucide-react';
 import { getCallByShareId, getExtraction, getSegments } from '@/lib/db';
 import { loadSamples } from '@/lib/samples';
 import { getCrm } from '@/lib/crm';
 import { CallWorkspace } from '@/components/CallWorkspace';
+import { Logo } from '@/components/Logo';
 import { Badge } from '@/components/ui/Badge';
 import { ButtonLink } from '@/components/ui/Button';
 import type { CallBundle } from '@/lib/types';
@@ -53,10 +54,7 @@ export default async function SharePage({ params }: PageProps<'/s/[shareId]'>) {
     <div className="flex h-dvh flex-col overflow-hidden">
       <header className="flex h-[var(--header-h)] shrink-0 items-center gap-3 border-b border-border-subtle bg-surface px-4 lg:px-6">
         <span className="flex items-center gap-2.5">
-          <span className="grid size-8 shrink-0 place-items-center rounded-control bg-brand text-on-brand">
-            <AudioLines size={17} strokeWidth={2.25} aria-hidden />
-          </span>
-          <span className="text-body font-semibold text-fg">OpenGong Lite</span>
+          <Logo />
         </span>
         <Badge tone="neutral">
           <Share2 size={12} aria-hidden />
