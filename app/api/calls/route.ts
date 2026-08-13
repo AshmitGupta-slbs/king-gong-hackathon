@@ -12,6 +12,7 @@ import { z } from 'zod';
 import { listCalls, medianRecentRunMs } from '@/lib/db';
 import { processCall } from '@/lib/harness/loop';
 import { resolveSeparation } from '@/lib/separation';
+import { uploadDir } from '@/lib/uploads';
 import { RequestedSeparationSchema } from '@/lib/types';
 
 export const runtime = 'nodejs';
@@ -108,7 +109,7 @@ async function prepareUpload(req: Request) {
    * `data/` (already gitignored as runtime state) and are streamed back by /api/audio.
    */
   const callId = randomUUID().slice(0, 8);
-  const dir = join(process.cwd(), 'data', 'uploads');
+  const dir = uploadDir();
   mkdirSync(dir, { recursive: true });
   const stored = `${callId}.wav`;
   writeFileSync(join(dir, stored), bytes);
