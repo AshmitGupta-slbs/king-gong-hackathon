@@ -11,7 +11,30 @@
  * Costs exactly one request (GET /me) — which itself counts against the daily cap, so this prints
  * the answer rather than polling.
  */
+import { existsSync } from 'node:fs';
 import { describeKey, hoursUntilUtcMidnight, pyaiPreflight, PyaiError } from '@/lib/pyai';
+
+/**
+ * Read `.env.local` the way `next dev` does.
+ *
+ * Without this the script answers a different question from the one the user is asking: `next dev`
+ * loads `.env.local`, a tsx script does not, so `check:key` would confidently report the old cached
+ * key as active while the app was already using the new one. `process.loadEnvFile` is built into
+ * Node (and this repo already requires ≥22.5), so this costs no dependency.
+ *
+ * A real shell variable still wins — `loadEnvFile` does not overwrite what is already set.
+ */
+let envFileLoaded = false;
+for (const f of ['.env.local', '.env']) {
+  if (!existsSync(f)) continue;
+  try {
+    process.loadEnvFile(f);
+    envFileLoaded = true;
+    break;
+  } catch {
+    /* malformed env file should not stop us reporting on the key */
+  }
+}
 
 const c = {
   ok: (s: string) => `\x1b[32m${s}\x1b[0m`,
@@ -40,7 +63,12 @@ async function main() {
     process.exit(0);
   }
 
-  row('source', info.source === 'env' ? 'PYAI_API_KEY (environment)' : '.pyai-key.json (minted)');
+  row(
+    'source',
+    info.source === 'env'
+      ? `PYAI_API_KEY${envFileLoaded ? ' (shell or .env.local)' : ' (environment)'}`
+      : '.pyai-key.json (self-minted cache)',
+  );
   row('key', info.masked ?? '—');
   row('tier', info.sandbox ? c.warn('sandbox — daily capped') : c.ok('live — no daily cap'));
   if (info.expiresAt) {
@@ -50,6 +78,15 @@ async function main() {
       `${new Date(info.expiresAt).toISOString()} ${
         days < 0 ? c.bad('(EXPIRED)') : c.dim(`(${days.toFixed(1)} days)`)
       }`,
+    );
+  }
+
+  if (info.source === 'file') {
+    console.log(
+      c.dim(
+        '\n  Note: this is the locally cached key. A key set in a hosting dashboard (Railway et al)\n' +
+          '  is not visible from here — set PYAI_API_KEY in your shell or .env.local to check that one.\n',
+      ),
     );
   }
 
