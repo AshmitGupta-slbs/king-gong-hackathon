@@ -41,12 +41,26 @@ function readJson<T>(name: string): T | null {
 }
 
 /** Idempotent: safe to call on every boot. Returns the ids that are now present. */
+/**
+ * Seeding is idempotent, so it only needs to succeed ONCE per process.
+ *
+ * Without this memo the five presence checks here plus the five in `seedCompanies` run on every
+ * page render. Against SQLite that is free and nobody noticed; against a REST gateway it is ten
+ * sequential HTTPS round trips before anything is drawn — measured at roughly three seconds on the
+ * home page. `force` still bypasses it, and a process restart re-checks, so nothing can get stuck.
+ */
+let seededThisProcess = false;
+
 export async function loadSamples(
   force = false,
 ): Promise<{ loaded: string[]; skipped: string[]; missingExtraction: string[] }> {
+  if (seededThisProcess && !force) {
+    return { loaded: [], skipped: [], missingExtraction: [] };
+  }
   // The account records these calls belong to. Idempotent and skip-if-present, so a user's
   // edits in /setup are never overwritten by a reseed.
   await seedCompanies();
+  seededThisProcess = true;
 
   const loaded: string[] = [];
   const skipped: string[] = [];

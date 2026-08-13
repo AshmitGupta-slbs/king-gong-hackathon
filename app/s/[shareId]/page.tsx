@@ -29,11 +29,15 @@ export default async function SharePage({ params }: PageProps<'/s/[shareId]'>) {
   const call = await getCallByShareId(shareId);
   if (!call) notFound();
 
-  const bundle: CallBundle = {
-    call,
-    segments: await getSegments(call.id),
-    extraction: await getExtraction(call.id),
-  };
+  // Fetched together: independent reads, and each sequential await is a network round trip on a
+  // remote store.
+  const [segments, extraction, ctx] = await Promise.all([
+    getSegments(call.id),
+    getExtraction(call.id),
+    getCrm().forCall(call.id),
+  ]);
+
+  const bundle: CallBundle = { call, segments, extraction };
 
   /**
    * A share link goes to someone outside the company. They get the names of the people who spoke,
@@ -43,7 +47,7 @@ export default async function SharePage({ params }: PageProps<'/s/[shareId]'>) {
    * rest in the UI: everything handed to a client component is serialized into the page, so the
    * deal value would sit in the HTML of a forwarded link even if no component ever drew it.
    */
-  const participants = (await getCrm().forCall(call.id))?.participants ?? [];
+  const participants = ctx?.participants ?? [];
 
   return (
     <div className="flex h-dvh flex-col overflow-hidden">

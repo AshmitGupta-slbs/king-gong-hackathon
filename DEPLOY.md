@@ -77,10 +77,22 @@ gateway to a real Atlas cluster is one variable and no code change:
 `MONGODB_DB` names the database and `MONGO_COLLECTION_PREFIX` is prepended to every collection, so
 several apps can share one cluster without colliding.
 
-> **The REST gateway shim is unverified.** Its URL paths are implemented as specified, but the
-> request/response body shape was never documented, so it has not been proven against a live
-> gateway. Prefer a `mongodb+srv://` URI, and if you must use the gateway, run `npm run check:store`
-> first — it round-trips a document rather than trusting configuration.
+Both backends are verified against real storage — `npm run test:store` runs the same contract
+against whichever is configured, and passes on all three (SQLite, a real `mongod`, and the live
+`ml-v2.justcall.io` gateway).
+
+**On the REST gateway specifically.** It publishes its own schema at
+`{MONGODB_URI}/agent_chat/query_mongo/openapi.json`, which is worth reading before changing
+anything here. Two behaviours the adapter depends on, both established by experiment:
+
+- `query/` strips `_id` unless a projection is supplied, so every read sends one (`{}` = all
+  fields, and Mongo includes `_id` in a projection by default).
+- `insert_data_mongo/` returns HTTP 500 for every payload shape tried. Inserts go through
+  `replace_data_mongo/` with `upsert: true`, which is equivalent for our usage and works.
+
+Sorting and limiting happen in the app rather than the gateway, and `findOneAndUpdate` is
+find-then-update and **not atomic** — run a single worker against the REST backend. Both limitations
+disappear on a `mongodb+srv://` URI.
 
 #### Audio is a filesystem object, and Mongo does not fix that
 
