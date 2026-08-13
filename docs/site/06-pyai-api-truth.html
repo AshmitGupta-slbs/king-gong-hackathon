@@ -129,6 +129,14 @@
 
   <p>For mono there is no ground truth for <em>which</em> speaker is the rep, so we use a stated heuristic: <strong>whoever speaks first is the rep</strong>, because the rep opens the call. Right on essentially every real sales call, wrong on some. The separation mode is persisted and shown in the UI so nobody mistakes a heuristic for a measurement.</p>
 
+  <div class="card accent">
+    <span class="card-eyebrow">LIVE RELIABILITY ISSUE</span>
+    <div class="card-title">The <code>diarize</code> stage 500s in multi-minute windows</div>
+    <p>The job is accepted, transcription succeeds, and only diarization fails: <code>{"status":"failed","error":"diarize: HTTP 500"}</code>. Ruled out by direct experiment — MP3 vs WAV, <code>numerals</code>, multipart field order, our own encoder. The identical bytes succeed minutes later. <strong>It is time, not payload.</strong></p>
+    <p>Two things follow. First, do not debug your audio when you see this, and do not A/B test it sequentially — the windows are long enough that whichever variant lands in a good window looks like the fix, which produced two false conclusions before interleaving settled it. Second, <code>channel:true</code> never touches that stage, so <strong>stereo upload is a working path while mono is failing</strong>.</p>
+    <p><code>lib/harness/retry.ts</code> caps at 2 attempts and cannot outlast a multi-minute window, which is deliberate — the budget governor exists to stop runs, not to hammer a broken upstream. The run ends <code>failed</code> with the upstream error preserved. The mitigation that actually matters is that the five committed sample calls need no API call at all.</p>
+  </div>
+
   <h2 id="streaming">Streaming: there are two protocols, and the default is the legacy one</h2>
 
   <p>Not on our critical path — batch jobs own ingest — but the published snippet is wrong in a way that costs hours, so it is recorded.</p>

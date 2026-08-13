@@ -124,7 +124,7 @@
       <tbody>
         <tr><td>Transcription — PyAI Hear batch jobs</td><td><span class="chip teal">Working &amp; verified</span></td><td>All 5 samples transcribed for real; ids contiguous and ordered, ms timestamps, rep/prospect mapped</td></tr>
         <tr><td>Stereo separation (<code>channel</code>)</td><td><span class="chip teal">Working &amp; verified</span></td><td>6/6 segments correct on a two-speaker probe</td></tr>
-        <tr><td>Mono diarization (<code>diarize</code>)</td><td><span class="chip teal">Working &amp; verified</span></td><td>6/6 correct; rep identity is a stated heuristic, shown in the UI</td></tr>
+        <tr><td>Mono diarization (<code>diarize</code>)</td><td><span class="chip mustard">Partial</span></td><td>Correctness verified 6/6, and rep identity is a stated heuristic shown in the UI — but the upstream <code>diarize</code> stage <strong>500s in multi-minute windows</strong>, server-side and unrelated to payload. <code>channel:true</code> is unaffected and is the working path meanwhile. See <a href="06-pyai-api-truth.html#separation">§06</a></td></tr>
         <tr><td>Segment-id assignment</td><td><span class="chip teal">Working &amp; verified</span></td><td>Asserted contiguous, ordered, never model-authored</td></tr>
         <tr><td><strong>The citation gate</strong></td><td><span class="chip teal">Working &amp; verified</span></td><td>23 checks; drops fabricated ids, flags unsupported claims, downgrades status</td></tr>
         <tr><td>Seven-part harness</td><td><span class="chip teal">Working &amp; verified</span></td><td>39 forced-failure checks including a real budget <code>deadline</code></td></tr>

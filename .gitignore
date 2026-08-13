@@ -78,3 +78,13 @@ scripts/probe/sandbox-key.json
 # Python bytecode from the probe scripts
 __pycache__/
 *.pyc
+
+# Probe outputs: recordings of real people and their transcripts.
+# mic_diarize_test.py (--keep) and hear_stream_test.py (--save, --save-audio, --keep-wav) write
+# these into the working directory by default. One such file was already caught by hand before the
+# first push; this is the rule so it cannot recur. Force-add a genuine fixture with `git add -f`.
+scripts/probe/*.wav
+scripts/probe/*.mp3
+scripts/probe/*.m4a
+scripts/probe/*.aiff
+scripts/probe/*.json

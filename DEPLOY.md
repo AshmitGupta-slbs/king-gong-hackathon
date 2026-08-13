@@ -81,3 +81,23 @@ If you add any other runtime-written file, do not put it in `public/`.
 - Export Markdown: it downloads and ends with the digit-substitution footnote.
 - Docs: the bare domain serves the index, all 11 pages load, both diagrams render.
 - Upload one short call, then click one of its citations — the fix above is what makes that work.
+
+### If a live upload fails, check this before your audio
+
+PyAI's `diarize` stage returns `500` in **multi-minute windows**, server-side and independent of the
+payload: the job is accepted, transcription succeeds, and only diarization fails. This was pinned
+down by interleaved A/B testing — MP3 vs WAV, `numerals`, multipart field order and our own encoder
+were each ruled out, and identical bytes succeed minutes later.
+
+Two consequences worth knowing before you stand in front of an audience:
+
+- **`channel: true` never touches that stage.** If mono upload is failing, upload stereo audio and
+  pick channel separation — it is also the more accurate mode.
+- Retry cannot save you here. `lib/harness/retry.ts` caps at 2 attempts by design; the budget
+  governor exists to stop runs, not to hammer a broken upstream for minutes. The run ends `failed`
+  with the upstream error preserved, which is the correct outcome.
+
+And do not sequentially A/B test it — the windows are long enough that whichever variant lands in a
+good window looks like the fix. Two false conclusions were reached that way before interleaving
+settled it. The reason the demo leads with the five committed samples is exactly this: they need no
+API call at all.
