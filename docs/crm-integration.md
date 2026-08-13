@@ -1,6 +1,32 @@
 # Connecting a real CRM (HubSpot)
 
-**Status: design only. Nothing in this document is implemented.**
+**Status: the payload is built and visible; nothing sends it.**
+
+The app now produces the exact document a push would post — `lib/crm/payload.ts`, readable at
+`GET /api/calls/{id}/crm-payload` and on the **CRM payload** tab of any call. There is no HubSpot
+client, no credential, and no code path that could reach a portal; `check:ship` fails the build if
+one appears. Everything below about *authentication* and *sending* remains design only.
+
+Building the payload first was deliberate. The question worth answering before wiring a token is
+not "can we push?" but "what exactly lands in the CRM, and would we be happy for a customer to read
+it?" — and that is answerable with no credential and no risk to a live pipeline.
+
+## What was learned from a live portal
+
+Property names, types and units below were read from a real HubSpot account rather than from the
+API docs. Three things the documentation does not make obvious, all of which shaped the payload:
+
+| Fact | Consequence |
+|---|---|
+| `hs_note_body` and `hs_call_body` are **`fieldType: "html"`** | Every claim keeps a working `<a>` back to `/s/{share_id}#seg_014`, so a citation survives into the CRM instead of becoming a bare assertion. |
+| `hs_call_duration` is **milliseconds** | `Call.duration_ms` maps across with no conversion. |
+| `dealstage` takes a **per-portal GUID**, not a label | The portal checked had four pipelines, in which "Negotiate" is `4a26def2-fe7f-49ef-8a0b-cb73f99f3907`. Our own `DealStage` vocabulary matches none of them, so a stage write would either be rejected or move the wrong deal. **No `dealstage` is written.** Stage travels as a signal for a human to act on. |
+
+Two further constraints the payload states rather than papers over. Nothing in this app stores a
+HubSpot object id, so every association carries `id: null` plus the lookup that would resolve it
+(domain, email) — an invented id would look more finished and be less true. And unverified claims
+are excluded from the note body and counted under `omitted`: in the app they ship with a visible
+warning, but a CRM note outlives its context and becomes the account's record.
 
 The account context on the call page currently comes from `lib/crm/fixture.ts` — fabricated records
 for the five bundled sample calls, labelled as demo data everywhere they are rendered. This document

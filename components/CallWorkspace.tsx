@@ -14,7 +14,7 @@
  * all, whether or not a component would have drawn it.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { FileText, Building2 } from 'lucide-react';
+import { FileText, Building2, Share2 } from 'lucide-react';
 import { analyseCall } from '@/lib/analytics';
 import { readableFor, renderedSpansFor } from '@/lib/readability';
 import type { CallContext, Participant } from '@/lib/crm/types';
@@ -24,6 +24,7 @@ import { Tabs } from '@/components/ui/Tabs';
 import { ActionItems } from '@/components/workspace/ActionItems';
 import { CallHeader } from '@/components/workspace/CallHeader';
 import { ContextPanel } from '@/components/workspace/ContextPanel';
+import { CrmPayload } from '@/components/workspace/CrmPayload';
 import { Insights, EmptyNotes } from '@/components/workspace/Insights';
 import { Player } from '@/components/workspace/Player';
 import { TranscriptLine } from '@/components/workspace/TranscriptPane';
@@ -68,7 +69,7 @@ export function CallWorkspace({
   const [gateBusy, setGateBusy] = useState(false);
   /** Segments backing the claim currently under the cursor. */
   const [cited, setCited] = useState<string[] | null>(null);
-  const [tab, setTab] = useState<'notes' | 'context'>('notes');
+  const [tab, setTab] = useState<'notes' | 'context' | 'crm'>('notes');
 
   /**
    * Memoised because it feeds the context value: the `?? []` fallback allocates a fresh array on
@@ -254,7 +255,7 @@ export function CallWorkspace({
                   <Tabs
                     className="mb-4 shrink-0"
                     active={tab}
-                    onChange={(id) => setTab(id as 'notes' | 'context')}
+                    onChange={(id) => setTab(id as 'notes' | 'context' | 'crm')}
                     tabs={[
                       {
                         id: 'notes',
@@ -265,6 +266,11 @@ export function CallWorkspace({
                         id: 'context',
                         label: 'Context',
                         icon: <Building2 size={14} aria-hidden />,
+                      },
+                      {
+                        id: 'crm',
+                        label: 'CRM payload',
+                        icon: <Share2 size={14} aria-hidden />,
                       },
                     ]}
                   />
@@ -295,6 +301,8 @@ export function CallWorkspace({
                         <EmptyNotes />
                       )}
                     </>
+                  ) : tab === 'crm' ? (
+                    <CrmPayload callId={call.id} />
                   ) : (
                     <ContextPanel crm={crm} analytics={analytics} />
                   )}
