@@ -4,14 +4,16 @@
  *   npm run check:model
  *
  * WHY THIS EXISTS. A live upload failed with
- * `404 not_found_error: The model 'anthropic.claude-opus-5' does not exist`, and two people then
- * disagreed about the cause from documentation alone — one reading the SDK's own types and the
- * bundled API reference as saying Mantle ids are BARE, the other reading it as saying they carry an
- * `anthropic.` prefix and that the 404 meant the region cannot serve the model.
+ * `404 not_found_error: The model 'anthropic.claude-opus-5' does not exist`, and two readings of the
+ * documentation disagreed about the cause — one that Mantle ids are bare, one that the prefix is
+ * required and the region simply cannot serve the model. The second was right (see
+ * `bedrock-extract.ts`), but only after a round of confident argument in both directions, which is
+ * the case for having a tool that just asks.
  *
- * Both readings are plausible and the question is cheap to settle by asking. So this asks: for each
- * candidate model it sends the smallest possible request in BOTH forms — bare (`claude-opus-5`) and
- * prefixed (`anthropic.claude-opus-5`) — and reports which the endpoint resolves.
+ * For each candidate model this sends the smallest possible request in BOTH forms — bare
+ * (`claude-opus-5`) and prefixed (`anthropic.claude-opus-5`) — and reports which the endpoint
+ * resolves. The prefixed form is the expected-correct one on Bedrock; the bare form is probed
+ * anyway, because a tool that only tests the answer you already believe cannot correct you.
  *
  * The two failure modes are deliberately distinguished, because they look alike and mean opposite
  * things:
@@ -125,11 +127,14 @@ async function main() {
     );
   } else if (sawNotFound && !sawDenied) {
     console.log(
+      c.warn('  This result says NOTHING about which id form is correct.'),
+    );
+    console.log(
       c.dim(
-        '  Every id was rejected as non-existent rather than refused, which points at the\n' +
-          `  endpoint or region rather than permissions. Try a different AWS_REGION (us-east-1 /\n` +
-          '  us-west-2), or the Claude-Platform-on-AWS surface (@anthropic-ai/aws-sdk, which also\n' +
-          '  needs ANTHROPIC_AWS_WORKSPACE_ID).\n',
+        `  Every candidate came back not-found in BOTH forms, so ${region} appears to serve none of\n` +
+          '  them — the prefix cells only carry information in a region that serves at least one\n' +
+          '  model. Re-run with AWS_REGION=us-east-1 (or us-west-2) and Anthropic model access\n' +
+          '  enabled there before drawing any conclusion about naming.\n',
       ),
     );
   } else {

@@ -135,7 +135,7 @@ export const REGISTRY_CONFIG = {
   <ol class="steps">
     <li data-step="1">
       <span class="step-title">Use the Mantle client, not the legacy path</span>
-      <p>There are two AWS integrations and only one works here. Legacy <code>InvokeModel</code>/<code>Converse</code> uses ARN-versioned, <code>anthropic.</code>-prefixed ids, and Claude Opus 5 has no such id at all. The working path is <code>AnthropicBedrockMantle</code>, an Anthropic <strong>Messages API</strong> surface, whose ids are the plain first-party strings — <code>claude-opus-5</code>, <strong>with no provider prefix</strong>.</p>
+      <p>Three AWS surfaces are easy to confuse and the model-id format is what separates them. Legacy <code>InvokeModel</code>/<code>Converse</code> uses ARN-versioned ids and a different request shape. <strong>Claude Platform on AWS</strong> (<code>AnthropicAws</code>, a different product) uses bare first-party ids. We use <code>AnthropicBedrockMantle</code> — <strong>Claude in Amazon Bedrock</strong> — which serves the same Messages API shape as first-party but whose ids carry an <code>anthropic.</code> provider prefix: <code>anthropic.claude-opus-5</code>.</p>
     </li>
     <li data-step="2">
       <span class="step-title">Structured outputs are supported</span>
@@ -156,18 +156,19 @@ npm run extract:samples      # regenerates all five sets of notes</pre>
 
   <p>One thing no code can arrange: <strong>Anthropic model access must be enabled in the Bedrock console for that region.</strong> The provider distinguishes that from a wrong model id, because both arrive as an HTTP error and the instinct on either is to re-check the keys:</p>
 
-  <pre style="background:var(--ink); color:var(--paper); padding:18px; border-radius:6px; overflow-x:auto; font-size:13px; font-family:var(--mono);">Bedrock denied access to claude-opus-5 in us-east-1.
+  <pre style="background:var(--ink); color:var(--paper); padding:18px; border-radius:6px; overflow-x:auto; font-size:13px; font-family:var(--mono);">Bedrock denied access to anthropic.claude-opus-5 in us-east-1.
 Enable Anthropic model access in the Bedrock console for this region,
 and check the IAM principal can call bedrock:InvokeModel.</pre>
 
   <div class="card accent">
     <span class="card-eyebrow">WHAT THE FIRST REAL CREDENTIAL FOUND</span>
-    <div class="card-title">This provider was written wrong, and the comment above it was confident</div>
-    <p>Until a real key existed, this page and the code both said the id carried an <code>anthropic.</code> prefix, and <code>bedrockModelId()</code> added one to every request. The first live call returned <code>404 not_found_error: The model 'anthropic.claude-opus-5' does not exist</code> — an <em>authenticated</em> response in Anthropic's own error envelope, rejecting only the model string. The prefix rule had been carried over from legacy Bedrock and written into a comment without the path ever running.</p>
-    <p>Two lessons are now enforced rather than remembered. The id is passed <strong>verbatim</strong>, so <code>OPENGONG_MODEL</code> is genuinely authoritative — while the code silently prefixed, that documented override could not even work around the bug. And <code>npm run check:model</code> now answers the question empirically: it sends a one-token request per candidate id in <em>both</em> forms and reports which the endpoint resolves, distinguishing "id not recognised" from "id fine, account cannot use it". §08 had this provider marked <em>Blocked · never executed</em> the whole time; that label was carrying real weight.</p>
+    <div class="card-title">The prefix was right; the reason given for it was not</div>
+    <p>The first live call returned <code>404 not_found_error: The model 'anthropic.claude-opus-5' does not exist</code>. That reads like a naming bug and it is not: the request was signed, accepted and answered, and the id format is the documented one for Bedrock. A well-formed id returning 404 means <strong>the region or the account cannot serve that model</strong> — so the levers are <code>AWS_REGION</code> and model access, not the string.</p>
+    <p>It was briefly "fixed" the wrong way here, by removing the prefix on the reasoning that a Messages-API surface must take first-party ids. That inference does not hold, and it is worth stating because it is tempting: Mantle serves the same Messages API shape as first-party <em>and</em> takes the <code>anthropic.</code> prefix — those are independent properties. Bare ids belong to Claude Platform on AWS, a different offering. Meanwhile the original prefix, though correct, had been written from recall and never executed; §08 carried this provider as <em>Blocked · never executed</em> throughout, and that label was doing real work.</p>
+    <p>The durable fix is a tool rather than a better comment. <code>npm run check:model</code> sends a one-token request per candidate id in <strong>both</strong> forms and reports which resolve, separating "not offered in this region" from "offered but not enabled for you". It also refuses to conclude anything about naming when every candidate is missing, because that result carries no information about the prefix.</p>
   </div>
 
-  <p>Still unverified end-to-end until a model call actually succeeds: whether <code>messages.parse()</code> behaves identically on Mantle, and whether <code>output_config.effort</code> is accepted there. Flagged rather than assumed — which is exactly the habit that made the id bug survive as long as it did.</p>
+  <p>Still unverified end-to-end until a model call actually succeeds: whether <code>messages.parse()</code> behaves identically on Mantle, and whether <code>output_config.effort</code> is accepted there. Flagged rather than assumed — the habit that would have caught both of the mistakes above.</p>
 
   <h2 id="provenance">Provenance enforcement</h2>
 

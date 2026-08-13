@@ -2,27 +2,37 @@
  * Extraction provider: Claude on AWS Bedrock.
  *
  * Uses the **Mantle** client — the Messages-API endpoint
- * (`https://bedrock-mantle.{region}.api.aws/anthropic`). This is deliberate, because there are two
- * AWS integrations and only one of them works here:
+ * (`https://bedrock-mantle.{region}.api.aws/anthropic`). Three AWS surfaces are easy to confuse,
+ * and the difference is the model-id format:
  *
- *   • Legacy `InvokeModel`/`Converse`, whose ids are ARN-versioned and `anthropic.`-prefixed
- *     (`anthropic.claude-...-v1:0`) — a different product, and Claude Opus 5 has no such id.
- *   • Mantle, an Anthropic **Messages API** surface — this one. Its ids are the plain first-party
- *     strings: `claude-opus-5`, with **NO** provider prefix.
+ *   • Legacy `InvokeModel`/`Converse` — ARN-versioned ids (`anthropic.claude-...-v1:0`), different
+ *     request shape. Not used here.
+ *   • **Mantle — Claude in Amazon Bedrock. THIS ONE.** Serves the same Messages API shape as
+ *     first-party, and ids carry an `anthropic.` **provider prefix**: `anthropic.claude-opus-5`.
+ *   • Claude Platform on AWS — `AnthropicAws` on `aws-external-anthropic.{region}.api.aws`,
+ *     Anthropic-operated, **bare** ids. A separate product; not this client.
  *
- * MODEL IDS ARE BARE HERE, and an earlier version of this file got that wrong in a way worth
- * recording. It applied `anthropic.` to every id, and the comment in this spot confidently
- * explained why that was correct. It was not: the first real request returned
- * `404 not_found_error: The model 'anthropic.claude-opus-5' does not exist` — an authenticated
- * response, in Anthropic's own error envelope, rejecting only the model string. The prefix rule was
- * carried over from legacy Bedrock and written into a comment without the path ever being executed,
- * while §08 of the docs listed this provider as "Blocked · never executed" the whole time. If you
- * are tempted to add a prefix back, run `npm run check:model` first — it will tell you.
+ * THE PREFIX IS REQUIRED HERE, and it took two opposite mistakes to establish that, both worth
+ * recording because the reasoning that produced them is seductive:
  *
- * What the SDK itself says (`node_modules/@anthropic-ai/bedrock-sdk/mantle-client.d.ts`): "Only the
- * `messages` and `beta.messages` resources are supported", and it wires up the same
- * `Resources.Messages` as the first-party client. So `messages.parse` and structured outputs behave
- * exactly as they do first-party — which is why this provider needs no JSON repair path.
+ *  1. The original prefix was correct, but its comment was written from recall without the path
+ *     ever being executed — §08 carried this provider as "Blocked · never executed" throughout.
+ *     Right answer, unearned.
+ *  2. It was then *removed*, on the inference that a Messages-API surface must take first-party
+ *     ids. That does not follow, and the authoritative doc pre-empts it in one sentence: Mantle
+ *     "serves the same Messages API shape — but model IDs carry an `anthropic.` provider prefix",
+ *     with an explicit mapping `claude-opus-5` → `anthropic.claude-opus-5` and the warning "do not
+ *     generate a first-party `claude-*` ID for a Bedrock client — it will 400". The bare-id rule
+ *     belongs to Claude Platform on AWS, a *different* offering whose docs say so on their first
+ *     line. Messages-shaped and bare-id are independent properties.
+ *
+ * So a 404 on `anthropic.claude-opus-5` is a well-formed id the account or region cannot serve —
+ * not a naming problem. `npm run check:model` distinguishes those two empirically; prefer it over
+ * anyone's reading, including this comment's.
+ *
+ * Structured outputs: the SDK wires the same `Resources.Messages` as the first-party client
+ * (`mantle-client.d.ts` — "only the `messages` and `beta.messages` resources are supported"), so
+ * `messages.parse` behaves as it does first-party and this provider needs no JSON repair path.
  *
  * Credentials resolve automatically, by the SDK's own precedence:
  *   apiKey arg > awsAccessKey/awsSecretAccessKey > AWS_BEARER_TOKEN_BEDROCK > default AWS chain
@@ -44,6 +54,14 @@ import {
   extractParams,
   toExtractResult,
 } from './extract-shared';
+
+/**
+ * Bedrock ids carry the `anthropic.` provider prefix. An id that already has one is passed through
+ * untouched, so `OPENGONG_MODEL` can name either form and still mean what it says.
+ */
+export function bedrockModelId(model: string): string {
+  return model.startsWith('anthropic.') ? model : `anthropic.${model}`;
+}
 
 function hasAwsCredentials(): boolean {
   return Boolean(
@@ -111,11 +129,7 @@ export function bedrockExtractor(): ExtractProvider {
       // container/IRSA roles all work without a code change.
       const client = new AnthropicBedrockMantle({ awsRegion: region });
 
-      // The configured id is sent VERBATIM. Nothing here rewrites it — see the header comment.
-      // `OPENGONG_MODEL` is therefore genuinely authoritative, which matters: while this function
-      // silently prefixed ids, setting OPENGONG_MODEL=claude-opus-5 still sent
-      // `anthropic.claude-opus-5`, so the documented override could not work around the bug.
-      const model = REGISTRY_CONFIG.extractModel;
+      const model = bedrockModelId(REGISTRY_CONFIG.extractModel);
 
       try {
         const res = await client.messages.parse({
@@ -133,12 +147,15 @@ export function bedrockExtractor(): ExtractProvider {
         // on seeing 404 is to re-check the keys.
         if (/not_found_error|does not exist|404/i.test(msg)) {
           throw new Error(
-            `The endpoint accepted your credentials but does not recognise the model "${model}" ` +
-              `in ${region}. This is not an auth failure — the request was signed and answered.\n` +
-              `  • Run \`npm run check:model\` to see which ids this account actually accepts.\n` +
-              `  • Then set OPENGONG_MODEL to one of them.\n` +
-              `  • Note ids on this endpoint are BARE (claude-opus-5); an "anthropic." prefix is ` +
-              `legacy Bedrock InvokeModel and will 404 here.\n` +
+            `Bedrock has no "${model}" available in ${region}.\n` +
+              `This is NOT an auth failure — the request was signed, accepted and answered, and the ` +
+              `id format is correct for Bedrock (the "anthropic." prefix is required here).\n` +
+              `So the variable is the region or model access, not the name:\n` +
+              `  • Run \`npm run check:model\` — it probes every candidate id and separates ` +
+              `"not offered here" from "offered but not enabled for you".\n` +
+              `  • Try a region that serves this model (us-east-1 / us-west-2) and enable Anthropic ` +
+              `model access there in the Bedrock console.\n` +
+              `  • Or pick a model the region does serve: OPENGONG_MODEL=claude-sonnet-5.\n` +
               `Original: ${msg}`,
           );
         }
