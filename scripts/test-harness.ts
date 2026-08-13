@@ -348,6 +348,16 @@ async function main() {
     check('ftyp (m4a/mp4) is detected',
       sniffAudioFormat(new Uint8Array([0, 0, 0, 0x20, 0x66, 0x74, 0x79, 0x70, 0x4d, 0x34, 0x41, 0x20]))?.mime === 'audio/mp4');
 
+    // Both AIFF brands. AIFC is the one that matters: it is what `say -o x.aiff` emits with no
+    // format flags, so recognising only AIFF missed the variant macOS produces by default.
+    const aiffHdr = (brand: string) =>
+      new Uint8Array([0x46, 0x4f, 0x52, 0x4d, 0, 1, 0xcb, 0x42, ...[...brand].map((c) => c.charCodeAt(0))]);
+    check('plain AIFF is detected', sniffAudioFormat(aiffHdr('AIFF'))?.ext === 'aiff');
+    check('AIFF-C is detected too (what `say` emits by default)',
+      sniffAudioFormat(aiffHdr('AIFC'))?.ext === 'aiff', String(sniffAudioFormat(aiffHdr('AIFC'))?.ext));
+    check('a FORM container of some other brand is not claimed as audio',
+      sniffAudioFormat(aiffHdr('XXXX')) === null);
+
     // Unknown or truncated input must not block an upload — fall back to the old behaviour.
     check('an unrecognised container sniffs as null', sniffAudioFormat(new Uint8Array(16)) === null);
     check('too-short input sniffs as null', sniffAudioFormat(new Uint8Array([1, 2, 3])) === null);

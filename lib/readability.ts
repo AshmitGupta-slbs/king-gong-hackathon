@@ -107,11 +107,22 @@ export function readable(text: string, extraProperNouns: string[] = []): string 
 // ─────────────────────────────────────────────────────────────────────────────
 // SPOKEN DIGIT RUNS — the one case where changing words is the correct call
 //
-// `numerals: true` is silently ignored by PyAI's transcription-jobs endpoint (verified two ways;
-// see docs/api-truth.md). So Hear reads figures out digit by digit and we get them as words:
-// pricing-pushback contains "the number is one four oh oh a seat" and "under five oh oh oh".
-// The product's entire pitch is that Gong costs $1,400 a seat, so "one four oh oh" in the
-// flagship sample is not a cosmetic nit — it reads as a broken product.
+// Hear's digit rendering is unreliable and NOT controllable from the request. `pricing-pushback`
+// comes back containing "the number is one four oh oh a seat" and "under five oh oh oh", while the
+// product's entire pitch is that Gong costs $1,400 a seat — so this is not a cosmetic nit, it reads
+// as a broken product.
+//
+// DO NOT try to fix this by setting `numerals: true` and regenerating the samples. That has been
+// tested directly: the flag changes nothing on these files. Toggling it across WAV 16k, WAV 22k and
+// AIFC 22k left the output identical each time, and re-running the committed pricing-pushback bytes
+// with the flag on reproduces "one four oh oh" exactly as committed. Meanwhile a short clean mono
+// clip of the same sentence returns "1400" with no flag at all.
+//
+// So it is deterministic per file, and the flag is simply not the variable — something about length,
+// mono vs stereo, `channel:true`, or surrounding context is, and which one is UNTESTED. That is
+// precisely why this is fixed here, deterministically, at the display boundary: we cannot ask the
+// API for the rendering we want, so we normalise what it gives us and prove we did not change the
+// meaning. See docs/api-truth.md for the full matrix.
 //
 // `readable()` above cannot fix this: it is word-preserving by design and its `sameWords` guard
 // would reject the change. Rather than weaken that guard, this is a SEPARATE pass with its own,

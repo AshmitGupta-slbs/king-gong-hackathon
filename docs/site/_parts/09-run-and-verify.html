@@ -8,12 +8,12 @@
 
   <div class="glance">
     <p><strong>In one line:</strong> <code>npm install &amp;&amp; npm run dev</code> — that is the whole setup. No key, no signup, no database server, nothing to compile.</p>
-    <p>Then <code>npm run verify</code> runs all 121 suite checks plus the 23-item ship checklist. Expect exactly one red line: the provenance gate, which stays red until a model credential is wired in.</p>
+    <p>Then <code>npm run verify</code> runs all 124 suite checks plus the 23-item ship checklist. Expect exactly one red line: the provenance gate, which stays red until a model credential is wired in.</p>
   </div>
 
   <h2 id="setup">Setup</h2>
 
-  <p>Requires <strong>Node 20.9+</strong>. Nothing else.</p>
+  <p>Requires <strong>Node 22.5+</strong> — for the built-in <code>node:sqlite</code>, which is why there is no database to install and nothing to compile. Nothing else. The version is declared in <code>engines</code> and <code>.nvmrc</code>; on an older Node the app boots and then fails on the first query.</p>
 
   <pre style="background:var(--ink); color:var(--paper); padding:18px; border-radius:6px; overflow-x:auto; font-size:13px; font-family:var(--mono);">git clone &lt;repo&gt; &amp;&amp; cd opengong-lite
 npm install
