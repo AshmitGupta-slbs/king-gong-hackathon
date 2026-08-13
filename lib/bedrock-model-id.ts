@@ -83,70 +83,77 @@ export class BedrockModelIdError extends Error {
 }
 
 /**
- * The account id that goes into the ARN.
+ * THIS MODULE IS PURE. It reads no environment, opens no socket, and imports no vendor SDK.
  *
- * DELIBERATE DIVERGENCE FROM THE REFERENCE. Upstream falls back to a one-shot STS
- * `get_caller_identity()` via boto3 when `AWS_ACCOUNT_ID` is unset, and — importantly — returns the
- * *unexpanded* id with only a `logger.warning` when it cannot resolve one. Its own tests cover that
- * path (`test_degrades_when_account_unresolvable`).
+ * Only a bare application-inference-profile id needs an AWS account id, and learning that account
+ * means AWS credentials and a signed STS call — which belongs with the Bedrock provider, behind the
+ * boundary `check:ship` enforces, not in a string-normalisation module. So the account arrives as an
+ * argument and the caller decides where it came from.
  *
- * We do neither. An STS call means adding an AWS SDK to a repo whose entire setup claim is that a
- * clone compiles nothing, and degrading silently means shipping a request we already know will fail
- * with a 404 that looks like a region problem — which is precisely the confusion that cost this
- * project a day. So: read the env var, and throw with the fix in the message if it is missing.
+ * The practical benefit is that every shape rule here is testable with no network and no mocking.
  */
-function accountId(): string {
-  const fromEnv = process.env.AWS_ACCOUNT_ID?.trim();
-  if (fromEnv) return fromEnv;
-  throw new BedrockModelIdError(
-    'AWS_ACCOUNT_ID is not set, and it is needed to expand a bare application-inference-profile id ' +
-      'into an ARN.\n' +
-      '  • Set AWS_ACCOUNT_ID to the account that owns the profile, or\n' +
-      '  • set LLM_MODEL to the full ARN, a cross-region profile (global.anthropic.…), or a ' +
-      'foundation id (claude-sonnet-5).\n' +
-      'Sending the bare id through unexpanded would return a 404 indistinguishable from "this ' +
-      'region does not serve that model", so this fails here instead.',
-  );
+
+/**
+ * True when this value needs the AWS account id — i.e. it is a bare profile id, not a foundation
+ * model that merely looks like one.
+ *
+ * A foundation model named without its prefix (`claude-sonnet-5`) also contains none of `. : /`, so
+ * it would be misread as a profile id and expanded into a nonsense ARN. The reference never hits
+ * this because its Bedrock path is always handed a profile id.
+ *
+ * Exported so a caller can tell whether it is worth resolving an account at all — that is what keeps
+ * the STS call off every other code path.
+ */
+export function needsAccountId(model: string): boolean {
+  const m = (model ?? '').trim();
+  return isBareProfileId(m) && !/^claude-/i.test(m);
+}
+
+/** Every shape that resolves without knowing the account. */
+function resolveWithoutAccount(m: string): string {
+  if (isBareProfileId(m)) return foundationId(`anthropic.${m}`); // a bare `claude-*` name
+  if (m.startsWith('arn:')) return m; // 1 — already an ARN
+  if (/^(global|us|eu|apac)\./i.test(m)) return m; // 2 — cross-region inference profile
+  return foundationId(m); // 3 — foundation id, routed through a cross-region profile
 }
 
 /**
- * Resolve `LLM_MODEL` to the identifier Bedrock actually accepts.
+ * Resolve `LLM_MODEL` to the identifier Bedrock accepts.
  *
  * @param model the configured value, any of the four shapes above
- * @param region AWS region the profile lives in; required only for the bare-id case
+ * @param region needed only to build an inference-profile ARN
+ * @param accountId needed only for a BARE profile id. Pass `needsAccountId(model)` first to decide
+ *        whether resolving one is worth the effort.
  */
-export function bedrockModelId(model: string, region = process.env.AWS_REGION ?? process.env.AWS_DEFAULT_REGION): string {
+export function bedrockModelId(model: string, region?: string, accountId?: string | null): string {
   const m = (model ?? '').trim();
   if (!m) return m;
+  if (!needsAccountId(m)) return resolveWithoutAccount(m);
 
-  // 4 — bare application-inference-profile id. Checked FIRST, as upstream does, because the test is
-  // an absence of characters and every other shape is identified by their presence.
-  if (isBareProfileId(m)) {
-    // A foundation model named without its prefix (`claude-sonnet-5`) also contains none of
-    // `. : /`, so it would be misread as a profile id. Upstream never hits this because its Bedrock
-    // path is always given a profile id, but our own default is `claude-opus-5`, so it does. Treat a
-    // leading `claude-` as a foundation id and let the prefix rule below apply.
-    if (/^claude-/i.test(m)) return foundationId(`anthropic.${m}`);
-    const cached = resolved.get(m);
-    if (cached) return cached;
-    if (!region) {
-      throw new BedrockModelIdError(
-        `AWS_REGION is not set, and it is needed to expand the application-inference-profile id "${m}" into an ARN.`,
-      );
-    }
-    const arn = `arn:aws:bedrock:${region}:${accountId()}:application-inference-profile/${m}`;
-    resolved.set(m, arn);
-    return arn;
+  const cached = resolved.get(m);
+  if (cached) return cached;
+  if (!region) {
+    throw new BedrockModelIdError(
+      `AWS_REGION is not set, and it is needed to expand the application-inference-profile id "${m}" into an ARN.`,
+    );
   }
-
-  // 1 — already an ARN.
-  if (m.startsWith('arn:')) return m;
-
-  // 2 — cross-region inference profile.
-  if (/^(global|us|eu|apac)\./i.test(m)) return m;
-
-  // 3 — foundation id, routed through a cross-region profile.
-  return foundationId(m);
+  /**
+   * No account, no ARN. The reference sends the bare id through with a warning here; Bedrock then
+   * rejects it with a 404 that reads exactly like "this region does not serve that model" — the most
+   * misleading failure in this whole integration. Fail with the remedy instead.
+   */
+  if (!accountId) {
+    throw new BedrockModelIdError(
+      `Could not determine the AWS account id, needed to expand the application-inference-profile ` +
+        `id "${m}" into an ARN.\n` +
+        `  • AWS_ACCOUNT_ID is unset and sts:GetCallerIdentity in ${region} did not answer.\n` +
+        '  • Set AWS_ACCOUNT_ID, or set LLM_MODEL to the full profile ARN, or leave LLM_MODEL unset ' +
+        'to use the cross-region default — which needs no account id at all.',
+    );
+  }
+  const arn = `arn:aws:bedrock:${region}:${accountId}:application-inference-profile/${m}`;
+  resolved.set(m, arn);
+  return arn;
 }
 
 /** Test seam: the ARN cache is process-wide, so tests that vary region/account must clear it. */

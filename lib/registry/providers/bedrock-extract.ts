@@ -16,8 +16,13 @@
  * earlier version of this provider prefixed everything with `anthropic.`, which mangled a profile id
  * into `anthropic.3s3wyt6beb2x` and produced a 404 that reads exactly like a region problem.
  *
+ * `AWS_ACCOUNT_ID` and `LLM_MODEL` are both OPTIONAL — the default model is a cross-region inference
+ * profile that needs neither, and a bare profile id gets its account from STS. Requiring either of
+ * them, as an earlier version did, broke a configuration that works everywhere else.
+ *
  * Deliberate differences from the reference, both recorded because they are judgement calls:
- *   • A missing `AWS_ACCOUNT_ID` throws instead of sending the unexpanded id with a warning.
+ *   • When STS also cannot answer, we throw rather than sending the unexpanded id with a warning —
+ *     that path produces a 404 that reads like a region problem, which is worse than a clear stop.
  *   • We ask for structured output first; the reference only ever uses tool calling (see below).
  *
  * Also needed, and NOT something code can arrange: Anthropic model access must be enabled for the
@@ -26,7 +31,7 @@
 import { AnthropicBedrock } from '@anthropic-ai/bedrock-sdk';
 import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
 import { REGISTRY_CONFIG } from '..';
-import { bedrockModelId } from '@/lib/bedrock-model-id';
+import { bedrockModelId, needsAccountId } from '@/lib/bedrock-model-id';
 import type { ExtractProvider, ExtractRequest, ExtractResult } from '../types';
 import {
   buildExtractUserMessage,
@@ -69,6 +74,84 @@ function bedrockClient(region: string): AnthropicBedrock {
   return awsAccessKey && awsSecretKey
     ? new AnthropicBedrock({ awsRegion: region, awsAccessKey, awsSecretKey, awsSessionToken })
     : new AnthropicBedrock({ awsRegion: region });
+}
+
+/**
+ * Cached STS answer, failure included, so a broken lookup costs one call per process rather than one
+ * per request. `null` = asked and could not tell; `undefined` = not asked yet.
+ */
+let stsAccount: string | null | undefined;
+
+/** Test seam: lets the STS path be exercised without a network or credentials. */
+let stsTransport: typeof fetch | null = null;
+export function __setStsTransport(f: typeof fetch | null): void {
+  stsTransport = f;
+  stsAccount = undefined;
+}
+
+/**
+ * Learn the AWS account id, so a bare application-inference-profile id can be expanded to an ARN.
+ *
+ * `AWS_ACCOUNT_ID` wins; otherwise ask `sts:GetCallerIdentity`, which needs no IAM permission of its
+ * own and is what makes this safe to do automatically. That fallback is why the sibling services run
+ * with the variable blank — and why requiring it here was a regression, not a safety measure.
+ *
+ * Lives in the provider rather than in lib/bedrock-model-id.ts on purpose: signing needs AWS
+ * packages, and nothing outside `lib/registry/providers/` may import a vendor SDK. Signing is
+ * delegated to `@smithy/signature-v4` rather than hand-rolled, and every package used here is
+ * already installed as an `@anthropic-ai/bedrock-sdk` dependency, so none of this adds install
+ * weight.
+ *
+ * Never throws — a failure returns null and the caller reports it with the remedy.
+ */
+async function resolveAccountId(region: string): Promise<string | null> {
+  const fromEnv = process.env.AWS_ACCOUNT_ID?.trim();
+  if (fromEnv) return fromEnv;
+  if (stsAccount !== undefined) return stsAccount;
+
+  try {
+    const [{ SignatureV4 }, { fromNodeProviderChain }, { Sha256 }] = await Promise.all([
+      import('@smithy/signature-v4'),
+      import('@aws-sdk/credential-providers'),
+      import('@aws-crypto/sha256-js'),
+    ]);
+    const body = 'Action=GetCallerIdentity&Version=2011-06-15';
+    const hostname = `sts.${region}.amazonaws.com`;
+    const signed = await new SignatureV4({
+      service: 'sts',
+      region,
+      credentials: fromNodeProviderChain(),
+      sha256: Sha256,
+    }).sign({
+      method: 'POST',
+      protocol: 'https:',
+      hostname,
+      path: '/',
+      headers: { host: hostname, 'content-type': 'application/x-www-form-urlencoded; charset=utf-8' },
+      body,
+    });
+    const send = stsTransport ?? fetch;
+    const res = await send(`https://${hostname}/`, {
+      method: 'POST',
+      headers: signed.headers as Record<string, string>,
+      body,
+    });
+    // The response is a handful of XML elements; a regex beats adding a parser for one field.
+    stsAccount = /<Account>(\d+)<\/Account>/.exec(await res.text())?.[1] ?? null;
+  } catch {
+    stsAccount = null;
+  }
+  return stsAccount;
+}
+
+/**
+ * The model id Bedrock will actually be sent. Resolves an account only when the configured value
+ * needs one, so the common cases — the cross-region default, an ARN, a foundation id — never touch
+ * the network.
+ */
+export async function resolveBedrockModelId(model: string, region: string): Promise<string> {
+  const accountId = needsAccountId(model) ? await resolveAccountId(region) : null;
+  return bedrockModelId(model, region, accountId);
 }
 
 function hasAwsCredentials(): boolean {
@@ -216,33 +299,12 @@ export function bedrockExtractor(): ExtractProvider {
         );
       }
 
-      /**
-       * Bedrock requires LLM_MODEL to be set explicitly — no default.
-       *
-       * The registry's default is `claude-opus-5`, which is right for the first-party API and cannot
-       * work here: an account without provisioned throughput cannot invoke a foundation model
-       * on-demand at all, and Bedrock says so with a 400 telling you to use an inference profile.
-       * Falling back to a value we know the platform rejects just converts a missing setting into a
-       * confusing API error one layer later, which is what happened on the first deploy.
-       */
-      if (!process.env.LLM_MODEL?.trim()) {
-        throw new Error(
-          'LLM_MODEL is not set, and Bedrock has no usable default.\n' +
-            'Set it to one of:\n' +
-            '  • your application-inference-profile id (e.g. 3s3wyt6beb2x) — also needs ' +
-            'AWS_ACCOUNT_ID so it can be expanded to an ARN;\n' +
-            '  • the full profile ARN (arn:aws:bedrock:…:application-inference-profile/…) — needs ' +
-            'nothing else;\n' +
-            '  • a cross-region profile such as global.anthropic.claude-sonnet-4-6.\n' +
-            'A bare foundation id like claude-opus-5 is NOT usable on an account without ' +
-            'provisioned throughput — Bedrock rejects on-demand invocation of it.',
-        );
-      }
-
       const client = bedrockClient(region);
 
-      // Resolved by shape — a bare application-inference-profile id becomes a full ARN here.
-      const model = bedrockModelId(REGISTRY_CONFIG.extractModel, region);
+      // Resolved by shape — a bare application-inference-profile id becomes a full ARN here, which
+      // may require one cached STS call to learn the account. `LLM_MODEL` is optional: the registry
+      // default is already a cross-region inference profile and needs none of that.
+      const model = await resolveBedrockModelId(REGISTRY_CONFIG.extractModel, region);
       const userMessage = buildExtractUserMessage(req);
 
       try {

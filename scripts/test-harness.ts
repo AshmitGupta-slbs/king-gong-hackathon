@@ -11,7 +11,9 @@
  * Note there is no fake provider anywhere here. Failures are induced through real code paths — a
  * fixture that does not exist, a budget cap of one cent — so what passes is the shipping loop.
  */
-import { bedrockModelId, __clearBedrockModelIdCache } from '@/lib/bedrock-model-id';
+import { bedrockModelId, needsAccountId, __clearBedrockModelIdCache } from '@/lib/bedrock-model-id';
+import { REGISTRY_CONFIG } from '@/lib/registry';
+import { resolveBedrockModelId, __setStsTransport } from '@/lib/registry/providers/bedrock-extract';
 import { db, closeRun, getSegments, listRuns, openRun, reconcileOrphanRuns } from '@/lib/db';
 import { BudgetGovernor, DeadlineError, estimateTokens } from '@/lib/harness/budget';
 import { processCall } from '@/lib/harness/loop';
@@ -341,15 +343,17 @@ async function main() {
     // Mirrors agent-service/tests/test_bedrock_model_id.py. The bare-id case is the one that was
     // broken: LLM_MODEL=3s3wyt6beb2x was being mangled into anthropic.3s3wyt6beb2x, producing a 404
     // that reads exactly like "this region does not serve that model".
+    // The account is passed explicitly: this module is pure, reads no environment and opens no
+    // socket, so every shape rule below is asserted with no mocking at all.
     const prevAccount = process.env.AWS_ACCOUNT_ID;
-    process.env.AWS_ACCOUNT_ID = '123456789012';
+    const ACCT = '123456789012';
     __clearBedrockModelIdCache();
 
     check(
       'a bare application-inference-profile id expands to a full ARN',
-      bedrockModelId('3s3wyt6beb2x', 'us-east-1') ===
+      bedrockModelId('3s3wyt6beb2x', 'us-east-1', ACCT) ===
         'arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/3s3wyt6beb2x',
-      bedrockModelId('3s3wyt6beb2x', 'us-east-1'),
+      bedrockModelId('3s3wyt6beb2x', 'us-east-1', ACCT),
     );
 
     const arn = 'arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/abc';
@@ -387,28 +391,112 @@ async function main() {
       bedrockModelId('claude-sonnet-4-6', 'us-east-1') === 'global.anthropic.claude-sonnet-4-6',
       bedrockModelId('claude-sonnet-4-6', 'us-east-1'));
 
-    // Failing loudly is a deliberate divergence: the reference sends the unexpanded id through with
-    // a warning, which produces a 404 that looks like a region problem.
+    // Only a bare profile id needs an account. Everything else must never trigger a lookup, which is
+    // what keeps the STS call off the common paths.
+    check('only a bare profile id needs an account id',
+      needsAccountId('3s3wyt6beb2x') &&
+        !needsAccountId(arn) &&
+        !needsAccountId('global.anthropic.claude-sonnet-4-6') &&
+        !needsAccountId('claude-opus-5') &&
+        !needsAccountId(''));
+
+    // With no account available at all, only the bare-id shape fails — and it fails with the remedy
+    // rather than sending an id Bedrock will reject with a misleading 404.
     delete process.env.AWS_ACCOUNT_ID;
     __clearBedrockModelIdCache();
-    let threwOnMissingAccount = false;
-    let namesTheVar = false;
+    let threw = false;
+    let namesTheRemedy = false;
     try {
-      bedrockModelId('3s3wyt6beb2x', 'us-east-1');
+      bedrockModelId('3s3wyt6beb2x', 'us-east-1', null);
     } catch (e) {
-      threwOnMissingAccount = true;
-      namesTheVar = (e instanceof Error ? e.message : '').includes('AWS_ACCOUNT_ID');
+      threw = true;
+      const m = e instanceof Error ? e.message : '';
+      namesTheRemedy = m.includes('AWS_ACCOUNT_ID') && m.includes('cross-region default');
     }
-    check('a bare id with no AWS_ACCOUNT_ID throws rather than sending a broken id', threwOnMissingAccount);
-    check('and the error names the variable to set', namesTheVar);
+    check('a bare id with no resolvable account throws rather than sending a broken id', threw);
+    check('and the error names both remedies', namesTheRemedy);
 
-    // A missing account must NOT block the shapes that need no expansion.
-    check('an ARN still resolves with no account id set', bedrockModelId(arn, 'us-east-1') === arn);
-    check('a foundation id still resolves with no account id set',
-      bedrockModelId('claude-opus-5', 'us-east-1') === 'global.anthropic.claude-opus-5');
+    check('an ARN still resolves with no account id', bedrockModelId(arn, 'us-east-1', null) === arn);
+    check('a foundation id still resolves with no account id',
+      bedrockModelId('claude-opus-5', 'us-east-1', null) === 'global.anthropic.claude-opus-5');
+
+    // THE DEFAULT must be usable with nothing configured. It is a cross-region inference profile, so
+    // it needs no account, no ARN and no provisioned throughput — which is the whole reason a blank
+    // LLM_MODEL works. Asserted against the registry itself so the two cannot drift.
+    check('the registry default is a cross-region inference profile',
+      /^global\./.test(REGISTRY_CONFIG.extractModel), REGISTRY_CONFIG.extractModel);
+    check('and it resolves unchanged, needing no account id',
+      bedrockModelId(REGISTRY_CONFIG.extractModel, 'us-east-1', null) === REGISTRY_CONFIG.extractModel);
 
     if (prevAccount === undefined) delete process.env.AWS_ACCOUNT_ID;
     else process.env.AWS_ACCOUNT_ID = prevAccount;
+    __clearBedrockModelIdCache();
+  }
+
+  head('STS account lookup — one call, cached, and never fatal on its own');
+  {
+    const prevAccount = process.env.AWS_ACCOUNT_ID;
+    const prevKey = process.env.AWS_ACCESS_KEY_ID;
+    const prevSecret = process.env.AWS_SECRET_ACCESS_KEY;
+    delete process.env.AWS_ACCOUNT_ID;
+    /**
+     * Fake credentials so SigV4 has something to sign with — without them the credential chain
+     * throws and the STS path bails before the transport, which is how this test first failed.
+     * Deliberately NOT of the form AKIA…: `check:ship` scans committed files for that pattern, and a
+     * test fixture that trips the repo's own secret scanner is a bad trade for realism SigV4 does not
+     * require.
+     */
+    process.env.AWS_ACCESS_KEY_ID = 'test-access-key-id';
+    process.env.AWS_SECRET_ACCESS_KEY = 'test-secret-access-key';
+    __clearBedrockModelIdCache();
+
+    // Stub the transport so the signing path runs for real but nothing leaves the machine.
+    let calls = 0;
+    __setStsTransport(async () => {
+      calls++;
+      return new Response(
+        '<GetCallerIdentityResponse><GetCallerIdentityResult><Account>210987654321</Account>' +
+          '</GetCallerIdentityResult></GetCallerIdentityResponse>',
+        { status: 200 },
+      );
+    });
+
+    const first = await resolveBedrockModelId('3s3wyt6beb2x', 'us-east-1');
+    check('a bare id resolves via STS with AWS_ACCOUNT_ID unset',
+      first === 'arn:aws:bedrock:us-east-1:210987654321:application-inference-profile/3s3wyt6beb2x',
+      first);
+
+    const second = await resolveBedrockModelId('3s3wyt6beb2x', 'us-east-1');
+    check('a repeat resolution is cached — STS is called once', second === first && calls === 1, `calls=${calls}`);
+
+    // A shape that needs no account must not reach STS at all.
+    __setStsTransport(async () => {
+      calls++;
+      return new Response('<x/>', { status: 200 });
+    });
+    const callsBefore = calls;
+    await resolveBedrockModelId('global.anthropic.claude-sonnet-4-6', 'us-east-1');
+    await resolveBedrockModelId('claude-opus-5', 'us-east-1');
+    check('shapes that need no account never call STS', calls === callsBefore, `calls=${calls}`);
+
+    // An STS failure must surface as our explicit error, not an unexpanded id.
+    __clearBedrockModelIdCache();
+    __setStsTransport(async () => new Response('nope', { status: 403 }));
+    let stsFailureThrew = false;
+    try {
+      await resolveBedrockModelId('3s3wyt6beb2x', 'us-east-1');
+    } catch {
+      stsFailureThrew = true;
+    }
+    check('an STS failure throws rather than sending the bare id', stsFailureThrew);
+
+    __setStsTransport(null);
+    if (prevAccount === undefined) delete process.env.AWS_ACCOUNT_ID;
+    else process.env.AWS_ACCOUNT_ID = prevAccount;
+    if (prevKey === undefined) delete process.env.AWS_ACCESS_KEY_ID;
+    else process.env.AWS_ACCESS_KEY_ID = prevKey;
+    if (prevSecret === undefined) delete process.env.AWS_SECRET_ACCESS_KEY;
+    else process.env.AWS_SECRET_ACCESS_KEY = prevSecret;
     __clearBedrockModelIdCache();
   }
 
