@@ -1,0 +1,144 @@
+<!--title: 07 · Extraction &amp; providers-->
+<!--pill: Providers-->
+<!--toc: registry|The capability registry ;; providers|The eight providers ;; extraction|How extraction works ;; bedrock|Wiring up Bedrock ;; provenance|Provenance enforcement ;; stub|The keyword stub-->
+
+  <div class="page-eyebrow">§ 07 · Extraction &amp; providers</div>
+  <h1 class="page-title">Providers are <em>config, not code.</em></h1>
+  <p class="page-lede">Which model or API each step calls is a line of configuration. Steps ask a registry for "the current speech provider"; they never import a vendor SDK. That is what makes the zero-setup demo possible and the Bedrock swap a one-liner.</p>
+
+  <div class="glance">
+    <p><strong>In one line:</strong> three capabilities (speech-to-text, extraction, text-to-speech), eight providers behind them, resolved by <code>lib/registry/index.ts</code>. Extraction auto-detects which model credential you have and falls back to a loudly-labelled keyword stub if you have none.</p>
+    <p>The rule is enforced by a test: <code>check:ship</code> <strong>fails</strong> if any file outside <code>lib/registry/providers/</code> imports <code>@anthropic-ai/*</code>. A registry that can be bypassed is decoration.</p>
+  </div>
+
+  <h2 id="registry">The capability registry</h2>
+
+  <p>Every provider adapts its vendor's response into <em>our</em> data contract before returning. Nothing outside the providers directory ever sees a raw vendor payload — which is what turns a provider swap into a one-file change instead of a rewrite.</p>
+
+  <pre style="background:var(--ink); color:var(--paper); padding:18px; border-radius:6px; overflow-x:auto; font-size:13px; font-family:var(--mono);">// lib/registry/index.ts — ★ the one file you edit to swap a provider ★
+
+export const REGISTRY_CONFIG = {
+  stt:     (process.env.OPENGONG_STT     ?? 'pyai-jobs'),
+  extract: (process.env.OPENGONG_EXTRACT ?? detectExtractProvider()),
+  tts:     (process.env.OPENGONG_TTS     ?? 'macos-say'),
+
+  extractModel:  process.env.OPENGONG_MODEL  ?? 'claude-opus-5',
+  extractEffort: process.env.OPENGONG_EFFORT ?? 'high',
+  budget: { maxInputTokens: 180_000, maxUsd: 1.0, /* … */ },
+  supportThreshold: 0.18,
+  maxAttempts: 2,
+};</pre>
+
+  <p>Note that the gate's support threshold and the budget caps live here too. The reference spec asked for budget caps "in the capability registry layer", and keeping every knob on one surface means a demo can be retuned with environment variables and no rebuild.</p>
+
+  <h2 id="providers">The eight providers</h2>
+
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>Capability</th><th>Provider</th><th>Status</th><th>Role</th></tr></thead>
+      <tbody>
+        <tr><td rowspan="2"><strong>stt</strong></td><td><code>pyai-jobs</code></td><td><span class="chip teal">verified</span></td><td>PyAI Hear batch jobs. The default. Burns real minutes.</td></tr>
+        <tr><td><code>fixture</code></td><td><span class="chip teal">verified</span></td><td>Replays committed sample transcripts. No network, no key, no cost — this is what makes the zero-setup demo real.</td></tr>
+        <tr><td rowspan="3"><strong>extract</strong></td><td><code>claude</code></td><td><span class="chip mustard">never run</span></td><td>First-party Anthropic API. Needs <code>ANTHROPIC_API_KEY</code>.</td></tr>
+        <tr><td><code>bedrock</code></td><td><span class="chip mustard">never run</span></td><td>Claude on AWS Bedrock. Needs AWS credentials + model access.</td></tr>
+        <tr><td><code>stub-heuristic</code></td><td><span class="chip accent">not a model</span></td><td>Deterministic keyword rules. The current default because no credential exists. Loudly labelled everywhere.</td></tr>
+        <tr><td rowspan="2"><strong>tts</strong></td><td><code>macos-say</code></td><td><span class="chip teal">verified</span></td><td>Built-in macOS speech. Generates sample audio. Never on the request path.</td></tr>
+        <tr><td><code>pyai-speak</code></td><td><span class="chip mustard">partial</span></td><td>PyAI Speak. Works, but sandbox quota blocks sustained generation.</td></tr>
+        <tr><td colspan="4"><em>All eight resolve through lazy dynamic imports, so a provider you are not using never loads its SDK.</em></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>The <code>fixture</code> provider deserves a note, because it is the reason a stranger can clone this repo and see five analysed calls with no key. It replays <code>samples/&lt;id&gt;.stt.json</code> — and it reports <strong>no usage</strong>, because replaying a cached file burns nothing. Reporting fake minutes there would make the usage counter a lie, which is the one thing this product cannot afford.</p>
+
+  <h2 id="extraction">How extraction works</h2>
+
+  <p>PyAI's Recap would nominally do this job, but the sandbox key carries neither <code>recap:read</code> nor <code>recap:configure</code>, and Recap needs an org add-on. PyAI's own conversation-intelligence guide says to bring your own model for this step, so we do.</p>
+
+  <div class="grid-2">
+    <div class="card accent">
+      <span class="card-eyebrow">NO JSON REPAIR LOOP</span>
+      <div class="card-title">Schema-forced output</div>
+      <p><code>messages.parse()</code> with <code>output_config.format</code> guarantees a schema-valid object. There is <strong>no free-text JSON parsing and no parse-and-repair retry anywhere in this repo.</strong> The retry that does exist is for <em>semantic</em> failure — a citation that does not resolve.</p>
+    </div>
+    <div class="card teal">
+      <span class="card-eyebrow">DEFENCE IN DEPTH</span>
+      <div class="card-title">Re-validated at the boundary</div>
+      <p>The parsed output is re-checked against the Zod schema in the provider. Structured outputs should already guarantee the shape, but validating means a provider quirk fails <em>loudly there</em> rather than flowing into the gate and producing a confidently wrong result.</p>
+    </div>
+  </div>
+
+  <p>Both real providers share their prompt, request shape and response handling via <code>extract-shared.ts</code>. They differ only in client construction and model id — because the prompt is the part that decides whether citations resolve, and two copies drifting apart would mean two different products behind one gate.</p>
+
+  <p>One deliberate omission in the schema, explained fully in <a href="10-decisions-risks.html#no-enum">§10</a>: <code>segment_ids</code> is <strong>not</strong> enum-constrained to the call's real ids, even though it could be. Constraining it would make a fabricated citation structurally impossible — and would also mean the gate could never fire, which would cost us the one honest, visible proof that it works.</p>
+
+  <h2 id="bedrock">Wiring up Bedrock</h2>
+
+  <p>Written and type-checked, but never executed against real AWS. Three facts established without credentials:</p>
+
+  <ol class="steps">
+    <li data-step="1">
+      <span class="step-title">Use the Mantle client, not the legacy path</span>
+      <p>There are two Bedrock integrations and only one works here. Claude Opus 5 has <strong>no ARN-versioned model id</strong>, so it does not appear in the legacy <code>InvokeModel</code> model table at all. The working path is <code>AnthropicBedrockMantle</code> with the bare prefixed id <code>anthropic.claude-opus-5</code>.</p>
+    </li>
+    <li data-step="2">
+      <span class="step-title">Structured outputs are supported</span>
+      <p>Verified from the feature list, and <code>messages.parse</code> was confirmed present on the Mantle client by inspection. That was the only feature extraction depends on. Nothing this app uses is on Bedrock's unsupported list.</p>
+    </li>
+    <li data-step="3">
+      <span class="step-title">The constructor arg is <code>awsSecretAccessKey</code></span>
+      <p>Not <code>awsSecretKey</code>, which is what the legacy client and some documentation examples use. Found by inspecting the package rather than at 7am on demo day.</p>
+    </li>
+  </ol>
+
+  <pre style="background:var(--ink); color:var(--paper); padding:18px; border-radius:6px; overflow-x:auto; font-size:13px; font-family:var(--mono);"># Nothing to pass explicitly — the SDK resolves credentials and region itself.
+export AWS_ACCESS_KEY_ID=...
+export AWS_SECRET_ACCESS_KEY=...
+export AWS_REGION=us-east-1
+
+npm run extract:samples      # regenerates all five sets of notes</pre>
+
+  <p>One thing no code can arrange: <strong>Anthropic model access must be enabled in the Bedrock console for that region.</strong> The provider detects that failure and says so, rather than letting you debug the prompt:</p>
+
+  <pre style="background:var(--ink); color:var(--paper); padding:18px; border-radius:6px; overflow-x:auto; font-size:13px; font-family:var(--mono);">Bedrock denied access to anthropic.claude-opus-5 in us-east-1.
+Enable Anthropic model access in the Bedrock console for this region,
+and check the IAM principal can call bedrock:InvokeModel.</pre>
+
+  <p>Two things remain genuinely unverifiable until credentials exist, and are flagged as such rather than assumed: whether <code>messages.parse()</code> behaves identically end-to-end on Mantle, and whether <code>output_config.effort</code> is accepted there.</p>
+
+  <h2 id="provenance">Provenance enforcement</h2>
+
+  <p>The stub exists so that the UI, routes, export and harness verification were not blocked behind a credential. That creates an obvious hazard: stub output quietly becoming the demo. So provenance is enforced by tooling rather than by remembering.</p>
+
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>Mechanism</th><th>Where</th></tr></thead>
+      <tbody>
+        <tr><td><code>extracted_by</code> is persisted into every result file</td><td><code>samples/*.result.json</code></td></tr>
+        <tr><td><code>isRealModelExtractor()</code> — one definition of "real output"</td><td><code>lib/registry/index.ts</code>, read by both UI and ship check</td></tr>
+        <tr><td>A permanent banner and a <code>STUB EXTRACTOR</code> badge in the header</td><td>Home page and every call page</td></tr>
+        <tr><td><strong><code>npm run check:ship</code> fails</strong> while any shipped note is stub-produced</td><td><code>scripts/check-ship.ts</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="pull">
+    Presenting keyword output as model reasoning would be <strong>exactly the dishonesty this product points at Gong about</strong>. That is why it is a failing test and not a sticky note.
+  </div>
+
+  <h2 id="stub">What the keyword stub actually does</h2>
+
+  <p>For completeness, since it is what you see on screen today. It derives claims <em>from</em> the transcript using keyword rules — objection cues, competitor names, next-step cues — which means every citation resolves by construction, so the gate runs for real and the UI gets realistically-shaped data.</p>
+
+  <p>It is not a model. It does not reason about the call. Its summary opens with <em>"[Heuristic stub — no model was involved]"</em>, and it reports zero tokens, because it consumed none.</p>
+
+  <p>It also earns its keep as a demonstration that the registry works: swapping the extraction engine is one line of config, and nothing outside <code>lib/registry/providers/</code> changed to accommodate it.</p>
+
+  <div class="related">
+    <div class="related-label">Related sections</div>
+    <div class="related-grid">
+      <a href="08-status.html"><strong>08 · Built vs pending</strong><small>What this blocks</small></a>
+      <a href="09-run-and-verify.html"><strong>09 · Run &amp; verify</strong><small>Commands and env vars</small></a>
+      <a href="10-decisions-risks.html"><strong>10 · Decisions</strong><small>Why no enum constraint</small></a>
+    </div>
+  </div>

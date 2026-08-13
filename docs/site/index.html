@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>OpenGong Lite — Documentation</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,500;9..144,600;9..144,700&family=JetBrains+Mono:wght@400;500;600&family=Inter+Tight:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/style.css">
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.0/dist/mermaid.min.js"></script>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-inner">
+    <a href="index.html" class="brand">
+      <div class="brand-mark">OG</div>
+      <span>OpenGong Lite</span>
+    </a>
+    <div class="topbar-right">
+      <span class="pill">PyAI Hackathon</span>
+      <span>v1 · 10 sections</span>
+    </div>
+  </div>
+</div>
+
+<div class="layout no-toc">
+<aside class="sidebar">
+  <button class="mobile-nav-toggle" aria-label="Toggle navigation">☰ Sections</button>
+  <div class="sidebar-section">
+    <div class="sidebar-label">Start here</div>
+    <nav>
+      <a href="index.html" class="active"><span class="nav-num">00</span>Overview</a>
+      <a href="01-what-it-does.html"><span class="nav-num">01</span>What it does</a>
+    </nav>
+  </div>
+  <div class="sidebar-section">
+    <div class="sidebar-label">How it works</div>
+    <nav>
+      <a href="02-architecture.html"><span class="nav-num">02</span>Architecture</a>
+      <a href="03-data-contract.html"><span class="nav-num">03</span>Data contract</a>
+      <a href="04-citation-gate.html"><span class="nav-num">04</span>The citation gate</a>
+      <a href="05-harness.html"><span class="nav-num">05</span>The harness</a>
+    </nav>
+  </div>
+  <div class="sidebar-section">
+    <div class="sidebar-label">Reality</div>
+    <nav>
+      <a href="06-pyai-api-truth.html"><span class="nav-num">06</span>PyAI API truth</a>
+      <a href="07-extraction-providers.html"><span class="nav-num">07</span>Extraction &amp; providers</a>
+      <a href="08-status.html"><span class="nav-num">08</span>Built vs pending</a>
+      <a href="09-run-and-verify.html"><span class="nav-num">09</span>Run &amp; verify</a>
+      <a href="10-decisions-risks.html"><span class="nav-num">10</span>Decisions &amp; risks</a>
+    </nav>
+  </div>
+</aside>
+
+<main class="content">
+
+  <section class="hero">
+    <div>
+      <div class="page-eyebrow">Project Documentation · OpenGong Lite</div>
+      <h1>Deal notes <em>with receipts.</em></h1>
+      <p class="hero-sub">Upload a sales call. Get a transcript, a summary, objections, intent, next steps and a follow-up email — where every claim points at the exact line in the call that proves it. Claims that cannot be traced to a real line are deleted, not softened. This site explains what exists, how it works, and what is still unfinished.</p>
+    </div>
+    <aside class="hero-meta">
+      <div class="meta-row"><span class="meta-label">Status</span><span class="meta-value">Working · notes pending a model credential</span></div>
+      <div class="meta-row"><span class="meta-label">Sections</span><span class="meta-value">10 + overview</span></div>
+      <div class="meta-row"><span class="meta-label">Reading time</span><span class="meta-value">~4 min skim · 35 min deep</span></div>
+      <div class="meta-row"><span class="meta-label">Audience</span><span class="meta-value">Anyone (§01) · Engineers (§02–10)</span></div>
+    </aside>
+  </section>
+
+  <section>
+    <h2 id="in-one-minute">In one minute</h2>
+
+    <div class="glance">
+      <p><strong>The problem.</strong> Every meeting-notes tool writes you a summary. None of them let you check it. A confident paragraph about "budget concerns" is worthless if nobody can find where the prospect said it — and actively harmful if they never did.</p>
+      <p><strong>What we built.</strong> The same notes, plus a hard rule: <em>no proof, no claim.</em> Every objection, next step and intent label carries the transcript line it came from. A blocking gate checks each citation before you see anything. Click a claim in the UI and the audio jumps to the second it came from.</p>
+      <p><strong>The unusual part.</strong> The app shows you what it <em>threw away</em> — the claims the model produced that failed verification, with reasons. Notes you cannot audit are a confident guess.</p>
+    </div>
+
+    <div class="stat-row">
+      <div class="stat"><div class="stat-num">5.9k</div><div class="stat-label">Lines of TypeScript across 43 source files</div></div>
+      <div class="stat"><div class="stat-num">130</div><div class="stat-label">Automated checks passing, of 131 — the one red line is deliberate</div></div>
+      <div class="stat"><div class="stat-num">5</div><div class="stat-label">Sample calls committed — demo needs zero setup</div></div>
+      <div class="stat"><div class="stat-num">11s</div><div class="stat-label">Measured clone-to-running-app</div></div>
+    </div>
+  </section>
+
+  <section>
+    <h2 id="status-at-a-glance">Status at a glance</h2>
+    <p>One vocabulary is used consistently across this whole site, so nothing hides behind a vague word. Full detail in <a href="08-status.html">§08 Built vs pending</a>.</p>
+
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>Area</th><th>Status</th><th>What that means</th></tr></thead>
+        <tbody>
+          <tr><td>Transcription (PyAI Hear)</td><td><span class="chip teal">Working &amp; verified</span></td><td>Real batch jobs, both speaker-separation modes proven on real audio</td></tr>
+          <tr><td>The citation gate</td><td><span class="chip teal">Working &amp; verified</span></td><td>23 checks; blocks fabricated citations and logs every rejection</td></tr>
+          <tr><td>The seven-part harness</td><td><span class="chip teal">Working &amp; verified</span></td><td>39 checks that force the failures rather than reading the code</td></tr>
+          <tr><td>Web UI, export, share links</td><td><span class="chip teal">Working &amp; verified</span></td><td>Citation → audio seek confirmed in a real browser</td></tr>
+          <tr><td><strong>Note generation (the model step)</strong></td><td><span class="chip mustard">Blocked</span></td><td>Code written for both Anthropic and Bedrock, but <strong>never run</strong> — no credential yet. Notes currently come from a keyword stub, loudly labelled</td></tr>
+          <tr><td>Silence-fabrication risk on our ingest path</td><td><span class="chip accent">Untested</span></td><td>Proven on the streaming path; the batch path we actually use is unmeasured. See <a href="10-decisions-risks.html#silence">§10</a></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="pull">
+      The one thing to know before showing this to anyone: the notes on screen today were written by <strong>keyword rules, not a model</strong>. The tooling refuses to call that shippable — <code>npm run check:ship</code> fails on purpose until a real credential is wired in.
+    </div>
+  </section>
+
+  <section>
+    <h2 id="how-to-read-this">How to read this</h2>
+    <p><strong>Not technical?</strong> Read <a href="01-what-it-does.html">§01 What it does</a> and stop. It has no jargon and no code.</p>
+    <p><strong>Reviewing the engineering?</strong> §02 → §05 are the build. <a href="06-pyai-api-truth.html">§06</a> is what we learned about PyAI's API by probing it rather than trusting its docs — the most reusable thing here for other hackathon teams. <a href="10-decisions-risks.html">§10</a> is where the judgement calls and the unresolved problems live.</p>
+    <p><strong>Just want to run it?</strong> <a href="09-run-and-verify.html">§09</a>.</p>
+
+    <div class="toc-tiles">
+      <a class="toc-tile" href="01-what-it-does.html">
+        <span class="toc-tile-num">§ 01 · Plain English</span>
+        <h3>What it does</h3>
+        <p>The job after a sales call, why citations are the whole point, and a walk through one real call. No jargon.</p>
+      </a>
+      <a class="toc-tile" href="02-architecture.html">
+        <span class="toc-tile-num">§ 02 · Architecture</span>
+        <h3>How it is put together</h3>
+        <p>End-to-end flow, the request path, the file map, and why there are zero native dependencies.</p>
+      </a>
+      <a class="toc-tile" href="03-data-contract.html">
+        <span class="toc-tile-num">§ 03 · Contract</span>
+        <h3>The data contract</h3>
+        <p>One canonical definition of a segment and a claim — and why the model's output is only ever a <em>draft</em>.</p>
+      </a>
+      <a class="toc-tile" href="04-citation-gate.html">
+        <span class="toc-tile-num">§ 04 · The product</span>
+        <h3>The citation gate</h3>
+        <p>Two tiers, why one deletes and the other only flags, and the category error the tests caught.</p>
+      </a>
+      <a class="toc-tile" href="05-harness.html">
+        <span class="toc-tile-num">§ 05 · Loop depth</span>
+        <h3>The seven-part harness</h3>
+        <p>Named exits, blocking gates, aimed retries, budget governor — each one proven by forcing it to fire.</p>
+      </a>
+      <a class="toc-tile" href="06-pyai-api-truth.html">
+        <span class="toc-tile-num">§ 06 · Field notes</span>
+        <h3>PyAI API truth</h3>
+        <p>Everything the docs got wrong, measured against the live API. Stale scopes, two stream protocols, quota behaviour.</p>
+      </a>
+      <a class="toc-tile" href="07-extraction-providers.html">
+        <span class="toc-tile-num">§ 07 · Providers</span>
+        <h3>Extraction &amp; the registry</h3>
+        <p>Anthropic, Bedrock, or a keyword stub — swapped by one config line, with provenance enforced.</p>
+      </a>
+      <a class="toc-tile" href="08-status.html">
+        <span class="toc-tile-num">§ 08 · Reality check</span>
+        <h3>Built vs pending vs usable</h3>
+        <p>The honest matrix: what works, what is unverified, what is blocked, and what you can use right now.</p>
+      </a>
+      <a class="toc-tile" href="09-run-and-verify.html">
+        <span class="toc-tile-num">§ 09 · Operations</span>
+        <h3>Run it &amp; verify it</h3>
+        <p>Setup, every command, what each test suite actually proves, and the troubleshooting table.</p>
+      </a>
+      <a class="toc-tile" href="10-decisions-risks.html">
+        <span class="toc-tile-num">§ 10 · Judgement</span>
+        <h3>Decisions &amp; open risks</h3>
+        <p>Nine decisions with their reasoning — and the unresolved problem that could undermine the core claim.</p>
+      </a>
+    </div>
+  </section>
+
+  <section>
+    <h2 id="source-of-truth">Where the source of truth lives</h2>
+    <p>This site summarises. The repo files below are authoritative, and were written as the work happened rather than afterwards.</p>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>File</th><th>What it holds</th></tr></thead>
+        <tbody>
+          <tr><td><code>docs/api-truth.md</code></td><td>Every API assumption, probed against the live API. Where docs and API disagreed, the API won and the disagreement was recorded.</td></tr>
+          <tr><td><code>docs/decisions.md</code></td><td>The judgement calls, each with the alternative that was rejected and why.</td></tr>
+          <tr><td><code>docs/demo-script.md</code></td><td>Five demo beats, a failure playbook, and a "do not" list.</td></tr>
+          <tr><td><code>docs/vs-gong.md</code></td><td>The side-by-side, written under a rule: no invented competitor details.</td></tr>
+          <tr><td><code>lib/types.ts</code></td><td>The data contract. Nothing else in the repo may define a segment or a claim.</td></tr>
+          <tr><td><code>scripts/probe/*.py</code></td><td>Six standalone probes against PyAI, including the live-mic streaming rig.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+</main>
+</div>
+
+<footer class="site">
+  <span>OpenGong Lite — Documentation</span>
+  <span>10 sections · MIT licensed · runs on PyAI</span>
+</footer>
+<script src="assets/script.js"></script>
+
+</body>
+</html>

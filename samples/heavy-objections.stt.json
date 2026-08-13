@@ -1,0 +1,86 @@
+{
+  "segments": [
+    {
+      "id": "seg_000",
+      "speaker": "rep",
+      "start_ms": 0,
+      "end_ms": 6880,
+      "text": "thanks for the time priya i know your team has looked at tools like this before and it did not land",
+      "channel": 0
+    },
+    {
+      "id": "seg_001",
+      "speaker": "prospect",
+      "start_ms": 6800,
+      "end_ms": 14800,
+      "text": "that's right and i'll be honest with you i am skeptical we rolled out a call recording tool two years ago and adoption was terrible",
+      "channel": 1
+    },
+    {
+      "id": "seg_002",
+      "speaker": "rep",
+      "start_ms": 14800,
+      "end_ms": 16320,
+      "text": "what went wrong with it",
+      "channel": 0
+    },
+    {
+      "id": "seg_003",
+      "speaker": "prospect",
+      "start_ms": 16240,
+      "end_ms": 24800,
+      "text": "the reps felt surveilled it became a stig managers used in one to ones and within a quarter people were taking calls off platform to avoid it",
+      "channel": 1
+    },
+    {
+      "id": "seg_004",
+      "speaker": "rep",
+      "start_ms": 24800,
+      "end_ms": 32240,
+      "text": "that is the most common failure mode we see where does your team sit on the compliance side given you are in health care",
+      "channel": 0
+    },
+    {
+      "id": "seg_005",
+      "speaker": "prospect",
+      "start_ms": 32640,
+      "end_ms": 46640,
+      "text": "that is the other problem anything touching patient information has to clear our privacy office and they are slow and they say no a lot and frankly i do not have headcount to run another rollout my team is already stretched in covering two regions",
+      "channel": 1
+    },
+    {
+      "id": "seg_006",
+      "speaker": "rep",
+      "start_ms": 46720,
+      "end_ms": 53600,
+      "text": "for three things rep trist the privacy review and no bandwidth to drive it have i got that right",
+      "channel": 0
+    },
+    {
+      "id": "seg_007",
+      "speaker": "prospect",
+      "start_ms": 53760,
+      "end_ms": 61600,
+      "text": "that is the list if you can only solve one of them solve the privacy review because nothing else matters if we cannot get approval",
+      "channel": 1
+    },
+    {
+      "id": "seg_008",
+      "speaker": "rep",
+      "start_ms": 62320,
+      "end_ms": 70960,
+      "text": "me start there i will send the data processing terms and the deployment options including the one where nothing leaves your tenancy",
+      "channel": 0
+    },
+    {
+      "id": "seg_009",
+      "speaker": "prospect",
+      "start_ms": 70880,
+      "end_ms": 76720,
+      "text": "send it and i'll forward it to privacy i am not promising a timeline they move at their own pace",
+      "channel": 1
+    }
+  ],
+  "audio_seconds": 76.978,
+  "speakers": 2
+}

@@ -1,0 +1,134 @@
+{
+  "summary": "[Heuristic stub — no model was involved] 10-segment call. 2 concern(s) detected by keyword, 1 action(s), 3 flagged moment(s). Intent classified as \"price-sensitive\". Replace by running extraction against a real model before showing this to anyone.",
+  "intent": {
+    "label": "price-sensitive",
+    "segment_ids": [
+      "seg_003"
+    ],
+    "verdict": "verified",
+    "support": 0.5,
+    "evidence": [
+      {
+        "segment_id": "seg_003",
+        "speaker": "prospect",
+        "start_ms": 18800,
+        "end_ms": 34000,
+        "text": "honestly our vp came from a company that used gong and he trusts it it is the safe choice internally nobody gets fired for picking gong the thing that bothers me about gong is the price and that we would be paying for a whole revenue suite when we want maybe a third of it"
+      }
+    ]
+  },
+  "objections": [
+    {
+      "claim": "Prospect raised a concern: Honestly our vp came from a company that used gong and he trusts it it is…",
+      "segment_ids": [
+        "seg_003"
+      ],
+      "verdict": "verified",
+      "support": 0.6666666666666666,
+      "evidence": [
+        {
+          "segment_id": "seg_003",
+          "speaker": "prospect",
+          "start_ms": 18800,
+          "end_ms": 34000,
+          "text": "honestly our vp came from a company that used gong and he trusts it it is the safe choice internally nobody gets fired for picking gong the thing that bothers me about gong is the price and that we would be paying for a whole revenue suite when we want maybe a third of it"
+        }
+      ]
+    },
+    {
+      "claim": "Prospect raised a concern: Chorus was cheaper but the summaries were noticeably worse in our pilot my rep stopped reading…",
+      "segment_ids": [
+        "seg_005"
+      ],
+      "verdict": "verified",
+      "support": 0.75,
+      "evidence": [
+        {
+          "segment_id": "seg_005",
+          "speaker": "prospect",
+          "start_ms": 34960,
+          "end_ms": 41040,
+          "text": "chorus was cheaper but the summaries were noticeably worse in our pilot my rep stopped reading them by week two"
+        }
+      ]
+    }
+  ],
+  "next_steps": [
+    {
+      "claim": "Agreed action: That would help send me something i can put in front of him side by side…",
+      "segment_ids": [
+        "seg_009"
+      ],
+      "verdict": "verified",
+      "support": 0.7777777777777778,
+      "evidence": [
+        {
+          "segment_id": "seg_009",
+          "speaker": "prospect",
+          "start_ms": 63920,
+          "end_ms": 70960,
+          "text": "that would help send me something i can put in front of him side by side before our decision meeting on the twentieth"
+        }
+      ]
+    }
+  ],
+  "follow_up_email": {
+    "subject": "Following up on our call",
+    "body": "Thanks for the time today. Picking up on what you raised, I will follow up on the points we agreed and come back to you with the detail.",
+    "segment_ids": [
+      "seg_009"
+    ],
+    "verdict": "verified",
+    "support": 0,
+    "evidence": [
+      {
+        "segment_id": "seg_009",
+        "speaker": "prospect",
+        "start_ms": 63920,
+        "end_ms": 70960,
+        "text": "that would help send me something i can put in front of him side by side before our decision meeting on the twentieth"
+      }
+    ]
+  },
+  "key_moments": [
+    {
+      "type": "competitor_mention",
+      "segment_id": "seg_001",
+      "note": "Named: gong, chorus, fireflies",
+      "evidence": {
+        "segment_id": "seg_001",
+        "speaker": "prospect",
+        "start_ms": 8160,
+        "end_ms": 15840,
+        "text": "we are down to three u gong and chorus we looked at fireflies early on but it did not have the coaching side we wanted"
+      }
+    },
+    {
+      "type": "competitor_mention",
+      "segment_id": "seg_002",
+      "note": "Named: gong",
+      "evidence": {
+        "segment_id": "seg_002",
+        "speaker": "rep",
+        "start_ms": 15760,
+        "end_ms": 18720,
+        "text": "what is pulling you toward gong at the moment"
+      }
+    },
+    {
+      "type": "next_step",
+      "segment_id": "seg_009",
+      "note": "That would help send me something i can put in…",
+      "evidence": {
+        "segment_id": "seg_009",
+        "speaker": "prospect",
+        "start_ms": 63920,
+        "end_ms": 70960,
+        "text": "that would help send me something i can put in front of him side by side before our decision meeting on the twentieth"
+      }
+    }
+  ],
+  "run_status": "shipped",
+  "rejections": [],
+  "extracted_by": "stub-heuristic"
+}

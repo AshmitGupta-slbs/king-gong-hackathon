@@ -1,0 +1,167 @@
+<!--title: 09 · Run &amp; verify-->
+<!--pill: Operations-->
+<!--toc: setup|Setup ;; credentials|Adding credentials ;; scripts|Every command ;; suites|What each suite proves ;; probes|Running the probes ;; demo|Demoing it ;; trouble|Troubleshooting-->
+
+  <div class="page-eyebrow">§ 09 · Run &amp; verify</div>
+  <h1 class="page-title">Run it, then <em>check it.</em></h1>
+  <p class="page-lede">Two commands to a working app with five analysed calls. One more to prove the claims on the rest of this site rather than take them on faith.</p>
+
+  <div class="glance">
+    <p><strong>In one line:</strong> <code>npm install &amp;&amp; npm run dev</code> — that is the whole setup. No key, no signup, no database server, nothing to compile.</p>
+    <p>Then <code>npm run verify</code> runs all 108 suite checks plus the 23-item ship checklist. Expect exactly one red line: the provenance gate, which stays red until a model credential is wired in.</p>
+  </div>
+
+  <h2 id="setup">Setup</h2>
+
+  <p>Requires <strong>Node 20.9+</strong>. Nothing else.</p>
+
+  <pre style="background:var(--ink); color:var(--paper); padding:18px; border-radius:6px; overflow-x:auto; font-size:13px; font-family:var(--mono);">git clone &lt;repo&gt; &amp;&amp; cd opengong-lite
+npm install
+npm run dev
+# → http://localhost:3000</pre>
+
+  <p>Five fully-analysed sample calls are already there. That works with a completely empty environment because the sample audio, transcripts and notes are all committed, a PyAI sandbox key mints itself on first live use, and storage is Node's built-in SQLite — so there is no service to start and no native module to build.</p>
+
+  <p>Measured on a clean copy: <strong>5 s install, 6 s to serving, 11 s total.</strong> All pages 200, five calls loaded, and no PyAI key minted — because viewing bundled samples touches no network.</p>
+
+  <h2 id="credentials">Adding credentials</h2>
+
+  <p>Transcription needs nothing — the sandbox key handles it. Notes need a model. The provider is auto-detected from whatever is present.</p>
+
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>Set this</th><th>Provider selected</th></tr></thead>
+      <tbody>
+        <tr><td><code>ANTHROPIC_API_KEY</code></td><td><code>claude</code> — first-party</td></tr>
+        <tr><td><code>AWS_ACCESS_KEY_ID</code> + <code>AWS_SECRET_ACCESS_KEY</code> + <code>AWS_REGION</code></td><td><code>bedrock</code> — also needs Anthropic model access enabled in the Bedrock console</td></tr>
+        <tr><td>Neither</td><td><code>stub-heuristic</code> — keyword rules, loudly labelled, not shippable</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <pre style="background:var(--ink); color:var(--paper); padding:18px; border-radius:6px; overflow-x:auto; font-size:13px; font-family:var(--mono);">export AWS_ACCESS_KEY_ID=...  AWS_SECRET_ACCESS_KEY=...  AWS_REGION=us-east-1
+npm run extract:samples     # regenerate all five sets of notes
+npm run check:ship          # should now pass fully</pre>
+
+  <p><code>extract:samples</code> deliberately reuses the committed transcripts, so it costs no TTS and burns no PyAI minutes. <code>.env.example</code> documents every option including the gate threshold and budget caps.</p>
+
+  <h2 id="scripts">Every command</h2>
+
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>Command</th><th>What it does</th><th>Costs</th></tr></thead>
+      <tbody>
+        <tr><td><code>npm run dev</code></td><td>Start the app</td><td>nothing</td></tr>
+        <tr><td><code>npm run verify</code></td><td>All three suites + ship checklist</td><td>nothing</td></tr>
+        <tr><td><code>npm run test:gate</code></td><td>21 citation-gate checks</td><td>nothing</td></tr>
+        <tr><td><code>npm run test:harness</code></td><td>39 forced-failure harness checks</td><td>nothing</td></tr>
+        <tr><td><code>npm run test:readability</code></td><td>17 word-preservation checks</td><td>nothing</td></tr>
+        <tr><td><code>npm run check:ship</code></td><td>Pass/fail ship gates, incl. provenance and audio drift</td><td>nothing</td></tr>
+        <tr><td><code>npm run extract:samples</code></td><td>Re-run notes over existing transcripts</td><td>model tokens</td></tr>
+        <tr><td><code>npm run samples</code></td><td>Rebuild everything: audio + transcripts + notes</td><td>TTS + PyAI minutes + tokens</td></tr>
+        <tr><td><code>npm run samples -- &lt;id&gt; …</code></td><td>Rebuild only named calls — finish a partial run without re-burning quota</td><td>as above, scoped</td></tr>
+        <tr><td><code>npm run reindex:samples</code></td><td>Rebuild the manifest from files on disk</td><td>nothing</td></tr>
+        <tr><td><code>npm run build</code></td><td>Production build</td><td>nothing</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>The split between <code>samples</code> and <code>extract:samples</code> is deliberate: regenerating notes is cheap and common, regenerating audio is expensive and rare. And <code>reindex:samples</code> exists because a run that dies partway leaves the manifest describing the previous state while the files describe the new one — which is how three calls once ended up paired with the wrong transcripts.</p>
+
+  <h2 id="suites">What each suite actually proves</h2>
+
+  <div class="grid-3">
+    <div class="card accent">
+      <span class="card-eyebrow">21 CHECKS</span>
+      <div class="card-title">test:gate</div>
+      <p>A fabricated segment id is dropped <em>and logged</em>. A real-but-unsupporting citation ships flagged. A partly-bad list keeps the good ids. Nothing surviving reports <code>failed</code>, not <code>partial</code>. Evidence text and timestamps come from the segment.</p>
+    </div>
+    <div class="card teal">
+      <span class="card-eyebrow">39 CHECKS</span>
+      <div class="card-title">test:harness</div>
+      <p>Budgets throw before the call, naming the cap. Retries are capped and carry the reason forward. A <code>DeadlineError</code> is never retried. Locks serialise and release. A killed run reconciles to <code>failed</code>. All four exit statuses demonstrated.</p>
+    </div>
+    <div class="card">
+      <span class="card-eyebrow">17 CHECKS</span>
+      <div class="card-title">test:readability</div>
+      <p>Casing, acronyms and proper nouns are fixed; and the property that matters — <strong>all 50 real transcript segments survive word-for-word identical</strong>, so the display layer can never alter evidence.</p>
+    </div>
+  </div>
+
+  <p>None of the harness tests use a fake provider. Failures are induced through real code paths — a fixture that does not exist, a one-token budget — so what passes is the shipping loop.</p>
+
+  <h2 id="probes">Running the probes</h2>
+
+  <p>Six Python probes under <code>scripts/probe/</code>, independent of the app. They hit the live API, so they cost quota.</p>
+
+  <pre style="background:var(--ink); color:var(--paper); padding:18px; border-radius:6px; overflow-x:auto; font-size:13px; font-family:var(--mono);"># python.org Python ships without a CA bundle — this is required
+export SSL_CERT_FILE=/etc/ssl/cert.pem
+
+python3 scripts/probe/probe.py           # H0: does a sandbox key get diarized segments?
+python3 scripts/probe/probe2.py          # both separation modes, model choice
+
+# the streaming rig has its own venv (sounddevice bundles PortAudio, no Homebrew needed)
+./scripts/probe/.venv/bin/python scripts/probe/hear_stream_test.py --mic
+./scripts/probe/.venv/bin/python scripts/probe/batch_silence_probe.py</pre>
+
+  <p>That last one is the unrun probe that would settle the open silence-fabrication question on our own ingest path. See <a href="10-decisions-risks.html#silence">§10</a>.</p>
+
+  <h2 id="demo">Demoing it</h2>
+
+  <p><code>docs/demo-script.md</code> has five beats, a failure playbook and a "do not" list. The short version:</p>
+
+  <ol class="steps">
+    <li data-step="1">
+      <span class="step-title">Open a sample — zero setup</span>
+      <p>No key, no signup, five analysed calls already there.</p>
+    </li>
+    <li data-step="2">
+      <span class="step-title">Upload a real call, early</span>
+      <p>Because the usage counter is the number people assume is fake. Watch it move.</p>
+    </li>
+    <li data-step="3">
+      <span class="step-title">Click a citation, then stop talking</span>
+      <p>Let the audio play those few seconds out loud. The silence is the moment the room understands it.</p>
+    </li>
+    <li data-step="4">
+      <span class="step-title">Press "Test the gate"</span>
+      <p>Fabricated claims get dropped and logged in front of the audience. Say plainly that the claims are hand-written and no model was called — we are demonstrating the gate, not faking a hallucination.</p>
+    </li>
+    <li data-step="5">
+      <span class="step-title">Export, then run the harness suite</span>
+      <p>Notes with quotes and timestamps inline, plus a table of everything the gate rejected.</p>
+    </li>
+  </ol>
+
+  <div class="card accent">
+    <span class="card-eyebrow">DO NOT</span>
+    <div class="card-title">Demo with the STUB EXTRACTOR badge showing</div>
+    <p>If that badge is visible, the notes came from keyword rules rather than a model. <code>check:ship</code> will refuse to pass. Fix the credential first.</p>
+  </div>
+
+  <h2 id="trouble">Troubleshooting</h2>
+
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>Symptom</th><th>Cause and fix</th></tr></thead>
+      <tbody>
+        <tr><td>Counter reads <code>0.0 min</code></td><td>Correct on a fresh clone. Bundled samples burn nothing, so they count nothing. Process a call and it moves.</td></tr>
+        <tr><td><code>STUB EXTRACTOR</code> badge showing</td><td>No model credential detected. Set one and run <code>npm run extract:samples</code>.</td></tr>
+        <tr><td>Audio will not autoplay</td><td>Browsers block autoplay until a user gesture. Press play once manually; the seek already happened.</td></tr>
+        <tr><td><code>429 daily_cap_exceeded</code> on Speak</td><td>Sandbox allowance for sustained synthesis. Hear is unaffected. Wait, or mint a fresh key (new org, fresh allowance).</td></tr>
+        <tr><td><code>CERTIFICATE_VERIFY_FAILED</code> in a probe</td><td>python.org Python has no CA bundle. <code>export SSL_CERT_FILE=/etc/ssl/cert.pem</code>. Node is unaffected.</td></tr>
+        <tr><td>Call page 500s after changing <code>lib/db.ts</code></td><td><code>node:sqlite</code> returns null-prototype rows and React Server Components refuse to serialize them. Rebuild plain objects explicitly in the read function.</td></tr>
+        <tr><td>Manifest disagrees with the files</td><td>A <code>samples</code> run died partway. <code>npm run reindex:samples</code>, then <code>POST /api/samples/load?force=1</code>.</td></tr>
+        <tr><td>Notes look thin on a call</td><td>Use <code>heavy-objections</code> or <code>competitor-named</code> — they have the most material.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="related">
+    <div class="related-label">Related sections</div>
+    <div class="related-grid">
+      <a href="08-status.html"><strong>08 · Built vs pending</strong><small>What these commands confirm</small></a>
+      <a href="05-harness.html"><strong>05 · The harness</strong><small>What the 39 checks assert</small></a>
+      <a href="06-pyai-api-truth.html"><strong>06 · API truth</strong><small>What the probes found</small></a>
+    </div>
+  </div>

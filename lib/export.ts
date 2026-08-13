@@ -1,0 +1,120 @@
+/**
+ * Export a processed call to Markdown.
+ *
+ * The bar this has to clear, from the reference spec: read it cold and ask whether it looks like
+ * something worth $1,400 a seat, or a JSON dump with headers slapped on. So: the receipts are
+ * inline as blockquotes with timestamps and speaker, unverified claims are visibly marked rather
+ * than quietly mixed in with the verified ones, and the follow-up email is ready to copy out.
+ */
+import { readableFor, renderedSpansFor } from './readability';
+import type { CallBundle, CitedClaim, Evidence } from './types';
+
+const ts = (ms: number) => {
+  const s = Math.floor(ms / 1000);
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+};
+
+/**
+ * Markdown export applies the readability pass (casing + terminal stop only, word-preserving —
+ * see lib/readability.ts) because this is the artifact a human reads or pastes into a CRM. The
+ * JSON export stays verbatim, so anything machine-read still gets exactly what Hear returned.
+ */
+export function toMarkdown(b: CallBundle): string {
+  const { call, extraction: ex, segments } = b;
+  const display = readableFor(call.title);
+  const quote = (e: Evidence) => `> **${e.speaker}** \`${ts(e.start_ms)}\` — ${display(e.text)}`;
+  const claimBlock = (c: CitedClaim): string => {
+    const flag = c.verdict === 'unverified' ? ' ⚠️ *unverified — cited line does not clearly support this*' : '';
+    return [`- **${display(c.claim)}**${flag}`, ...c.evidence.map((e) => `  ${quote(e)}`)].join('\n');
+  };
+  const out: string[] = [];
+
+  out.push(`# ${call.title}`, '');
+  out.push(
+    `\`${ts(call.duration_ms)}\` · ${segments.length} segments · ` +
+      `speaker separation: ${call.separation} · run status: **${ex?.run_status ?? 'not processed'}**`,
+    '',
+  );
+
+  if (!ex) {
+    out.push('_This call has been transcribed but not yet analysed._', '');
+  } else {
+    out.push('## Summary', '', ex.summary, '');
+
+    out.push('## Intent', '', `**${ex.intent.label}**`, '');
+    ex.intent.evidence.forEach((e) => out.push(quote(e), ''));
+
+    out.push('## Objections', '');
+    out.push(ex.objections.length ? ex.objections.map(claimBlock).join('\n\n') : '_None raised._');
+    out.push('');
+
+    out.push('## Next steps', '');
+    out.push(ex.next_steps.length ? ex.next_steps.map(claimBlock).join('\n\n') : '_None agreed._');
+    out.push('');
+
+    if (ex.key_moments.length) {
+      out.push('## Flagged moments', '');
+      for (const m of ex.key_moments) {
+        out.push(`- \`${ts(m.evidence.start_ms)}\` **${m.type.replace('_', ' ')}** — ${m.note}`);
+        out.push(`  ${quote(m.evidence)}`);
+      }
+      out.push('');
+    }
+
+    out.push('## Follow-up email', '');
+    if (ex.follow_up_email.verdict === 'unverified') {
+      out.push('> ⚠️ Draft could not be grounded in a specific line of the call — read before sending.', '');
+    }
+    out.push(`**Subject:** ${ex.follow_up_email.subject}`, '', ex.follow_up_email.body, '');
+
+    // Publishing our own rejections is the point. A notes product that hides what it threw away
+    // is asking for the same trust Gong asks for, which is the thing we are arguing against.
+    if (ex.rejections.length) {
+      out.push('## What the citation gate rejected', '');
+      out.push(
+        'Claims the model produced that did not survive verification. Shown because a summary ' +
+          'you cannot audit is just a confident guess.',
+        '',
+      );
+      out.push('| Field | Claim | Reason | Outcome |', '| --- | --- | --- | --- |');
+      for (const r of ex.rejections) {
+        out.push(
+          `| \`${r.field}\` | ${r.claim.replace(/\|/g, '\\|').slice(0, 90)} | ${r.reason.replace(/_/g, ' ')} | ${r.dropped ? '**dropped**' : 'flagged'} |`,
+        );
+      }
+      out.push('');
+    }
+  }
+
+  out.push('## Transcript', '');
+
+  // The UI marks digit-normalised spans with a tooltip; Markdown has no hover, so the same
+  // disclosure goes in a footnote. Without it this document silently shows figures as digits that
+  // the recording spelled out word by word.
+  const spansOf = renderedSpansFor(call.title);
+  const normalised: string[] = [];
+
+  for (const s of segments) {
+    for (const p of spansOf(s.text)) {
+      if (p.normalized && p.spoken) normalised.push(`\`${s.id}\` — **${p.text}** was spoken as "${p.spoken}"`);
+    }
+    out.push(`\`${ts(s.start_ms)}\` **${s.speaker}** ${display(s.text)}  <sub>${s.id}</sub>`, '');
+  }
+
+  if (normalised.length > 0) {
+    out.push(
+      '### A note on the numbers above',
+      '',
+      'PyAI Hear returns figures spelled out word by word, so a long enough run of digit words is',
+      'collapsed into the number it spells to keep the transcript readable. Those are the only places',
+      'this document differs in wording from the recording, and each one is listed here. The citation',
+      'gate checked the spoken words, not these digits:',
+      '',
+      ...normalised.map((n) => `- ${n}`),
+      '',
+    );
+  }
+
+  out.push('---', '', '_Generated by OpenGong Lite — every claim above links to the line that proves it. Runs on PyAI._');
+  return out.join('\n');
+}

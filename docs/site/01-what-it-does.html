@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>01 · What it does · OpenGong Lite</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,500;9..144,600;9..144,700&family=JetBrains+Mono:wght@400;500;600&family=Inter+Tight:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/style.css">
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.0/dist/mermaid.min.js"></script>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-inner">
+    <a href="index.html" class="brand">
+      <div class="brand-mark">OG</div>
+      <span>OpenGong Lite</span>
+    </a>
+    <div class="topbar-right">
+      <span class="pill">Plain English</span>
+      <span>§ 01</span>
+    </div>
+  </div>
+</div>
+
+<div class="layout">
+<aside class="sidebar">
+  <button class="mobile-nav-toggle" aria-label="Toggle navigation">☰ Sections</button>
+  <div class="sidebar-section">
+    <div class="sidebar-label">Start here</div>
+    <nav>
+      <a href="index.html"><span class="nav-num">00</span>Overview</a>
+      <a href="01-what-it-does.html" class="active"><span class="nav-num">01</span>What it does</a>
+    </nav>
+  </div>
+  <div class="sidebar-section">
+    <div class="sidebar-label">How it works</div>
+    <nav>
+      <a href="02-architecture.html"><span class="nav-num">02</span>Architecture</a>
+      <a href="03-data-contract.html"><span class="nav-num">03</span>Data contract</a>
+      <a href="04-citation-gate.html"><span class="nav-num">04</span>The citation gate</a>
+      <a href="05-harness.html"><span class="nav-num">05</span>The harness</a>
+    </nav>
+  </div>
+  <div class="sidebar-section">
+    <div class="sidebar-label">Reality</div>
+    <nav>
+      <a href="06-pyai-api-truth.html"><span class="nav-num">06</span>PyAI API truth</a>
+      <a href="07-extraction-providers.html"><span class="nav-num">07</span>Extraction &amp; providers</a>
+      <a href="08-status.html"><span class="nav-num">08</span>Built vs pending</a>
+      <a href="09-run-and-verify.html"><span class="nav-num">09</span>Run &amp; verify</a>
+      <a href="10-decisions-risks.html"><span class="nav-num">10</span>Decisions &amp; risks</a>
+    </nav>
+  </div>
+</aside>
+
+<main class="content">
+
+  <div class="page-eyebrow">§ 01 · No jargon, no code</div>
+  <h1 class="page-title">What it does, <em>plainly.</em></h1>
+  <p class="page-lede">This page is for anyone. If you have never opened the code and never intend to, this is the only page you need. Nothing here assumes you know what an API is.</p>
+
+  <div class="glance">
+    <p><strong>The short version.</strong> A salesperson finishes a call. They need three things written down: what happened, what the customer pushed back on, and what they promised to do next. This tool listens to the recording and writes those three things — and next to every single sentence it writes, it shows you the moment in the call that sentence came from.</p>
+    <p>You can click any sentence and hear the customer actually say it.</p>
+  </div>
+
+  <h2 id="the-problem">The problem it solves</h2>
+
+  <p>Tools that summarise meetings already exist, and they are fine. Here is what is wrong with all of them.</p>
+
+  <p>Imagine your notes say: <em>"The customer raised concerns about budget."</em> That might be exactly right. Or the customer might have said something vaguely near it and the tool rounded it up. Or the tool might have invented it entirely — this happens, and it happens most on the sentences that sound most confident.</p>
+
+  <p>You cannot tell which. To find out, you would have to listen to the whole call again, which is the thing the notes were supposed to save you from. So in practice people do one of two things: trust the notes and occasionally act on something false, or ignore the notes and listen anyway.</p>
+
+  <div class="pull">
+    A summary you cannot check is not a summary. It is <strong>a confident guess</strong> wearing the clothes of a fact.
+  </div>
+
+  <h2 id="what-we-do-differently">What this does differently</h2>
+
+  <p>Every sentence in the notes carries a receipt: a small tag showing which moment of the call it came from. Click the tag, and the recording jumps to that second and starts playing. You hear the customer say it, in their own voice, in about two seconds.</p>
+
+  <p>That changes the notes from something you trust to something you <em>check</em>. And checking one sentence takes two seconds instead of re-listening to forty minutes.</p>
+
+  <div class="grid-2">
+    <div class="card accent">
+      <span class="card-eyebrow">THE RULE</span>
+      <div class="card-title">No proof, no claim</div>
+      <p>Before you see the notes, the tool verifies that every sentence really does point at a real moment in this call. If a sentence points at a moment that does not exist, that sentence is <strong>deleted</strong>. Not softened, not hedged — removed.</p>
+    </div>
+    <div class="card teal">
+      <span class="card-eyebrow">THE UNUSUAL PART</span>
+      <div class="card-title">It shows you what it threw away</div>
+      <p>There is a panel listing the sentences that failed the check, and why. Most tools would hide this. We show it, because a tool that quietly discards its own mistakes is asking for exactly the trust we are arguing you should not give.</p>
+    </div>
+  </div>
+
+  <h2 id="walk-through">A walk through one call</h2>
+
+  <p>Here is a real call from the bundled examples — a software company weighing us against two competitors.</p>
+
+  <ol class="steps">
+    <li data-step="1">
+      <span class="step-title">The recording goes in</span>
+      <p>A 71-second sales call. The salesperson is on one side, the customer on the other.</p>
+    </li>
+    <li data-step="2">
+      <span class="step-title">It gets written out, with who said what</span>
+      <p>The call becomes text, split into ten numbered chunks, each labelled with who was speaking and when. Those numbers matter — they are what every receipt points at.</p>
+    </li>
+    <li data-step="3">
+      <span class="step-title">The notes get written</span>
+      <p>Summary, what the customer objected to, how interested they seem, what was agreed, and a draft follow-up email. Each one has to name the chunks it is based on.</p>
+    </li>
+    <li data-step="4">
+      <span class="step-title">Every claim gets checked</span>
+      <p>Does chunk 3 actually exist in this call? Does what the customer said in chunk 3 actually support this sentence? Anything that fails is dropped or visibly flagged.</p>
+    </li>
+    <li data-step="5">
+      <span class="step-title">You get notes you can click</span>
+      <p>One of the objections reads: <em>"The customer is worried about paying for a whole suite when they only want part of it."</em> Next to it: a tag reading <strong>0:18</strong>. Click it, and you hear them say <em>"the thing that bothers me about Gong is the price, and that we would be paying for a whole revenue suite when we want maybe a third of it."</em></p>
+    </li>
+  </ol>
+
+  <p>That last step is the entire product. Everything else in this documentation exists to make that click trustworthy.</p>
+
+  <h2 id="what-it-does-not-do">What it deliberately does not do</h2>
+
+  <p>This is a small tool that does one job. It is not trying to be the big expensive suite, and the things below are missing on purpose, not by accident.</p>
+
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>Not included</th><th>Why</th></tr></thead>
+      <tbody>
+        <tr><td>Coaching dashboards, deal boards, forecasting</td><td>That is what the big suites are for. If you need those, buy one — that is a real answer.</td></tr>
+        <tr><td>Automatic syncing into your CRM</td><td>You copy the notes out, or download them. Adding a sync is real work we chose not to spend the time on.</td></tr>
+        <tr><td>Team accounts and logins</td><td>It runs on one machine for one person right now.</td></tr>
+        <tr><td>Live note-taking during the call</td><td>It works on recordings, after the fact.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2 id="honest-caveats">Three things you should know</h2>
+
+  <p>Stated here rather than buried, because you would find them in five minutes anyway.</p>
+
+  <div class="grid-3">
+    <div class="card mustard">
+      <span class="card-eyebrow">RIGHT NOW</span>
+      <div class="card-title">The notes are not written by an AI yet</div>
+      <p>The part that writes the notes needs a paid credential we do not have wired up yet. Until then, notes come from simple word-matching rules — and the app says so, in orange, permanently. Everything else is real.</p>
+    </div>
+    <div class="card">
+      <span class="card-eyebrow">READING</span>
+      <div class="card-title">The transcript has no commas</div>
+      <p>The service that turns speech into text returns it in lowercase with no punctuation. We tidy up the capital letters, but we refuse to have an AI add commas, because that means letting an AI edit the evidence.</p>
+    </div>
+    <div class="card">
+      <span class="card-eyebrow">MEASUREMENT</span>
+      <div class="card-title">The usage counter starts at zero</div>
+      <p>It only counts real work. Opening one of the bundled examples costs nothing, so it counts nothing. It moves the moment you process a call of your own.</p>
+    </div>
+  </div>
+
+  <p>There is also one open problem that is more serious than these three, and it deserves its own explanation with the engineering context around it — see <a href="10-decisions-risks.html#silence">§10 Decisions &amp; risks</a>.</p>
+
+  <div class="related">
+    <div class="related-label">Where to go next</div>
+    <div class="related-grid">
+      <a href="08-status.html"><strong>08 · Built vs pending</strong><small>Exactly what works today</small></a>
+      <a href="09-run-and-verify.html"><strong>09 · Run &amp; verify</strong><small>Try it yourself in a minute</small></a>
+      <a href="02-architecture.html"><strong>02 · Architecture</strong><small>Start of the technical half</small></a>
+    </div>
+  </div>
+  <div class="page-nav">
+    <a href="index.html">
+      <span class="nav-direction">← Previous</span>
+      <span class="nav-title">00 · Overview</span>
+    </a>
+    <a href="02-architecture.html" class="next">
+      <span class="nav-direction">Next →</span>
+      <span class="nav-title">02 · Architecture</span>
+    </a>
+  </div>
+
+</main>
+
+<aside class="toc">
+  <div class="toc-label">On this page</div>
+  <ul>
+    <li><a href="#the-problem">The problem it solves</a></li>
+    <li><a href="#what-we-do-differently">What this does differently</a></li>
+    <li><a href="#walk-through">A walk through one call</a></li>
+    <li><a href="#what-it-does-not-do">What it does not do</a></li>
+    <li><a href="#honest-caveats">Three things to know</a></li>
+  </ul>
+</aside>
+</div>
+
+<footer class="site">
+  <span>OpenGong Lite — Documentation</span>
+  <span>§ 01 · What it does</span>
+</footer>
+<script src="assets/script.js"></script>
+
+</body>
+</html>

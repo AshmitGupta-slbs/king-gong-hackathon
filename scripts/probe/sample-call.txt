@@ -1,0 +1,8 @@
+# Sample discovery call. "speaker: text", one turn per line.
+# Deliberately includes a number and a competitor name — both are where ASR usually slips.
+rep: Hi Sarah, thanks for making the time today. I know you've been evaluating a few options.
+prospect: Yeah, we've been looking at Gong and one other tool, but the pricing came in around fourteen hundred a seat which is hard to justify.
+rep: That's fair. Can you tell me how many reps would actually be in the tool day to day?
+prospect: Realistically about twelve, maybe fifteen by Q4 if hiring goes to plan.
+rep: Got it. And is the main job here call review for coaching, or is it more about pushing data into your CRM?
+prospect: Honestly both, but the CRM sync is the part my ops lead cares about. If it doesn't write back to HubSpot cleanly it's a non-starter.

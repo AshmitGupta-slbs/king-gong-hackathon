@@ -1,0 +1,202 @@
+{
+  "summary": "[Heuristic stub — no model was involved] 10-segment call. 4 concern(s) detected by keyword, 3 action(s), 3 flagged moment(s). Intent classified as \"evaluating\". Replace by running extraction against a real model before showing this to anyone.",
+  "intent": {
+    "label": "evaluating",
+    "segment_ids": [
+      "seg_001"
+    ],
+    "verdict": "verified",
+    "support": 0,
+    "evidence": [
+      {
+        "segment_id": "seg_001",
+        "speaker": "prospect",
+        "start_ms": 6800,
+        "end_ms": 14800,
+        "text": "that's right and i'll be honest with you i am skeptical we rolled out a call recording tool two years ago and adoption was terrible"
+      }
+    ]
+  },
+  "objections": [
+    {
+      "claim": "Prospect raised a concern: That's right and i'll be honest with you i am skeptical we rolled out a call…",
+      "segment_ids": [
+        "seg_001"
+      ],
+      "verdict": "verified",
+      "support": 0.6666666666666666,
+      "evidence": [
+        {
+          "segment_id": "seg_001",
+          "speaker": "prospect",
+          "start_ms": 6800,
+          "end_ms": 14800,
+          "text": "that's right and i'll be honest with you i am skeptical we rolled out a call recording tool two years ago and adoption was terrible"
+        }
+      ]
+    },
+    {
+      "claim": "Prospect raised a concern: The reps felt surveilled it became a stig managers used in one to ones and within…",
+      "segment_ids": [
+        "seg_003"
+      ],
+      "verdict": "verified",
+      "support": 0.75,
+      "evidence": [
+        {
+          "segment_id": "seg_003",
+          "speaker": "prospect",
+          "start_ms": 16240,
+          "end_ms": 24800,
+          "text": "the reps felt surveilled it became a stig managers used in one to ones and within a quarter people were taking calls off platform to avoid it"
+        }
+      ]
+    },
+    {
+      "claim": "Prospect raised a concern: That is the other problem anything touching patient information has to clear our privacy office and…",
+      "segment_ids": [
+        "seg_005"
+      ],
+      "verdict": "verified",
+      "support": 0.75,
+      "evidence": [
+        {
+          "segment_id": "seg_005",
+          "speaker": "prospect",
+          "start_ms": 32640,
+          "end_ms": 46640,
+          "text": "that is the other problem anything touching patient information has to clear our privacy office and they are slow and they say no a lot and frankly i do not have headcount to run another rollout my team is already stretched in covering two regions"
+        }
+      ]
+    },
+    {
+      "claim": "Prospect raised a concern: That is the list if you can only solve one of them solve the privacy review…",
+      "segment_ids": [
+        "seg_007"
+      ],
+      "verdict": "verified",
+      "support": 0.6666666666666666,
+      "evidence": [
+        {
+          "segment_id": "seg_007",
+          "speaker": "prospect",
+          "start_ms": 53760,
+          "end_ms": 61600,
+          "text": "that is the list if you can only solve one of them solve the privacy review because nothing else matters if we cannot get approval"
+        }
+      ]
+    }
+  ],
+  "next_steps": [
+    {
+      "claim": "Agreed action: Send it and i'll forward it to privacy i am not promising a timeline they move…",
+      "segment_ids": [
+        "seg_009"
+      ],
+      "verdict": "verified",
+      "support": 0.75,
+      "evidence": [
+        {
+          "segment_id": "seg_009",
+          "speaker": "prospect",
+          "start_ms": 70880,
+          "end_ms": 76720,
+          "text": "send it and i'll forward it to privacy i am not promising a timeline they move at their own pace"
+        }
+      ]
+    },
+    {
+      "claim": "Agreed action: Me start there i will send the data processing terms and the deployment options including the…",
+      "segment_ids": [
+        "seg_008"
+      ],
+      "verdict": "verified",
+      "support": 0.8,
+      "evidence": [
+        {
+          "segment_id": "seg_008",
+          "speaker": "rep",
+          "start_ms": 62320,
+          "end_ms": 70960,
+          "text": "me start there i will send the data processing terms and the deployment options including the one where nothing leaves your tenancy"
+        }
+      ]
+    },
+    {
+      "claim": "Agreed action: That is the list if you can only solve one of them solve the privacy review…",
+      "segment_ids": [
+        "seg_007"
+      ],
+      "verdict": "verified",
+      "support": 0.75,
+      "evidence": [
+        {
+          "segment_id": "seg_007",
+          "speaker": "prospect",
+          "start_ms": 53760,
+          "end_ms": 61600,
+          "text": "that is the list if you can only solve one of them solve the privacy review because nothing else matters if we cannot get approval"
+        }
+      ]
+    }
+  ],
+  "follow_up_email": {
+    "subject": "Following up on our call",
+    "body": "Thanks for the time today. Picking up on what you raised, I will follow up on the points we agreed and come back to you with the detail.",
+    "segment_ids": [
+      "seg_009"
+    ],
+    "verdict": "verified",
+    "support": 0,
+    "evidence": [
+      {
+        "segment_id": "seg_009",
+        "speaker": "prospect",
+        "start_ms": 70880,
+        "end_ms": 76720,
+        "text": "send it and i'll forward it to privacy i am not promising a timeline they move at their own pace"
+      }
+    ]
+  },
+  "key_moments": [
+    {
+      "type": "objection",
+      "segment_id": "seg_001",
+      "note": "That's right and i'll be honest with you i am…",
+      "evidence": {
+        "segment_id": "seg_001",
+        "speaker": "prospect",
+        "start_ms": 6800,
+        "end_ms": 14800,
+        "text": "that's right and i'll be honest with you i am skeptical we rolled out a call recording tool two years ago and adoption was terrible"
+      }
+    },
+    {
+      "type": "objection",
+      "segment_id": "seg_003",
+      "note": "The reps felt surveilled it became a stig managers used…",
+      "evidence": {
+        "segment_id": "seg_003",
+        "speaker": "prospect",
+        "start_ms": 16240,
+        "end_ms": 24800,
+        "text": "the reps felt surveilled it became a stig managers used in one to ones and within a quarter people were taking calls off platform to avoid it"
+      }
+    },
+    {
+      "type": "next_step",
+      "segment_id": "seg_008",
+      "note": "Me start there i will send the data processing terms…",
+      "evidence": {
+        "segment_id": "seg_008",
+        "speaker": "rep",
+        "start_ms": 62320,
+        "end_ms": 70960,
+        "text": "me start there i will send the data processing terms and the deployment options including the one where nothing leaves your tenancy"
+      }
+    }
+  ],
+  "run_status": "shipped",
+  "rejections": [],
+  "extracted_by": "stub-heuristic"
+}

@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>05 · The harness · OpenGong Lite</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,500;9..144,600;9..144,700&family=JetBrains+Mono:wght@400;500;600&family=Inter+Tight:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/style.css">
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.0/dist/mermaid.min.js"></script>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-inner">
+    <a href="index.html" class="brand">
+      <div class="brand-mark">OG</div>
+      <span>OpenGong Lite</span>
+    </a>
+    <div class="topbar-right">
+      <span class="pill">Loop depth</span>
+      <span>§ 05</span>
+    </div>
+  </div>
+</div>
+
+<div class="layout">
+<aside class="sidebar">
+  <button class="mobile-nav-toggle" aria-label="Toggle navigation">☰ Sections</button>
+  <div class="sidebar-section">
+    <div class="sidebar-label">Start here</div>
+    <nav>
+      <a href="index.html"><span class="nav-num">00</span>Overview</a>
+      <a href="01-what-it-does.html"><span class="nav-num">01</span>What it does</a>
+    </nav>
+  </div>
+  <div class="sidebar-section">
+    <div class="sidebar-label">How it works</div>
+    <nav>
+      <a href="02-architecture.html"><span class="nav-num">02</span>Architecture</a>
+      <a href="03-data-contract.html"><span class="nav-num">03</span>Data contract</a>
+      <a href="04-citation-gate.html"><span class="nav-num">04</span>The citation gate</a>
+      <a href="05-harness.html" class="active"><span class="nav-num">05</span>The harness</a>
+    </nav>
+  </div>
+  <div class="sidebar-section">
+    <div class="sidebar-label">Reality</div>
+    <nav>
+      <a href="06-pyai-api-truth.html"><span class="nav-num">06</span>PyAI API truth</a>
+      <a href="07-extraction-providers.html"><span class="nav-num">07</span>Extraction &amp; providers</a>
+      <a href="08-status.html"><span class="nav-num">08</span>Built vs pending</a>
+      <a href="09-run-and-verify.html"><span class="nav-num">09</span>Run &amp; verify</a>
+      <a href="10-decisions-risks.html"><span class="nav-num">10</span>Decisions &amp; risks</a>
+    </nav>
+  </div>
+</aside>
+
+<main class="content">
+
+  <div class="page-eyebrow">§ 05 · The harness</div>
+  <h1 class="page-title">Seven parts, <em>all real.</em></h1>
+  <p class="page-lede">Anyone can call a transcription endpoint. The difference between a demo and something people trust is the engineering around the loop — and the only way to claim it is real is to force each failure and show the record it leaves.</p>
+
+  <div class="glance">
+    <p><strong>In one line:</strong> every run ends in exactly one of four named statuses, budgets stop runs before they overspend, retries are capped and carry the reason forward, writes to one call are serialised, and no run can vanish without leaving a record — including if you kill the process mid-run.</p>
+    <p><strong>39 checks</strong> in <code>npm run test:harness</code>, all passing. None of them mock a provider: failures are induced through real code paths.</p>
+  </div>
+
+  <h2 id="why">Why the harness is the moat</h2>
+
+  <p>The wrapper is not the interesting part. A transcription call plus a model call is an afternoon. What takes the time is everything that happens when one of them misbehaves — and that is also what decides whether the citation feature is trustworthy or cosmetic.</p>
+
+  <p>A gate that can be bypassed by a retry loop is not a gate. A budget that is logged after the fact is not a budget. So each part below has a column for what makes it real, because the failure mode for all seven is <em>looking</em> implemented.</p>
+
+  <h2 id="seven">The seven parts</h2>
+
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>#</th><th>Part</th><th>Where</th><th>What makes it real</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td>Named loop + exit status</td><td><code>harness/loop.ts</code></td><td>Every run ends <code>shipped</code>/<code>partial</code>/<code>failed</code>/<code>deadline</code>, written in a <code>finally</code>. No run trails off.</td></tr>
+        <tr><td>2</td><td>Blocking gate</td><td><code>harness/gate.ts</code></td><td>A function that returns rejections and removes claims. Feed it <code>seg_999</code> and watch output disappear.</td></tr>
+        <tr><td>3</td><td>Bounded aimed retry</td><td><code>harness/retry.ts</code></td><td>Capped attempts, and the previous failure's <em>reason</em> is passed into the next attempt.</td></tr>
+        <tr><td>4</td><td>Failure invariant</td><td><code>db.ts</code> + loop</td><td>The run row is written <strong>before</strong> the work. Orphans reconcile to <code>failed</code> on boot.</td></tr>
+        <tr><td>5</td><td>Capability registry</td><td><code>registry/index.ts</code></td><td>Provider swap is one config line, and a ship check fails if any file outside the providers directory imports a vendor SDK.</td></tr>
+        <tr><td>6</td><td>Safe parallelism</td><td><code>harness/parallel.ts</code></td><td>Different calls run concurrently; two operations on the <em>same</em> call are serialised behind a per-key lock.</td></tr>
+        <tr><td>7</td><td>Budget governor</td><td><code>harness/budget.ts</code></td><td>Token, wall-clock and dollar caps checked <strong>before</strong> each model call, not logged after.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>All seven meet in exactly one place — <code>processCall()</code> — and nowhere else. That was a deliberate constraint: harness logic scattered across route handlers is harness logic nobody can audit.</p>
+
+  <h2 id="aimed">What makes a retry "aimed"</h2>
+
+  <p>Most retries are "try the identical thing again and hope". That is useful for a network blip and useless for a model that produced structurally valid output with a fabricated citation — retrying the same prompt gets you the same class of answer.</p>
+
+  <p>So the gate's actual complaint is threaded into the next attempt's prompt:</p>
+
+  <pre style="background:var(--ink); color:var(--paper); padding:18px; border-radius:6px; overflow-x:auto; font-size:13px; font-family:var(--mono);">// lib/registry/providers/extract-shared.ts
+if (req.priorFailure) {
+  user +=
+    `\n\nYour previous attempt was rejected by the citation gate:\n${req.priorFailure}\n` +
+    `Fix exactly that. Cite only ids present in the list above, and drop any claim you ` +
+    `cannot ground in a real segment rather than re-citing a missing one.`;
+}</pre>
+
+  <p>The trigger is narrow on purpose. A retry is spent only when the gate had to <strong>delete</strong> claims for citing segments that do not exist. A flagged-but-shipped claim does not burn an attempt — it is a legitimate outcome, not a failure.</p>
+
+  <p>Two things are never retried, both because retrying is the opposite of what they mean:</p>
+
+  <div class="chips">
+    <span class="chip accent">DeadlineError — the budget said stop</span>
+    <span class="chip">a fatal 4xx — bad scope or bad request</span>
+  </div>
+
+  <h2 id="budget">The budget governor</h2>
+
+  <p>Deliberately vendor-neutral: it knows about tokens, seconds and dollars, not about Anthropic. Three caps, all checked before the call:</p>
+
+  <pre style="background:var(--ink); color:var(--paper); padding:18px; border-radius:6px; overflow-x:auto; font-size:13px; font-family:var(--mono);">maxInputTokens   180_000     // projected input would exceed → stop
+maxOutputTokens   16_000
+maxWallClockMs   180_000     // elapsed already over → stop
+maxUsd               1.0     // projected spend would exceed → stop</pre>
+
+  <p>The pre-call input estimate is a character heuristic (~3.6 chars/token), which is approximate on purpose — the alternative is a network round-trip to a token counter before every call, buying precision nobody needs. Actual usage is recorded after each call and gates the next one, so the estimate cannot drift far.</p>
+
+  <p>Breaching any cap throws a <code>DeadlineError</code> naming the cap, the loop catches it, and the run exits <code>deadline</code> with the reason attached. Caps are overridable per run, which is what makes them testable without mutating global config.</p>
+
+  <h2 id="invariant">The failure invariant</h2>
+
+  <p>The ordering is the whole feature:</p>
+
+  <ol class="steps">
+    <li data-step="1">
+      <span class="step-title">Write the row first</span>
+      <p><code>openRun()</code> happens before the STT call, before anything. Status <code>running</code>.</p>
+    </li>
+    <li data-step="2">
+      <span class="step-title">Do the work</span>
+      <p>Whatever happens — success, provider failure, budget deadline, uncaught throw.</p>
+    </li>
+    <li data-step="3">
+      <span class="step-title">Close the row in a <code>finally</code></span>
+      <p>Exactly one terminal status, plus the error text and a budget snapshot. This runs even when the body throws.</p>
+    </li>
+    <li data-step="4">
+      <span class="step-title">Reconcile orphans on boot</span>
+      <p>A row still marked <code>running</code> from a previous process is, by definition, a crash. <code>reconcileOrphanRuns()</code> turns it into a <code>failed</code> record carrying <em>"process exited before this run completed"</em>. Called on every home-page load.</p>
+    </li>
+  </ol>
+
+  <p>The point is not tidiness. It is that <code>partial</code> and <code>failed</code> are only trustworthy if the alternative — a run that simply vanished — is impossible.</p>
+
+  <h2 id="proof">Forced-failure proof</h2>
+
+  <p><code>scripts/test-harness.ts</code>, 39 checks. Notable: <strong>there is no fake provider anywhere in it</strong>. Failures are induced through real code paths — a fixture transcript that does not exist, a budget cap of one token — so what passes is the shipping loop rather than a test double.</p>
+
+  <div class="deep-dive">
+    <div class="deep-dive-head">
+      <div class="deep-icon">i</div>
+      <h2>What each group asserts</h2>
+      <span class="meta">
+        <button id="expand-all" style="background:none;border:none;color:var(--accent);font-family:inherit;cursor:pointer;font-size:11px;text-transform:uppercase;letter-spacing:.1em;">Expand all</button>
+        ·
+        <button id="collapse-all" style="background:none;border:none;color:var(--soft);font-family:inherit;cursor:pointer;font-size:11px;text-transform:uppercase;letter-spacing:.1em;">Collapse</button>
+      </span>
+    </div>
+
+    <details class="dd">
+      <summary>Budget governor — 6 checks</summary>
+      <div class="dd-body">
+        <p>A request inside the caps is allowed. Projected input over cap throws <code>DeadlineError</code> naming <code>maxInputTokens</code>. Projected spend over cap names <code>maxUsd</code>. Elapsed wall clock over cap names <code>maxWallClockMs</code>. Dollar accounting matches list pricing (1M input + 100k output = $7.50). The token estimator is sane.</p>
+      </div>
+    </details>
+
+    <details class="dd">
+      <summary>Bounded aimed retry — 10 checks</summary>
+      <div class="dd-body">
+        <p>Succeeds first time without retrying. Retries when validation rejects. First attempt gets no <code>priorFailure</code>; <strong>the second receives the specific reason</strong>. Attempts are capped — no infinite loop. Returns the last value when attempts run out, and records every failure reason. A throwing step is retried to the cap then rethrown. A <code>DeadlineError</code> is tried exactly once. A fatal 4xx is tried exactly once.</p>
+      </div>
+    </details>
+
+    <details class="dd">
+      <summary>Safe parallelism — 6 checks</summary>
+      <div class="dd-body">
+        <p>Same key: the second operation waits (asserted on interleaving order, not timing). Different keys run concurrently. A holder that <em>throws</em> does not wedge the queue behind it. Lock entries are released once drained. <code>parallelMap</code> respects its concurrency limit and preserves input order in its results.</p>
+      </div>
+    </details>
+
+    <details class="dd">
+      <summary>Failure invariant — 4 checks</summary>
+      <div class="dd-body">
+        <p>A stale <code>running</code> row is reconciled on boot, becomes a <code>failed</code> record, and carries a reason. A properly closed run is never touched by reconciliation.</p>
+      </div>
+    </details>
+
+    <details class="dd">
+      <summary>The named loop, end to end — 13 checks</summary>
+      <div class="dd-body">
+        <p>A good run ends <code>shipped</code> or <code>partial</code>, persists segments, produces an extraction, closes its row with that status, and records a budget snapshot.</p>
+        <p>A provider failure ends <code>failed</code>, reports the error to the caller, still leaves a row, attaches the reason, and closes the row — no silent hang.</p>
+        <p>And the budget proof: a run with <code>maxInputTokens: 1</code> exits <code>deadline</code>, names the cap it hit, and is recorded like any other run.</p>
+      </div>
+    </details>
+  </div>
+
+  <h2 id="found">What writing the tests actually found</h2>
+
+  <p>Two real bugs, which is the argument for forced-failure testing over assertion-by-comment.</p>
+
+  <div class="grid-2">
+    <div class="card accent">
+      <span class="card-eyebrow">BUG 1</span>
+      <div class="card-title">The lock map grew forever</div>
+      <p>Cleanup compared <code>locks.get(key)</code> against <code>undefined</code> — never true at that point, so entries were never released and the map grew for the lifetime of the process. Now it compares identity against the stored tail, which also avoids orphaning a queued waiter.</p>
+      <span class="meta">caught by: "lock entries are released once drained"</span>
+    </div>
+    <div class="card teal">
+      <span class="card-eyebrow">BUG 2</span>
+      <div class="card-title">A spread overwrote the field beside it</div>
+      <p>In the gate, <code>{ claim, segment_ids: v.segment_ids, ...v }</code> silently overwrote <code>segment_ids</code> and leaked an internal <code>missing</code> field into shipped output. Now written explicitly.</p>
+      <span class="meta">caught by: TypeScript, once strict-checked</span>
+    </div>
+  </div>
+
+  <div class="related">
+    <div class="related-label">Related sections</div>
+    <div class="related-grid">
+      <a href="04-citation-gate.html"><strong>04 · The citation gate</strong><small>Part 2, in full</small></a>
+      <a href="07-extraction-providers.html"><strong>07 · Providers</strong><small>Part 5, in full</small></a>
+      <a href="09-run-and-verify.html"><strong>09 · Run &amp; verify</strong><small>Run these suites yourself</small></a>
+    </div>
+  </div>
+  <div class="page-nav">
+    <a href="04-citation-gate.html">
+      <span class="nav-direction">← Previous</span>
+      <span class="nav-title">04 · The citation gate</span>
+    </a>
+    <a href="06-pyai-api-truth.html" class="next">
+      <span class="nav-direction">Next →</span>
+      <span class="nav-title">06 · PyAI API truth</span>
+    </a>
+  </div>
+
+</main>
+
+<aside class="toc">
+  <div class="toc-label">On this page</div>
+  <ul>
+    <li><a href="#why">Why the harness is the moat</a></li>
+    <li><a href="#seven">The seven parts</a></li>
+    <li><a href="#aimed">What makes a retry "aimed"</a></li>
+    <li><a href="#budget">The budget governor</a></li>
+    <li><a href="#invariant">The failure invariant</a></li>
+    <li><a href="#proof">Forced-failure proof</a></li>
+    <li><a href="#found">What the tests found</a></li>
+  </ul>
+</aside>
+</div>
+
+<footer class="site">
+  <span>OpenGong Lite — Documentation</span>
+  <span>§ 05 · The harness</span>
+</footer>
+<script src="assets/script.js"></script>
+
+</body>
+</html>

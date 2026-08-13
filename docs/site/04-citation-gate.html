@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>04 · The citation gate · OpenGong Lite</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,500;9..144,600;9..144,700&family=JetBrains+Mono:wght@400;500;600&family=Inter+Tight:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/style.css">
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.0/dist/mermaid.min.js"></script>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-inner">
+    <a href="index.html" class="brand">
+      <div class="brand-mark">OG</div>
+      <span>OpenGong Lite</span>
+    </a>
+    <div class="topbar-right">
+      <span class="pill">The product</span>
+      <span>§ 04</span>
+    </div>
+  </div>
+</div>
+
+<div class="layout">
+<aside class="sidebar">
+  <button class="mobile-nav-toggle" aria-label="Toggle navigation">☰ Sections</button>
+  <div class="sidebar-section">
+    <div class="sidebar-label">Start here</div>
+    <nav>
+      <a href="index.html"><span class="nav-num">00</span>Overview</a>
+      <a href="01-what-it-does.html"><span class="nav-num">01</span>What it does</a>
+    </nav>
+  </div>
+  <div class="sidebar-section">
+    <div class="sidebar-label">How it works</div>
+    <nav>
+      <a href="02-architecture.html"><span class="nav-num">02</span>Architecture</a>
+      <a href="03-data-contract.html"><span class="nav-num">03</span>Data contract</a>
+      <a href="04-citation-gate.html" class="active"><span class="nav-num">04</span>The citation gate</a>
+      <a href="05-harness.html"><span class="nav-num">05</span>The harness</a>
+    </nav>
+  </div>
+  <div class="sidebar-section">
+    <div class="sidebar-label">Reality</div>
+    <nav>
+      <a href="06-pyai-api-truth.html"><span class="nav-num">06</span>PyAI API truth</a>
+      <a href="07-extraction-providers.html"><span class="nav-num">07</span>Extraction &amp; providers</a>
+      <a href="08-status.html"><span class="nav-num">08</span>Built vs pending</a>
+      <a href="09-run-and-verify.html"><span class="nav-num">09</span>Run &amp; verify</a>
+      <a href="10-decisions-risks.html"><span class="nav-num">10</span>Decisions &amp; risks</a>
+    </nav>
+  </div>
+</aside>
+
+<main class="content">
+
+  <div class="page-eyebrow">§ 04 · The citation gate</div>
+  <h1 class="page-title">A gate that <em>actually blocks.</em></h1>
+  <p class="page-lede">Everything else in this repo is plumbing around one function: <code>runCitationGate()</code>. It is a blocking check that deletes model output, logs why, and downgrades the run status. Not a comment saying <em>TODO: validate</em>.</p>
+
+  <div class="glance">
+    <p><strong>In one line:</strong> before any note reaches a screen, every citation is checked twice — does the cited line exist in <em>this</em> call, and does that line actually back up the claim? Failing the first deletes the claim. Failing the second ships it with a visible warning.</p>
+    <p>Every deletion and every flag is written to <code>gate_rejections</code> with a reason, and shown in the UI. <strong>21 automated checks</strong> hold this behaviour in place.</p>
+  </div>
+
+  <h2 id="two-tiers">Two tiers</h2>
+
+  <div class="diagram-frame">
+    <div class="mermaid">
+flowchart TD
+  Claim["A claim from the model<br/><i>+ segment_ids</i>"]:::data
+  T1{"TIER 1<br/>Do the cited ids exist<br/>in THIS call?"}:::gate
+  None["No ids resolve"]:::bad
+  Some["Some resolve"]:::warn
+  All["All resolve"]:::good
+  T2{"TIER 2<br/>Does the segment text<br/>support the claim?<br/><i>assertions only</i>"}:::gate
+  Drop["DROPPED from output<br/><i>logged: unresolvable_citation</i>"]:::bad
+  Flag["SHIPPED, flagged unverified<br/><i>logged: unsupported_by_segment</i>"]:::warn
+  Ship["SHIPPED, verified<br/><i>with evidence attached</i>"]:::good
+
+  Claim --> T1
+  T1 -->|list claim| None --> Drop
+  T1 --> Some --> T2
+  T1 --> All --> T2
+  T2 -->|below threshold| Flag
+  T2 -->|at or above| Ship
+
+  classDef data fill:#fffaf2,stroke:#78716c,color:#1c1917
+  classDef gate fill:#fbe9e0,stroke:#c2410c,color:#1c1917,font-weight:bold
+  classDef bad fill:#fde8e8,stroke:#b91c1c,color:#1c1917
+  classDef warn fill:#fdf6e9,stroke:#a16207,color:#1c1917
+  classDef good fill:#e0f2f1,stroke:#0f766e,color:#1c1917
+    </div>
+    <div class="diagram-caption">Fig. 4.1 — Only tier 1 can delete a claim. Tier 2 can only flag one.</div>
+  </div>
+
+  <h2 id="tier1">Tier 1 — does the citation resolve?</h2>
+
+  <p>Exact, cheap, and non-negotiable. Every <code>segment_id</code> a claim cites must exist in this call's transcript. There is no fuzzy matching and no nearest-neighbour fallback.</p>
+
+  <p>A claim citing <code>seg_412</code> on a ten-segment call is not a claim with a typo. It is a claim about something that did not happen, and it is removed.</p>
+
+  <h2 id="tier2">Tier 2 — does the segment support the claim?</h2>
+
+  <p>The reference spec flagged this as a genuine design decision with several defensible answers — keyword overlap, an LLM-as-judge second pass, or a human-in-the-loop flag — and said to pick one openly instead of defaulting to whatever was easiest. Our answer is deterministic content-word overlap.</p>
+
+  <pre style="background:var(--ink); color:var(--paper); padding:18px; border-radius:6px; overflow-x:auto; font-size:13px; font-family:var(--mono);">// Recall of the claim's content words in the cited evidence, in [0,1].
+export function supportScore(claim: string, evidenceText: string): number {
+  const want = contentTokens(claim);          // stopwords removed, lightly stemmed
+  if (want.size === 0) return 1;
+  const have = contentTokens(evidenceText);
+  let hit = 0;
+  for (const t of want) if (have.has(t)) hit++;
+  return hit / want.size;
+}</pre>
+
+  <p>Default threshold <code>0.18</code>, configurable in one place (<code>REGISTRY_CONFIG.supportThreshold</code>).</p>
+
+  <div class="grid-2">
+    <div class="card accent">
+      <span class="card-eyebrow">WHY RECALL</span>
+      <div class="card-title">Not F1, not Jaccard</div>
+      <p>Evidence is <em>allowed</em> to say much more than the claim — a segment is usually longer than the sentence summarising it. But a claim should not assert content that appears nowhere in what it cites. That asymmetry is exactly recall.</p>
+    </div>
+    <div class="card teal">
+      <span class="card-eyebrow">WHY NOT AN LLM JUDGE</span>
+      <div class="card-title">It has to be showable</div>
+      <p>An LLM judge would be more semantically accurate, and is the obvious upgrade. It also adds a model call to every extraction and <strong>cannot be demonstrated as deterministic on stage</strong>. Overlap is free, instant, reproducible, and explainable: here is the score, here is the threshold.</p>
+    </div>
+  </div>
+
+  <h2 id="category-error">The category error the tests caught</h2>
+
+  <p>Tier 2 originally ran on every field. The first test run failed, and the failure was more interesting than a bug.</p>
+
+  <p>The <code>intent</code> label <code>price-sensitive</code> scored <strong>0.00</strong> against its own evidence — <em>"the pricing is the real problem though one four oh oh a seat is hard to justify"</em> — and got flagged as unsupported. The classification was correct. The scoring was measuring the wrong thing.</p>
+
+  <div class="pull">
+    An intent label is a <strong>classification</strong>, not a restatement of what was said. It will essentially never lexically overlap its own evidence. Applying claim-support scoring to it is a category error.
+  </div>
+
+  <p>So the line was drawn where it belongs: <strong>tier 2 gates assertions about what was said; tier 1 gates everything.</strong></p>
+
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>Field</th><th>Tier 1</th><th>Tier 2</th><th>Because</th></tr></thead>
+      <tbody>
+        <tr><td><code>objections</code></td><td>✓</td><td>✓</td><td>Assertions about what the prospect said — must echo the call</td></tr>
+        <tr><td><code>next_steps</code></td><td>✓</td><td>✓</td><td>Same</td></tr>
+        <tr><td><code>intent.label</code></td><td>✓</td><td>—</td><td>A category, not a quote</td></tr>
+        <tr><td><code>key_moments[].note</code></td><td>✓</td><td>—</td><td>A short abstraction</td></tr>
+        <tr><td><code>follow_up_email</code></td><td>✓</td><td>—</td><td>Drafted prose, mostly the rep's own words</td></tr>
+        <tr><td><code>summary</code></td><td>—</td><td>—</td><td>Explicitly a synthesis, not required to cite</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>The support score is still computed and stored for the exempt fields, so the choice stays auditable rather than invisible.</p>
+
+  <h2 id="asymmetry">Drop vs flag — an asymmetry, stated openly</h2>
+
+  <div class="grid-2">
+    <div class="card">
+      <span class="card-eyebrow">LIST CLAIMS</span>
+      <div class="card-title">Dropped</div>
+      <p><code>objections</code>, <code>next_steps</code>, <code>key_moments</code> with unresolvable citations are removed. There is always a coherent output without them — an empty objections list is a correct answer.</p>
+    </div>
+    <div class="card mustard">
+      <span class="card-eyebrow">SINGLETON DELIVERABLES</span>
+      <div class="card-title">Flagged, never silently dropped</div>
+      <p><code>intent</code> and <code>follow_up_email</code> are single objects. Deleting them leaves a hole a reader misreads as <em>"no objections found"</em>. They ship marked <code>unverified</code>, with unresolvable ids stripped, and force <code>run_status</code> to <code>partial</code>.</p>
+    </div>
+  </div>
+
+  <p>Either way, nothing ships as though it were grounded when it is not, and every decision is logged.</p>
+
+  <h2 id="status">How run_status is decided</h2>
+
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>Status</th><th>Condition</th></tr></thead>
+      <tbody>
+        <tr><td><span class="chip teal">shipped</span></td><td>No rejections at all. Everything passed clean.</td></tr>
+        <tr><td><span class="chip mustard">partial</span></td><td>Something was dropped or flagged, but at least one claim survived verified.</td></tr>
+        <tr><td><span class="chip accent">failed</span></td><td>Claims were attempted and <strong>nothing</strong> held up. Not a cheerful partial — a failed extraction.</td></tr>
+        <tr><td><span class="chip">deadline</span></td><td>The budget governor stopped the run before it could finish. Set by the loop, not the gate.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2 id="worked">Worked examples</h2>
+
+  <p>These are real cases from <code>scripts/test-gate.ts</code>, run against a real transcript.</p>
+
+  <div class="deep-dive">
+    <div class="deep-dive-head">
+      <div class="deep-icon">i</div>
+      <h2>Four cases, and what the gate does</h2>
+      <span class="meta">
+        <button id="expand-all" style="background:none;border:none;color:var(--accent);font-family:inherit;cursor:pointer;font-size:11px;text-transform:uppercase;letter-spacing:.1em;">Expand all</button>
+        ·
+        <button id="collapse-all" style="background:none;border:none;color:var(--soft);font-family:inherit;cursor:pointer;font-size:11px;text-transform:uppercase;letter-spacing:.1em;">Collapse</button>
+      </span>
+    </div>
+
+    <details class="dd">
+      <summary>A well-cited claim → verified, shipped</summary>
+      <div class="dd-body">
+        <p>Claim: <em>"Pricing is hard to justify at that per-seat cost"</em>, citing <code>seg_003</code>.</p>
+        <p>Segment <code>seg_003</code>: <em>"the pricing is the real problem though one four oh oh a seat is hard to justify"</em></p>
+        <p>Tier 1 resolves. Tier 2 scores <strong>0.67</strong> — content words <em>pricing, seat, hard, justify</em> all present. Verdict <code>verified</code>, <code>run_status: shipped</code>, evidence attached with the segment's real timestamp of 15,280 ms.</p>
+      </div>
+    </details>
+
+    <details class="dd">
+      <summary>A fabricated segment id → dropped and logged</summary>
+      <div class="dd-body">
+        <p>Claim: <em>"The prospect said their legal team blocked the deal"</em>, citing <code>seg_999</code> on a ten-segment call.</p>
+        <p>Tier 1 fails. The claim is <strong>removed from the output</strong>. A rejection row is written:</p>
+        <pre style="background:var(--ink); color:var(--paper); padding:18px; border-radius:6px; overflow-x:auto; font-size:13px; font-family:var(--mono);">field:   objections[1]
+reason:  unresolvable_citation
+detail:  Cited seg_999; no such segment in this call. Claim dropped.
+dropped: true</pre>
+        <p>The legitimate claim alongside it survives untouched, and <code>run_status</code> drops to <code>partial</code>.</p>
+      </div>
+    </details>
+
+    <details class="dd">
+      <summary>A real segment that does not support the claim → flagged, not dropped</summary>
+      <div class="dd-body">
+        <p>Claim: <em>"The prospect confirmed budget approval and a signed purchase order"</em>, citing <code>seg_000</code> — which is the rep's opening pleasantry.</p>
+        <p>Tier 1 resolves, so the claim is not deleted. Tier 2 scores <strong>0.00</strong>. The claim ships marked <code>unverified</code> with an amber badge reading <em>"support 0.00"</em>, and a rejection is logged with <code>dropped: false</code>.</p>
+        <p>This is the case that would be invisible in any other tool: a citation that <em>looks</em> fine and points somewhere real, but does not say what the claim says.</p>
+      </div>
+    </details>
+
+    <details class="dd">
+      <summary>A partly-bad citation list → keeps the good ids, drops the bad</summary>
+      <div class="dd-body">
+        <p>Claim citing <code>["seg_003", "seg_777"]</code>. The gate keeps <code>seg_003</code>, discards <code>seg_777</code>, logs the partial failure with <code>dropped: false</code>, and the claim ships with one accurate receipt instead of two — one of which was fiction.</p>
+      </div>
+    </details>
+  </div>
+
+  <h2 id="proof">The proof</h2>
+
+  <p>23 checks in <code>npm run test:gate</code>, all passing. They assert behaviour by forcing the failure, not by reading the code:</p>
+
+  <div class="chips">
+    <span class="chip teal">clean draft → shipped, 0 rejections</span>
+    <span class="chip accent">fabricated id → dropped + logged</span>
+    <span class="chip accent">legit claim survives alongside it</span>
+    <span class="chip mustard">unsupported → flagged, not dropped</span>
+    <span class="chip">no citation at all → dropped</span>
+    <span class="chip accent">nothing holds up → failed, not partial</span>
+    <span class="chip">partial list → good ids kept</span>
+    <span class="chip teal">evidence text comes from the segment</span>
+    <span class="chip teal">evidence carries the segment's real timestamp</span>
+  </div>
+
+  <p style="margin-top:18px;">There is also a live demonstration wired into the app. <code>POST /api/demo/gate-check</code> feeds hand-written claims — three that resolve, two that cite non-existent segments — through the <em>real</em> gate and returns what happened. It is reachable from any call page via <strong>Test the gate</strong>.</p>
+
+  <p>It is labelled honestly in both the API response and the UI: no model is called, and it is not pretending a model hallucinated. Waiting for a real hallucination on stage would be a bad bet; inventing one and implying the model produced it would be dishonest. So it says plainly that the claims are injected, and lets you watch the gate work on them.</p>
+
+  <h2 id="limits">What the gate cannot do</h2>
+
+  <p>The gate verifies that <strong>a quoted claim matches the transcript</strong>. It has no way to know whether the transcript itself is faithful to the audio.</p>
+
+  <p>That is not hypothetical. PyAI Hear has been observed fabricating fluent, confident sentences from room ambience on the streaming path — text nobody said, at 0.99+ confidence. If a transcript segment contains invented speech, a claim citing it passes the gate cleanly, because from the gate's point of view the quote is right there in the transcript.</p>
+
+  <div class="pull">
+    Our ingest uses the <strong>batch</strong> path, which has <strong>not been measured</strong> for this behaviour. It is the single most consequential open question about the product's core guarantee — see <a href="10-decisions-risks.html#silence">§10</a>.
+  </div>
+
+  <div class="related">
+    <div class="related-label">Related sections</div>
+    <div class="related-grid">
+      <a href="03-data-contract.html"><strong>03 · Data contract</strong><small>Draft vs result</small></a>
+      <a href="05-harness.html"><strong>05 · The harness</strong><small>The loop around the gate</small></a>
+      <a href="10-decisions-risks.html"><strong>10 · Risks</strong><small>The limit above, in full</small></a>
+    </div>
+  </div>
+  <div class="page-nav">
+    <a href="03-data-contract.html">
+      <span class="nav-direction">← Previous</span>
+      <span class="nav-title">03 · Data contract</span>
+    </a>
+    <a href="05-harness.html" class="next">
+      <span class="nav-direction">Next →</span>
+      <span class="nav-title">05 · The harness</span>
+    </a>
+  </div>
+
+</main>
+
+<aside class="toc">
+  <div class="toc-label">On this page</div>
+  <ul>
+    <li><a href="#two-tiers">Two tiers</a></li>
+    <li><a href="#tier1">Tier 1 — does it resolve?</a></li>
+    <li><a href="#tier2">Tier 2 — does it support?</a></li>
+    <li><a href="#category-error">The category error</a></li>
+    <li><a href="#asymmetry">Drop vs flag</a></li>
+    <li><a href="#status">How run_status is decided</a></li>
+    <li><a href="#worked">Worked examples</a></li>
+    <li><a href="#proof">The proof</a></li>
+    <li><a href="#limits">What the gate cannot do</a></li>
+  </ul>
+</aside>
+</div>
+
+<footer class="site">
+  <span>OpenGong Lite — Documentation</span>
+  <span>§ 04 · The citation gate</span>
+</footer>
+<script src="assets/script.js"></script>
+
+</body>
+</html>
