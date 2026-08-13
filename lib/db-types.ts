@@ -14,6 +14,7 @@ import type {
 } from './types';
 import type { Company } from './company-types';
 import type { Learning } from './learning-types';
+import type { ActionItem } from './action-item-types';
 
 export type RunRow = {
   id: string;
@@ -111,4 +112,27 @@ export interface Store {
   learningsForCompany(companyId: string, limit?: number): Promise<Learning[]>;
   getLearning(id: number | string): Promise<Learning | null>;
   markLearningPromoted(id: number | string): Promise<void>;
+
+  // action items — commitments carried between calls
+  /** Append only. Deduping against what is already open happens above the store. */
+  insertActionItems(rows: ActionItem[]): Promise<void>;
+  actionItemsForCompany(companyId: string): Promise<ActionItem[]>;
+  /** Everything still open for this account, oldest first — what the next call is asked about. */
+  openActionItems(companyId: string): Promise<ActionItem[]>;
+  getActionItem(id: string): Promise<ActionItem | null>;
+  /** The one mutation. Settling an item is the only thing that ever edits a row. */
+  resolveActionItem(
+    id: string,
+    patch: Pick<
+      ActionItem,
+      | 'status'
+      | 'resolved_call_id'
+      | 'resolved_segment_id'
+      | 'resolved_start_ms'
+      | 'resolved_quote'
+      | 'resolved_note'
+      | 'resolved_by'
+      | 'resolved_at'
+    >,
+  ): Promise<void>;
 }

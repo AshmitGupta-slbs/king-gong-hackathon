@@ -126,6 +126,20 @@ audio ──▶ PyAI Hear ──▶ segments ──▶ Claude ──▶ draft �
 Swapping any provider is one line in `lib/registry/index.ts`. Nothing outside
 `lib/registry/providers/` imports a vendor SDK.
 
+**Skills** shape step 2. What counts as a real objection, when a commitment is verifiable, how to
+judge whether last call's promise happened — that judgement lives in `skills/<id>/SKILL.md`, in
+markdown a salesperson can edit, not in a string literal. Files may say what to *look for*; they may
+not supply wording to *describe* findings in, because the gate scores a claim against the line it
+cites and borrowed vocabulary makes true claims fail. `npm run test:skills` enforces it.
+
+**Action items** span steps 4 and 1 of the *next* call. A verified next step becomes a commitment
+that stays open until something settles it; the next call with that account is asked about each one
+by id and must cite a line to close it. Silence closes nothing. The percentage always ships with its
+denominator, and a commitment closed by a person rather than by evidence says so.
+
+**CRM payload.** `GET /api/calls/{id}/crm-payload` returns exactly what a HubSpot push would post,
+every claim linking back to the moment that proves it. It cannot be sent — see the caveats.
+
 ---
 
 ## The harness
@@ -186,7 +200,10 @@ Things a demo would normally hide:
 - **Speaker roles in mono are a heuristic** — whoever talks first is the rep. Exact for stereo. The
   UI always tells you which mode produced the labels.
 - **Sample audio is synthesised**, not real customer calls. No PII in a public repo.
-- **No CRM sync, no deal scoring, no forecasting.** This does the after-the-call job and stops.
+- **No CRM sync, no deal scoring, no forecasting.** This does the after-the-call job and stops. It
+  will show you the exact payload a HubSpot push would post — every claim carrying a link back to
+  the line that proves it — but it cannot send it. There is no client and no credential, and
+  `check:ship` fails if either appears.
 
 ---
 
@@ -199,9 +216,11 @@ Things a demo would normally hide:
 | `npm run extract:samples` | Re-run notes over existing transcripts — no re-recording, no re-transcribing |
 | `npm run test:gate` | Citation gate verification |
 | `npm run test:harness` | Harness verification |
+| `npm run test:skills` | Skill corpus loads, selects, and does not poison the gate |
+| `npm run test:store` | Storage contract, against whichever backend is configured |
 | `npm run test:readability` | Proves the display layer never changes what was said |
 | `npm run check:ship` | Ship checklist |
-| `npm run verify` | All four suites in order — the one command to run before shipping |
+| `npm run verify` | All five suites in order — the one command to run before shipping |
 
 ## Layout
 

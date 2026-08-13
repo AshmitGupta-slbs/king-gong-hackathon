@@ -29,11 +29,13 @@
  */
 import type {
   CitedClaim,
+  CitedOutcome,
   Claim,
   Evidence,
   ExtractionDraft,
   ExtractionResult,
   GateRejection,
+  Outcome,
   RunStatus,
   TranscriptSegment,
   Verdict,
@@ -177,6 +179,11 @@ export function runCitationGate(
   draft: ExtractionDraft,
   segments: TranscriptSegment[],
   extractedBy?: string,
+  /**
+   * Ids of the commitments this account actually has open. Empty when none were carried in, which
+   * makes every outcome the model returns unresolvable — correct, since there was nothing to judge.
+   */
+  openActionItemIds: readonly string[] = [],
 ): GateOutcome {
   const threshold = REGISTRY_CONFIG.supportThreshold;
   const index = new Map(segments.map((s) => [s.id, s]));
@@ -240,6 +247,92 @@ export function runCitationGate(
     return kept;
   };
 
+  /**
+   * Judgements on commitments from EARLIER calls.
+   *
+   * Its own path rather than a reuse of `gateList`, for three reasons that all point the same way.
+   *
+   * FIRST, there is an extra tier-1 check with no analogue elsewhere: `item_id` must name a
+   * commitment actually open for this account. An invented item id is the same class of error as an
+   * invented segment id — a citation pointing at nothing — and is dropped the same way. Without it
+   * the model could close a commitment that does not exist, or worse, one belonging to a different
+   * account.
+   *
+   * SECOND, tier 2 is scored against `note`, not against the item's text. The item's text is last
+   * call's wording; scoring it would measure overlap between two different conversations and would
+   * flag correct judgements as unsupported. `note` is what the model says THIS call said, so
+   * scoring it asks the right question: does the line you cited actually say that?
+   *
+   * THIRD, `not_discussed` is verified with no evidence at all. Absence has no line to point at,
+   * and it is the ordinary answer for most items on most calls. It resolves nothing, so nothing is
+   * at stake in accepting it — whereas demanding a citation would push the model to invent one.
+   */
+  const gateOutcomes = (outcomes: Outcome[], openIds: Set<string>): CitedOutcome[] => {
+    const kept: CitedOutcome[] = [];
+    outcomes.forEach((o, i) => {
+      const at = `outcomes[${i}]`;
+      const label = `${o.item_id}: ${o.note || o.status}`;
+
+      if (!openIds.has(o.item_id)) {
+        rejections.push({
+          field: at,
+          claim: label,
+          reason: 'unresolvable_citation',
+          detail: `No open action item "${o.item_id}" for this account. Judgement dropped.`,
+          dropped: true,
+        });
+        return;
+      }
+
+      if (o.status === 'not_discussed') {
+        kept.push({ ...o, verdict: 'verified', support: 1, evidence: [] });
+        return;
+      }
+
+      if (!o.segment_ids?.length) {
+        rejections.push({
+          field: at,
+          claim: label,
+          reason: 'no_citation',
+          detail: 'Marked done with no segment_ids. A commitment cannot close on an assertion.',
+          dropped: true,
+        });
+        return;
+      }
+
+      const v = verifyCitations(o.note || o.item_id, o.segment_ids, index, threshold, true);
+      if (v.evidence.length === 0) {
+        rejections.push({
+          field: at,
+          claim: label,
+          reason: 'unresolvable_citation',
+          detail: `Cited ${v.missing.join(', ')}; no such segment in this call. Judgement dropped.`,
+          dropped: true,
+        });
+        return;
+      }
+      if (v.verdict === 'unverified') {
+        rejections.push({
+          field: at,
+          claim: label,
+          reason: 'unsupported_by_segment',
+          detail: `Support ${v.support.toFixed(2)} < ${threshold}. Kept flagged; does NOT close the item.`,
+          dropped: false,
+        });
+      }
+      kept.push({
+        item_id: o.item_id,
+        status: o.status,
+        note: o.note,
+        segment_ids: v.segment_ids,
+        verdict: v.verdict,
+        support: v.support,
+        evidence: v.evidence,
+      });
+    });
+    return kept;
+  };
+
   /** Singleton deliverables: tier 1 only (abstractions), flag, never drop. */
   const gateSingleton = (text: string, ids: string[], field: string): Verified => {
     const v = verifyCitations(text, ids ?? [], index, threshold, false);
@@ -294,15 +387,22 @@ export function runCitationGate(
     })
     .filter((m): m is NonNullable<typeof m> => m !== null);
 
+  const outcomes = gateOutcomes(draft.outcomes ?? [], new Set(openActionItemIds));
+
   // ── exit status ────────────────────────────────────────────────────────────
+  // Outcomes are counted on BOTH sides. Leaving them out of `attempted` while they can contribute
+  // to `survivedVerified` would let a call whose every claim was deleted still read as shipped
+  // because one commitment was judged; leaving them out of both would ignore work the model did.
   const attempted =
     (draft.objections?.length ?? 0) +
     (draft.next_steps?.length ?? 0) +
-    (draft.key_moments?.length ?? 0);
+    (draft.key_moments?.length ?? 0) +
+    (draft.outcomes?.length ?? 0);
   const survivedVerified =
     objections.filter((o) => o.verdict === 'verified').length +
     next_steps.filter((n) => n.verdict === 'verified').length +
     key_moments.length +
+    outcomes.filter((o) => o.verdict === 'verified').length +
     (intentV.verdict === 'verified' ? 1 : 0) +
     (emailV.verdict === 'verified' ? 1 : 0);
 
@@ -338,6 +438,7 @@ export function runCitationGate(
         evidence: emailV.evidence,
       },
       key_moments,
+      ...(outcomes.length ? { outcomes } : {}),
       run_status,
       rejections,
       ...(extractedBy ? { extracted_by: extractedBy } : {}),

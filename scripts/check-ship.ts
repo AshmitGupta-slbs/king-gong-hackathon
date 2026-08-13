@@ -398,6 +398,45 @@ if (pkg.dependencies && 'better-sqlite3' in pkg.dependencies) {
   warn('a native dependency crept in (better-sqlite3) — it adds a compile step to a clean clone');
 }
 
+// ── 9. The CRM payload is a preview, and stays one ───────────────────────────
+/**
+ * The feature's promise is that nothing can reach a CRM: no client, no credential, no code path.
+ * That promise is worth exactly as much as it is enforced, and "we did not write one" is the kind
+ * of thing that stops being true the first time somebody adds a convenience.
+ *
+ * So it is derived, not asserted: scan for an outbound call to a HubSpot host and for any HubSpot
+ * credential being read. Either would mean the app can now write to a live pipeline, which is a
+ * different product with different risks and should not arrive quietly.
+ */
+{
+  const offenders: string[] = [];
+  const scanEgress = (dir: string) => {
+    for (const entry of readdirSync(join(ROOT, dir), { withFileTypes: true })) {
+      const rel = join(dir, entry.name);
+      if (entry.isDirectory()) {
+        if (!SKIP_DIRS.has(entry.name)) scanEgress(rel);
+        continue;
+      }
+      if (!/\.tsx?$/.test(entry.name)) continue;
+      const body = readFileSync(join(ROOT, rel), 'utf8');
+      // A URL pointing at HubSpot, or a credential named for it. Comments and prose are fine —
+      // the payload explains itself at length — so this looks for code shapes, not the word.
+      if (/https?:\/\/[^'"\s]*hubapi\.com|https?:\/\/[^'"\s]*hubspot\.com/i.test(body)) {
+        offenders.push(`${rel} (hubspot host)`);
+      }
+      if (/process\.env\.HUBSPOT[A-Z0-9_]*/.test(body)) offenders.push(`${rel} (hubspot credential)`);
+    }
+  };
+  for (const d of ['app', 'lib', 'components', 'scripts']) {
+    if (existsSync(join(ROOT, d))) scanEgress(d);
+  }
+  assert(
+    offenders.length === 0,
+    'the CRM payload cannot be sent — no HubSpot client, no credential',
+    offenders.join(', '),
+  );
+}
+
 // ── summary ──────────────────────────────────────────────────────────────────
 console.log(
   '\n' +

@@ -24,9 +24,10 @@
     "check:key": "tsx scripts/check-key.ts",
     "check:store": "tsx scripts/check-store.ts",
     "test:store": "tsx scripts/test-store.ts",
-    "verify": "tsx scripts/test-gate.ts && tsx scripts/test-harness.ts && tsx scripts/test-readability.ts && tsx scripts/check-ship.ts",
+    "verify": "tsx scripts/test-gate.ts && tsx scripts/test-harness.ts && tsx scripts/test-skills.ts && tsx scripts/test-readability.ts && tsx scripts/check-ship.ts",
     "test:readability": "tsx scripts/test-readability.ts",
-    "reindex:samples": "tsx scripts/reindex-samples.ts"
+    "reindex:samples": "tsx scripts/reindex-samples.ts",
+    "test:skills": "tsx scripts/test-skills.ts"
   },
   "dependencies": {
     "@anthropic-ai/bedrock-sdk": "^0.32.1",

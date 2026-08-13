@@ -12,6 +12,8 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { getCall, insertCall, replaceSegments, saveExtraction, store } from './db';
 import { seedCompanies } from './crm/db';
+import { recordLearnings } from './learnings';
+import { recordActionItems } from './action-items';
 import type { ExtractionResult, TranscriptSegment } from './types';
 
 const DIR = join(process.cwd(), 'samples');
@@ -79,6 +81,34 @@ function readJson<T>(name: string): T | null {
  */
 let seededThisProcess = false;
 
+/**
+ * Derive what the harness would have derived, had these calls been analysed here.
+ *
+ * The samples ship as finished extractions, so they skip the loop — which meant everything the loop
+ * produces AFTER the gate never existed for them. On a clean clone that left /setup showing "nothing
+ * learned yet" for all five accounts and no commitments anywhere, so two features that work were
+ * invisible until someone uploaded a call of their own.
+ *
+ * Legitimate because it derives from exactly what the harness derives from: claims in the committed
+ * extraction that already carry a verdict and their evidence. Nothing is invented here — a sample
+ * whose claims the gate flagged contributes nothing, the same as it would have live.
+ *
+ * Idempotent by construction: learnings are replaced per call id, and an action item is skipped when
+ * an open one already leads with the same words.
+ */
+async function deriveFromSamples(): Promise<void> {
+  for (const m of sampleManifest()) {
+    const companyId = await store().companyIdForCall(m.id);
+    if (!companyId) continue;
+
+    const ex = readJson<ExtractionResult>(`${m.id}.result.json`);
+    if (!ex) continue;
+
+    await recordLearnings(companyId, m.id, ex);
+    await recordActionItems(companyId, m.id, ex);
+  }
+}
+
 export async function loadSamples(
   force = false,
 ): Promise<{ loaded: string[]; skipped: string[]; missingExtraction: string[] }> {
@@ -89,6 +119,7 @@ export async function loadSamples(
   // edits in /setup are never overwritten by a reseed.
   await seedCompanies();
   await linkSamplesToAccounts();
+  await deriveFromSamples();
   seededThisProcess = true;
 
   const loaded: string[] = [];

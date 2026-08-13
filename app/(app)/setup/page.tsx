@@ -7,6 +7,8 @@
  */
 import { listCompanies } from '@/lib/companies';
 import { learningsForCompany, suggestedNotes } from '@/lib/learnings';
+import { actionItemsForCompany, followThrough } from '@/lib/action-items';
+import type { FollowThrough } from '@/lib/action-item-types';
 import { loadSamples } from '@/lib/samples';
 import { describeCrm } from '@/lib/crm';
 import { SetupCompanies } from '@/components/SetupCompanies';
@@ -21,7 +23,7 @@ export default async function SetupPage() {
   // Keyed by company so the client component can render each account's ledger without a fetch.
   // The suggestion is composed over the FULL ledger (500 rows), not the 20 listed as evidence —
   // it speaks for everything not yet in the notes, so a narrower window would quietly drop facts.
-  const [learnings, suggestions] = await Promise.all([
+  const [learnings, suggestions, follow] = await Promise.all([
     Object.fromEntries(
       await Promise.all(
         companies.map(async (c) => [c.id, await learningsForCompany(c.id, 20)] as const),
@@ -30,6 +32,15 @@ export default async function SetupPage() {
     Object.fromEntries(
       await Promise.all(companies.map(async (c) => [c.id, await suggestedNotes(c.id)] as const)),
     ) as Record<string, Awaited<ReturnType<typeof suggestedNotes>>>,
+    // How well each account keeps its word — derived from the ledger on read, like everything else
+    // here, so it cannot go stale against the items it counts.
+    Object.fromEntries(
+      await Promise.all(
+        companies.map(
+          async (c) => [c.id, followThrough(await actionItemsForCompany(c.id))] as const,
+        ),
+      ),
+    ) as Record<string, FollowThrough>,
   ]);
   const crm = describeCrm();
 
@@ -53,7 +64,12 @@ export default async function SetupPage() {
       </header>
 
       <div className="mt-7">
-        <SetupCompanies companies={companies} learnings={learnings} suggestions={suggestions} />
+        <SetupCompanies
+          companies={companies}
+          learnings={learnings}
+          suggestions={suggestions}
+          followThrough={follow}
+        />
       </div>
     </div>
   );

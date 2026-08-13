@@ -71,6 +71,20 @@ export type ExtractRequest = {
    * Banner'd separately from `accountContext` in the prompt so the model is told which is which.
    */
   learnedContext?: string;
+  /**
+   * Pre-rendered skill instructions — HOW to read this call, never anything about it.
+   *
+   * Categorically different from the two context fields above, which carry facts. These are
+   * directions, and they are banner'd as such so the model cannot mistake an instruction to look
+   * for something for an assertion that it happened.
+   */
+  skillContext?: string;
+  /**
+   * Commitments still open from earlier calls, each carrying the stable id the model quotes back.
+   * A plain string for the same reason as `accountContext`: rendering belongs to the caller, and
+   * the registry must not learn what an action item is.
+   */
+  openActionItems?: string;
 };
 
 export type ExtractResult = {

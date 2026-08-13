@@ -678,6 +678,96 @@ async function main() {
 
   d.prepare(`DELETE FROM runs WHERE call_id LIKE ? OR id LIKE ?`).run(`${TEST_PREFIX}%`, `${TEST_PREFIX}%`);
 
+  head('CRM payload — what a push would post, and what it must never contain');
+  {
+    const { toHubspotPayload, SIGNAL_PROPERTIES } = await import('@/lib/crm/payload');
+    const segs = [
+      { id: 'seg_000', speaker: 'rep', start_ms: 0, end_ms: 4000, text: 'how did the security review land' },
+      { id: 'seg_001', speaker: 'prospect', start_ms: 4000, end_ms: 9000, text: 'it came back clean on monday so we are good to go' },
+    ];
+    const ev = { segment_id: 'seg_001', speaker: 'prospect', start_ms: 4000, end_ms: 9000, text: segs[1].text };
+    const payload = toHubspotPayload({
+      bundle: {
+        call: {
+          id: 'c1', title: 'Acme — final', audio_path: '/a.wav', duration_ms: 68_453,
+          separation: 'channel', created_at: 1_700_000_000_000, share_id: 'sh1',
+        },
+        segments: segs,
+        extraction: {
+          summary: 'Security cleared.',
+          intent: { label: 'ready to sign', segment_ids: ['seg_001'], verdict: 'verified', support: 1, evidence: [ev] },
+          objections: [
+            { claim: 'Security review was the last blocker', segment_ids: ['seg_001'], verdict: 'verified', support: 1, evidence: [ev] },
+            { claim: 'Procurement flagged a residual indemnity concern', segment_ids: ['seg_000'], verdict: 'unverified', support: 0.02, evidence: [] },
+          ],
+          next_steps: [],
+          follow_up_email: { subject: 's', body: 'b', segment_ids: ['seg_001'], verdict: 'verified', support: 1, evidence: [ev] },
+          key_moments: [],
+          run_status: 'partial',
+          rejections: [{ field: 'objections[1]', claim: 'x', reason: 'unsupported_by_segment', detail: 'd', dropped: false }],
+          extracted_by: 'bedrock',
+        },
+      },
+      company: {
+        id: 'co1', name: 'Acme', industry: null, size_band: null, website: 'acme.example',
+        notes: null, stage: 'Negotiation', created_at: 0, detail: null,
+      },
+      actionItems: [],
+      baseUrl: 'https://kg.example',
+    });
+
+    const json = JSON.stringify(payload);
+    const note = payload.objects.find((o) => o.type === 'notes')!;
+    const callObj = payload.objects.find((o) => o.type === 'calls')!;
+    const body = String(note.properties.hs_note_body);
+
+    check('every claim keeps a working citation link',
+      body.includes('https://kg.example/s/sh1#seg_001'),
+      'HubSpot has no idea what a segment is; an anchor back is the only way a claim keeps its proof');
+    check('the note body is HTML, because hs_note_body is an html field', body.startsWith('<p>'));
+    check('HTML in claim text is escaped, not injected', !body.includes('<script'));
+
+    check('unverified claims are WITHHELD from the body',
+      !body.includes('residual indemnity'),
+      'a CRM note outlives its context and becomes the account record');
+    check('...and the withholding is declared', payload.omitted[0]?.unverified_claims === 1,
+      `${payload.omitted[0]?.unverified_claims ?? 0} declared`);
+
+    check('call duration passes through unconverted', callObj.properties.hs_call_duration === 68_453,
+      'hs_call_duration is milliseconds on the HubSpot side too — verified against the live property');
+
+    // The finding that matters most, asserted rather than remembered.
+    const propertyKeys = payload.objects.flatMap((o) => Object.keys(o.properties));
+    check('NO dealstage is ever written', !propertyKeys.includes('dealstage'),
+      'stage ids are per-portal GUIDs and ours is a different vocabulary — a write would 400 or move the wrong deal');
+    check('...the stage travels as a signal instead',
+      payload.signals.deal_stage_observed === 'Negotiation');
+
+    check('association ids are null rather than invented',
+      note.associations.every((a) => a.id === null),
+      'nothing in this app stores a HubSpot object id');
+    check('...each carrying the lookup that would resolve it',
+      note.associations.every((a) => a.resolve_by.length > 0));
+    check('the company association resolves by domain',
+      note.associations.some((a) => a.to === 'companies' && a.resolve_by.includes('acme.example')));
+
+    check('the signals carry the gate\'s own quality numbers',
+      payload.signals.claims_flagged_by_gate === 1 && payload.signals.run_status === 'partial');
+    check('custom properties needed for those signals are spelled out',
+      SIGNAL_PROPERTIES.length > 0 && SIGNAL_PROPERTIES.every((p) => p.name && p.type && p.fieldType),
+      SIGNAL_PROPERTIES.map((p) => p.name).join(', '));
+
+    check('nothing in the payload names a credential',
+      !/token|api[_-]?key|authorization|bearer/i.test(json),
+      'the payload is a document, not a request');
+    check('a call with no share link still builds',
+      Boolean(toHubspotPayload({
+        bundle: { call: { id: 'c2', title: 't', audio_path: '/a', duration_ms: 1, separation: 'channel', created_at: 0, share_id: null }, segments: [], extraction: null },
+        company: null, actionItems: [], baseUrl: null,
+      }).objects.length),
+      'no share id means no anchors, not a crash');
+  }
+
   console.log(
     failures === 0
       ? '\n\x1b[32m\x1b[1mAll harness checks passed.\x1b[0m Budgets stop runs, retries are bounded and aimed, writes serialise, and no run vanishes.\n'
