@@ -16,7 +16,20 @@ import { BudgetGovernor, DeadlineError, estimateTokens } from '@/lib/harness/bud
 import { processCall } from '@/lib/harness/loop';
 import { activeLockCount, parallelMap, withLock } from '@/lib/harness/parallel';
 import { retryAimed } from '@/lib/harness/retry';
-import { audioUploadIdentity, buildWav, silence, sniffAudioFormat } from '@/lib/wav';
+import {
+  audioUploadIdentity,
+  buildWav,
+  concat,
+  detectChannelLayout,
+  interleaveStereo,
+  parseWav,
+  readWavHeader,
+  silence,
+  sniffAudioFormat,
+} from '@/lib/wav';
+import { resolveSeparation } from '@/lib/separation';
+import { RequestedSeparationSchema, SeparationModeSchema } from '@/lib/types';
+import { mapSegments } from '@/lib/registry/providers/pyai-jobs';
 
 let failures = 0;
 const check = (name: string, cond: boolean, detail = '') => {
@@ -372,6 +385,132 @@ async function main() {
     d.prepare(`DELETE FROM ${t} WHERE call_id LIKE ?`).run(`${TEST_PREFIX}%`);
   }
   d.prepare(`DELETE FROM calls WHERE id LIKE ?`).run(`${TEST_PREFIX}%`);
+
+  // ───────────────────────────────────────────────────────────────────────────
+  const RATE = 8000;
+  /** int16 sine, written through a DataView so it works on a pooled Buffer too. */
+  function tone(ms: number, hz = 220, amp = 9000): Uint8Array {
+    const n = Math.round((RATE * ms) / 1000);
+    const out = new Uint8Array(n * 2);
+    const v = new DataView(out.buffer);
+    for (let i = 0; i < n; i++) {
+      v.setInt16(i * 2, Math.round(amp * Math.sin((2 * Math.PI * hz * i) / RATE)), true);
+    }
+    return out;
+  }
+  const wav = (pcm16: Uint8Array, channels: number) => buildWav({ pcm16, sampleRate: RATE, channels });
+  // Party A speaks in blocks 1 and 3, party B in block 2 — disjoint in time, like a real call.
+  const talk = concat([tone(600), silence(600, RATE), tone(600)]);
+  const reply = concat([silence(600, RATE), tone(600, 330), silence(600, RATE)]);
+  const twoParty = wav(interleaveStereo(talk, reply), 2);
+  const dualMono = wav(interleaveStereo(talk, talk), 2);
+  const oneSilent = wav(interleaveStereo(talk, new Uint8Array(talk.length)), 2);
+  const correlated = wav(interleaveStereo(tone(1800, 220), tone(1800, 250, 6000)), 2);
+  const monoWav = wav(talk, 1);
+
+  head('Channel layout — stereo is read from the bytes, and dual-mono is not mistaken for two parties');
+  {
+    const layout = (b: Uint8Array) => detectChannelLayout(b).layout;
+    check('a mono WAV reports mono', layout(monoWav) === 'mono', layout(monoWav));
+    check('true one-party-per-channel stereo is detected', layout(twoParty) === 'two-party-stereo', layout(twoParty));
+    // The trap: a mono call exported as stereo. channel:true here attributes half the call to the
+    // wrong person, and the transcript still looks plausible.
+    check('THE DUAL-MONO TRAP: identical channels are NOT two parties', layout(dualMono) === 'dual-mono', layout(dualMono));
+    check('a stereo file with one silent channel is not two parties', layout(oneSilent) === 'one-silent', layout(oneSilent));
+    check('both-channels-always-active stereo is not claimed as two parties', layout(correlated) === 'correlated-stereo', layout(correlated));
+
+    const mp3 = new Uint8Array([0x49, 0x44, 0x33, 3, 0, 0, 0, 0, 0, 0, 0, 0]);
+    check('an MP3 cannot be judged without decoding, and says so', layout(mp3) === 'unknown' && detectChannelLayout(mp3).channels === null);
+    check('an Ogg upload reports unknown rather than throwing', layout(new Uint8Array([0x4f, 0x67, 0x67, 0x53, 0, 0, 0, 0, 0, 0, 0, 0])) === 'unknown');
+    check('a truncated WAV reports unknown rather than throwing', layout(twoParty.subarray(0, 30)) === 'unknown');
+
+    const patched = (src: Uint8Array, off: number, val: number, bytes16 = true) => {
+      const c = new Uint8Array(src);
+      const v = new DataView(c.buffer);
+      if (bytes16) v.setUint16(off, val, true); else v.setUint32(off, val, true);
+      return c;
+    };
+    const twentyFour = patched(twoParty, 34, 24);
+    check('a 24-bit stereo WAV is not analysed, and the detail names the depth',
+      layout(twentyFour) === 'unknown' && detectChannelLayout(twentyFour).detail.includes('24-bit'));
+    check('a 4-channel WAV is not treated as two-party', layout(patched(twoParty, 22, 4)) === 'multichannel');
+
+    const big = wav(interleaveStereo(concat([talk, talk, talk, talk]), concat([reply, reply, reply, reply])), 2);
+    const bounded = detectChannelLayout(big, 1000);
+    check('detection is bounded by maxFrames', (bounded.stats?.framesExamined ?? 0) <= 1001, String(bounded.stats?.framesExamined));
+    check('stride is at least 1', (bounded.stats?.strideFrames ?? 0) >= 1);
+    const t0 = Date.now();
+    detectChannelLayout(big);
+    check('detection does not scale with file size', Date.now() - t0 < 250, `${Date.now() - t0}ms`);
+
+    check('readWavHeader never throws on garbage', readWavHeader(new Uint8Array(16)) === null);
+    let msg = '';
+    try { parseWav(new Uint8Array([1, 2, 3])); } catch (e) { msg = (e as Error).message; }
+    check('parseWav still throws on non-RIFF after the refactor', msg === 'not a RIFF/WAVE file', msg);
+    msg = '';
+    try { parseWav(twentyFour); } catch (e) { msg = (e as Error).message; }
+    check('parseWav still throws on non-16-bit after the refactor', msg === 'expected 16-bit PCM, got 24-bit', msg);
+    // pyai-speak returns a streaming WAV with both sizes 0xFFFFFFFF; losing this clamp would read
+    // far past the buffer and would only show up as corrupt sample audio.
+    const streaming = patched(twoParty, 40, 0xffffffff, false);
+    check('THE STREAMING-WAV CLAMP SURVIVES: 0xFFFFFFFF reads only the bytes that arrived',
+      parseWav(streaming).pcm16.length === twoParty.length - 44);
+  }
+
+  head('Separation resolution — auto picks the exact mode only when it can prove it');
+  {
+    const auto = (b: Uint8Array) => resolveSeparation(b, 'auto');
+    check('auto on true stereo resolves to channel', auto(twoParty).mode === 'channel' && auto(twoParty).auto === true);
+    check('auto on dual-mono resolves to diarize, not channel', auto(dualMono).mode === 'diarize', auto(dualMono).mode);
+    check('auto on one-silent stereo resolves to diarize', auto(oneSilent).mode === 'diarize');
+    check('auto on correlated stereo resolves to diarize', auto(correlated).mode === 'diarize');
+    check('auto on mono resolves to diarize', auto(monoWav).mode === 'diarize');
+    check('auto on an MP3 resolves to diarize', auto(new Uint8Array([0x49, 0x44, 0x33, 3, 0, 0, 0, 0, 0, 0, 0, 0])).mode === 'diarize');
+
+    const forced = resolveSeparation(dualMono, 'channel');
+    check('an explicit channel request is never overridden by detection', forced.mode === 'channel' && forced.auto === false);
+    check('and the disagreement is stated rather than hidden', forced.reason.includes('diarize'), forced.reason);
+    check('an explicit diarize request on true stereo is honoured', resolveSeparation(twoParty, 'diarize').mode === 'diarize');
+    check('the resolved mode is always concrete',
+      [twoParty, dualMono, monoWav].every((b) => SeparationModeSchema.safeParse(auto(b).mode).success));
+  }
+
+  head('Mode validation — the form field is validated, not cast');
+  {
+    // Each of these would have sailed through `as SeparationMode` into pyai-jobs.ts's bare `else`
+    // and silently diarized, indistinguishable from a deliberate choice.
+    for (const bad of ['stereo', 'CHANNEL', '', 'true']) {
+      check(`"${bad}" is rejected`, !RequestedSeparationSchema.safeParse(bad).success);
+    }
+    check('auto / channel / diarize are accepted',
+      ['auto', 'channel', 'diarize'].every((m) => RequestedSeparationSchema.safeParse(m).success));
+  }
+
+  head('Speaker mapping — the lookup key cannot diverge from the map key');
+  {
+    const seg = (start: number, speaker?: string, channel?: number) => ({
+      id: 0, start, end: start + 1, text: 'hello', ...(speaker ? { speaker } : {}), ...(channel !== undefined ? { channel } : {}),
+    });
+    const chan = mapSegments([seg(0, 'speaker_1', 0), seg(1, 'speaker_2', 1)] as never, 'channel');
+    check('channel mode maps channel 0 to rep and channel 1 to prospect',
+      chan[0].speaker === 'rep' && chan[1].speaker === 'prospect', chan.map((c) => c.speaker).join(','));
+
+    // The second independent cause of the reported bug: one shared label used to collapse every
+    // segment onto whichever role was written to the map last.
+    const shared = mapSegments([seg(0, 'speaker_1', 0), seg(1, 'speaker_1', 1)] as never, 'channel');
+    check('REGRESSION: channel mode is keyed by channel, so one shared label still yields two roles',
+      shared[0].speaker === 'rep' && shared[1].speaker === 'prospect', shared.map((c) => c.speaker).join(','));
+
+    // Diarize returns no channel, so the old lookup key was the literal "channel_undefined".
+    const unlabelled = mapSegments([seg(0), seg(1)] as never, 'diarize');
+    check('REGRESSION: a diarized segment with no speaker label is not "unknown"',
+      unlabelled.every((u) => u.speaker !== 'unknown'), unlabelled.map((u) => u.speaker).join(','));
+
+    const ordered = mapSegments([seg(5, 'b', 1), seg(0, 'a', 0)] as never, 'channel');
+    check('segments are ordered by start and ids assigned once',
+      ordered[0].id === 'seg_000' && ordered[0].start_ms === 0 && ordered[1].id === 'seg_001');
+  }
+
   d.prepare(`DELETE FROM runs WHERE call_id LIKE ? OR id LIKE ?`).run(`${TEST_PREFIX}%`, `${TEST_PREFIX}%`);
 
   console.log(

@@ -138,6 +138,23 @@ if (stubbed.length > 0) {
   ok('notes were produced by a real model, not the keyword stub');
 }
 
+// ── 4b. The upload path decides separation from the audio ────────────────────
+// This is the check that would have caught the shipped bug: a stereo two-party recording was
+// transcribed with `diarize: true` because the form defaulted to mono and nothing read the file.
+// Asserting the wiring rather than remembering it — the same habit as the sandbox-key check below.
+const uploadRoute = read('app/api/calls/route.ts');
+assert(
+  Boolean(uploadRoute?.includes('resolveSeparation')),
+  'the upload path consults the bytes before choosing a separation mode',
+);
+// Strip comments before testing: the fix's own explanatory comment quotes the old cast, and a
+// check that trips on prose describing the bug it prevents punishes documenting it.
+const uploadCode = (uploadRoute ?? '').replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+assert(
+  !/as SeparationMode/.test(uploadCode),
+  'the mode form field is validated, not cast (an unchecked cast silently diarizes)',
+);
+
 // ── 5. Sandbox key self-mints, and no secrets are committed ──────────────────
 const pyai = read('lib/pyai.ts');
 assert(

@@ -30,7 +30,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from batch_silence_probe import multipart, request, wav_bytes  # noqa: E402
 from hear_stream_test import (  # noqa: E402
     BOLD, BYTES_PER_SAMPLE, DIM, GREEN, RED, RESET, SAMPLE_RATE, YELLOW,
-    read_wav, resolve_key, rms, write_wav,
+    read_wav, resolve_key, rms, sniff_format, write_wav,
 )
 
 # Colour per speaker, so a transcript is scannable at a glance.
@@ -96,10 +96,52 @@ CONTENT_TYPES = {
 }
 
 
+def preflight(key: str) -> str | None:
+    """Cheap GET before a big upload. Returns a human-readable reason, or None if all is well.
+
+    Without this, an over-quota or bad key produces a BrokenPipeError traceback instead of the
+    actual error: the API rejects the request after reading ~1 MB and closes the socket, and urllib
+    dies writing the rest of the body. One GET costs nothing and turns that into one clear line.
+    """
+    status, body = request("GET", "/models", key)
+    if status == 200:
+        return None
+    err = body.get("error") or {}
+    code, message = err.get("code"), err.get("message")
+    if code == "daily_cap_exceeded":
+        return (f"{message}\n"
+                f"  This key is out of quota — nothing to do with your audio file.\n"
+                f"  Options: wait for the reset, set PYAI_API_KEY to another key, or get a real key\n"
+                f"  at https://console.pyai.com (sandbox minting is capped per network).")
+    if code == "sandbox_limit_reached":
+        return f"{message}\n  No new sandbox keys available from this network."
+    if status in (401, 403):
+        return f"key rejected ({status}): {message or 'check PYAI_API_KEY / .pyai-key.json'}"
+    return f"{code or f'HTTP {status}'}: {message or json.dumps(body)[:200]}"
+
+
+def wav_channels(data: bytes) -> int | None:
+    """Channel count straight from a RIFF/WAVE header. None if it is not a parseable WAV.
+
+    Matters because stereo means `channel:true` is available: one party per track is exact,
+    model-free, and bypasses the diarization stage that is currently 500ing intermittently.
+    """
+    if len(data) < 24 or data[:4] != b"RIFF" or data[8:12] != b"WAVE":
+        return None
+    i = 12
+    while i + 8 <= len(data):
+        cid, size = data[i:i + 4], int.from_bytes(data[i + 4:i + 8], "little")
+        if cid == b"fmt " and i + 24 <= len(data):
+            return int.from_bytes(data[i + 10:i + 12], "little")
+        i += 8 + size + (size & 1)
+    return None
+
+
 def _submit_once(data: bytes, filename: str, ctype: str, key: str,
-                 timeout: float) -> tuple[dict | None, str | None]:
+                 timeout: float, mode: str) -> tuple[dict | None, str | None]:
     """One upload + poll cycle. Returns (result, error-description)."""
-    body, mime = multipart({"diarize": "true", "numerals": "true"}, filename, data, ctype)
+    flags = {"channel": "true"} if mode == "channel" else {"diarize": "true"}
+    body, mime = multipart({**flags, "numerals": "true"}, filename, data, ctype)
     status, job = request("POST", "/transcription/jobs", key, body, mime)
     if status not in (200, 201, 202):
         return None, f"upload returned {status}: {json.dumps(job)[:200]}"
@@ -120,8 +162,8 @@ def _submit_once(data: bytes, filename: str, ctype: str, key: str,
     return job.get("result") or {}, None
 
 
-def diarize(data: bytes, filename: str, key: str, timeout: float = 180.0,
-            attempts: int = 4) -> dict | None:
+def diarize(data: bytes, filename: str, key: str, mode: str = 'diarize',
+            timeout: float = 180.0, attempts: int = 4) -> dict | None:
     """Upload with diarize:true and wait, retrying transient server-side failures.
 
     The retry is not defensive padding: a job was observed failing with
@@ -131,9 +173,17 @@ def diarize(data: bytes, filename: str, key: str, timeout: float = 180.0,
     """
     ctype = CONTENT_TYPES.get(Path(filename).suffix.lower(), "application/octet-stream")
     for attempt in range(1, attempts + 1):
-        result, err = _submit_once(data, filename, ctype, key, timeout)
+        result, err = _submit_once(data, filename, ctype, key, timeout, mode)
         if result is not None:
             return result
+        # A quota refusal is terminal. Backoff never clears a daily cap, and retrying a 4 MB upload
+        # three more times just burns wall clock to reach the same answer.
+        if err and ("daily_cap_exceeded" in err or "sandbox_limit_reached" in err
+                    or "connection_closed_during_upload" in err):
+            print(f"{RED}{err}{RESET}")
+            print(f"{DIM}Not retrying — this is a key/quota problem, not a transient one. Run "
+                  f"again once quota resets.{RESET}")
+            return None
         last = attempt == attempts
         print(f"{YELLOW}attempt {attempt}/{attempts} failed{RESET} — {err}")
         if last:
@@ -199,23 +249,49 @@ def main() -> None:
     p.add_argument("--file", type=Path,
                    help="diarize this audio file instead of recording — mp3, m4a, wav, flac, ogg. "
                         "Sent to PyAI as-is; no conversion needed.")
+    p.add_argument("--mode", choices=["diarize", "channel"],
+                   help="diarize = model guesses who is who (mono). channel = one party per stereo track, exact. Auto-selected from the file when omitted.")
     p.add_argument("--seconds", type=float, help="stop recording after N seconds")
     p.add_argument("--device", type=int, help="input device index")
     p.add_argument("--keep", type=Path, help="save the recording to this WAV")
     args = p.parse_args()
 
+    mode = args.mode
     if args.file:
         if not args.file.exists():
             sys.exit(f"no such file: {args.file}")
-        suffix = args.file.suffix.lower()
-        if suffix not in CONTENT_TYPES:
-            print(f"{YELLOW}Unrecognised extension {suffix or '(none)'}{RESET} — sending anyway. "
-                  f"{DIM}Known-good: {', '.join(sorted(CONTENT_TYPES))}{RESET}")
         # Uploaded byte-for-byte. PyAI decodes server-side, so there is no local conversion step
         # and no re-encoding loss. Duration comes back in result.audio_seconds.
-        data, filename = args.file.read_bytes(), args.file.name
-        print(f"{BOLD}{args.file.name}{RESET}  {DIM}{len(data) / 1e6:.2f} MB, "
-              f"uploaded as-is ({CONTENT_TYPES.get(suffix, 'unknown type')}){RESET}\n")
+        data = args.file.read_bytes()
+        sniffed = sniff_format(data)
+        suffix = args.file.suffix.lower()
+
+        if sniffed and sniffed[0] != suffix:
+            # Trust the bytes. Sending audio/mpeg for a WAV payload is a lie the server may or may
+            # not forgive, and it is the reason a real recording.mp3 failed here.
+            print(f"{YELLOW}{args.file.name} is really a {sniffed[0]} file, not "
+                  f"{suffix or '(no extension)'}{RESET} {DIM}— uploading it as {sniffed[1]}{RESET}")
+        true_ext, ctype = sniffed if sniffed else (suffix, CONTENT_TYPES.get(suffix, ""))
+        if not ctype:
+            print(f"{YELLOW}Unrecognised audio format{RESET} — sending anyway. "
+                  f"{DIM}Known: {', '.join(sorted(CONTENT_TYPES))}{RESET}")
+            ctype = "application/octet-stream"
+        # Give the upload a filename matching its real content, for the same reason.
+        filename = args.file.stem + (true_ext or ".bin")
+
+        channels = wav_channels(data) if true_ext == ".wav" else None
+        if channels:
+            print(f"{DIM}{channels} channel(s) detected{RESET}")
+        if mode is None and channels == 2:
+            mode = "channel"
+            print(f"{GREEN}Stereo → using channel mode{RESET}: one party per track, so speakers are "
+                  f"read off the\n  recording rather than guessed. Exact, and it skips the "
+                  f"diarization stage entirely.\n  {DIM}Force the other with --mode diarize.{RESET}")
+        elif mode is None:
+            mode = "diarize"
+
+        print(f"{BOLD}{args.file.name}{RESET}  {DIM}{len(data) / 1e6:.2f} MB, {ctype}, "
+              f"mode={mode}{RESET}\n")
         known_s = None
     else:
         pcm = record(args)
@@ -229,8 +305,14 @@ def main() -> None:
             write_wav(args.keep, pcm)
             print(f"{DIM}saved {args.keep}{RESET}")
         data, filename = wav_bytes(pcm), "mic-diarize.wav"
+        mode = mode or "diarize"
 
-    result = diarize(data, filename, resolve_key())
+    key = resolve_key()
+    if reason := preflight(key):
+        print(f"{RED}Cannot reach the API with this key.{RESET}\n  {reason}")
+        sys.exit(1)
+
+    result = diarize(data, filename, key, mode)
     if result is None:
         sys.exit(1)
     # For an uploaded file we only learn the duration from the API.

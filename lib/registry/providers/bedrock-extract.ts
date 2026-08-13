@@ -1,17 +1,38 @@
 /**
  * Extraction provider: Claude on AWS Bedrock.
  *
- * Uses the **Mantle** client — the Messages-API Bedrock endpoint
- * (`https://bedrock-mantle.{region}.api.aws/anthropic`). This is deliberate and worth stating,
- * because there are two Bedrock integrations and only one of them works here:
+ * Uses the **Mantle** client — the Messages-API endpoint
+ * (`https://bedrock-mantle.{region}.api.aws/anthropic`). Three AWS surfaces are easy to confuse,
+ * and the difference is the model-id format:
  *
- *   • Legacy `InvokeModel`/`Converse` with ARN-versioned ids (`anthropic.claude-...-v1:0`) —
- *     Claude Opus 5 has NO ARN-versioned id, so it does not appear in that model table at all.
- *   • Mantle / Messages API with bare prefixed ids (`anthropic.claude-opus-5`) — this one.
+ *   • Legacy `InvokeModel`/`Converse` — ARN-versioned ids (`anthropic.claude-...-v1:0`), different
+ *     request shape. Not used here.
+ *   • **Mantle — Claude in Amazon Bedrock. THIS ONE.** Serves the same Messages API shape as
+ *     first-party, and ids carry an `anthropic.` **provider prefix**: `anthropic.claude-opus-5`.
+ *   • Claude Platform on AWS — `AnthropicAws` on `aws-external-anthropic.{region}.api.aws`,
+ *     Anthropic-operated, **bare** ids. A separate product; not this client.
  *
- * Verified before writing this: `messages.parse` exists on the Mantle client, so structured
- * outputs work here exactly as on the first-party API, and Bedrock's feature list explicitly
- * includes structured outputs. Nothing this app uses is on Bedrock's unsupported list.
+ * THE PREFIX IS REQUIRED HERE, and it took two opposite mistakes to establish that, both worth
+ * recording because the reasoning that produced them is seductive:
+ *
+ *  1. The original prefix was correct, but its comment was written from recall without the path
+ *     ever being executed — §08 carried this provider as "Blocked · never executed" throughout.
+ *     Right answer, unearned.
+ *  2. It was then *removed*, on the inference that a Messages-API surface must take first-party
+ *     ids. That does not follow, and the authoritative doc pre-empts it in one sentence: Mantle
+ *     "serves the same Messages API shape — but model IDs carry an `anthropic.` provider prefix",
+ *     with an explicit mapping `claude-opus-5` → `anthropic.claude-opus-5` and the warning "do not
+ *     generate a first-party `claude-*` ID for a Bedrock client — it will 400". The bare-id rule
+ *     belongs to Claude Platform on AWS, a *different* offering whose docs say so on their first
+ *     line. Messages-shaped and bare-id are independent properties.
+ *
+ * So a 404 on `anthropic.claude-opus-5` is a well-formed id the account or region cannot serve —
+ * not a naming problem. `npm run check:model` distinguishes those two empirically; prefer it over
+ * anyone's reading, including this comment's.
+ *
+ * Structured outputs: the SDK wires the same `Resources.Messages` as the first-party client
+ * (`mantle-client.d.ts` — "only the `messages` and `beta.messages` resources are supported"), so
+ * `messages.parse` behaves as it does first-party and this provider needs no JSON repair path.
  *
  * Credentials resolve automatically, by the SDK's own precedence:
  *   apiKey arg > awsAccessKey/awsSecretAccessKey > AWS_BEARER_TOKEN_BEDROCK > default AWS chain
@@ -34,8 +55,11 @@ import {
   toExtractResult,
 } from './extract-shared';
 
-/** Bedrock model ids carry an `anthropic.` prefix; first-party ids do not. */
-function bedrockModelId(model: string): string {
+/**
+ * Bedrock ids carry the `anthropic.` provider prefix. An id that already has one is passed through
+ * untouched, so `OPENGONG_MODEL` can name either form and still mean what it says.
+ */
+export function bedrockModelId(model: string): string {
   return model.startsWith('anthropic.') ? model : `anthropic.${model}`;
 }
 
@@ -47,6 +71,39 @@ function hasAwsCredentials(): boolean {
       process.env.AWS_CONTAINER_CREDENTIALS_RELATIVE_URI ||
       process.env.AWS_WEB_IDENTITY_TOKEN_FILE,
   );
+}
+
+/** What a model-id probe found. `denied` means the id is right but unusable here. */
+export type ModelProbe = { outcome: 'resolved' | 'not_found' | 'denied' | 'error'; detail: string };
+
+/**
+ * Ask the endpoint whether it resolves one model id, with the smallest legal request.
+ *
+ * Lives HERE rather than in the diagnostic script for two reasons: nothing outside
+ * `lib/registry/providers/` may import a vendor SDK (asserted by `check:ship`, which caught exactly
+ * this), and the probe must construct its client the same way extraction does or it can answer a
+ * question about a different code path than the one that failed.
+ *
+ * Deliberately does not use `extractParams` — effort and adaptive thinking are themselves things an
+ * endpoint can reject, and that would confound a test about model naming.
+ */
+export async function probeBedrockModel(region: string, model: string): Promise<ModelProbe> {
+  const client = new AnthropicBedrockMantle({ awsRegion: region });
+  try {
+    await client.messages.create({
+      model,
+      max_tokens: 1,
+      messages: [{ role: 'user', content: 'hi' }],
+    });
+    return { outcome: 'resolved', detail: '' };
+  } catch (err) {
+    const msg = (err instanceof Error ? err.message : String(err)).replace(/\s+/g, ' ').slice(0, 160);
+    if (/not_found_error|does not exist|404/i.test(msg)) return { outcome: 'not_found', detail: msg };
+    if (/AccessDenied|not authorized|don't have access|model access|403/i.test(msg)) {
+      return { outcome: 'denied', detail: msg };
+    }
+    return { outcome: 'error', detail: msg };
+  }
 }
 
 export function bedrockExtractor(): ExtractProvider {
@@ -72,19 +129,39 @@ export function bedrockExtractor(): ExtractProvider {
       // container/IRSA roles all work without a code change.
       const client = new AnthropicBedrockMantle({ awsRegion: region });
 
+      const model = bedrockModelId(REGISTRY_CONFIG.extractModel);
+
       try {
         const res = await client.messages.parse({
-          model: bedrockModelId(REGISTRY_CONFIG.extractModel),
+          model,
           ...extractParams(buildExtractUserMessage(req), zodOutputFormat(ExtractionDraftSchema)),
         });
         return toExtractResult(res, 'bedrock');
       } catch (err) {
-        // The two failures most likely on a first run, called out so nobody debugs the prompt
-        // when the real problem is an AWS console checkbox.
+        // The failures most likely on a first run, called out so nobody debugs the prompt when the
+        // real problem is a model id, an AWS console checkbox, or an unsupported parameter.
         const msg = err instanceof Error ? err.message : String(err);
+
+        // A 404 here is NOT a credentials problem, and it reads like one. The request was signed,
+        // accepted and answered; only the model string was rejected. Say so, because the instinct
+        // on seeing 404 is to re-check the keys.
+        if (/not_found_error|does not exist|404/i.test(msg)) {
+          throw new Error(
+            `Bedrock has no "${model}" available in ${region}.\n` +
+              `This is NOT an auth failure — the request was signed, accepted and answered, and the ` +
+              `id format is correct for Bedrock (the "anthropic." prefix is required here).\n` +
+              `So the variable is the region or model access, not the name:\n` +
+              `  • Run \`npm run check:model\` — it probes every candidate id and separates ` +
+              `"not offered here" from "offered but not enabled for you".\n` +
+              `  • Try a region that serves this model (us-east-1 / us-west-2) and enable Anthropic ` +
+              `model access there in the Bedrock console.\n` +
+              `  • Or pick a model the region does serve: OPENGONG_MODEL=claude-sonnet-5.\n` +
+              `Original: ${msg}`,
+          );
+        }
         if (/AccessDenied|not authorized|don't have access|model access/i.test(msg)) {
           throw new Error(
-            `Bedrock denied access to ${bedrockModelId(REGISTRY_CONFIG.extractModel)} in ${region}. ` +
+            `Bedrock denied access to ${model} in ${region}. ` +
               `Enable Anthropic model access in the Bedrock console for this region, and check the ` +
               `IAM principal can call bedrock:InvokeModel. Original: ${msg}`,
           );
