@@ -111,6 +111,12 @@ presence would silently move everybody off Claude. Three differences, all shown 
 - Because a matched citation always resolves, an unsupported claim ships **visibly flagged on a
   partial run** rather than being deleted.
 
+**A self-minted sandbox key cannot run Recap, and never will.** Sandbox keys carry
+`hear:transcribe`, `transcribe:jobs`, `voice:synthesize`, `omni:session`, `amd:*` and `cast:render` — read
+off a minted key, not inferred — and no `recap:*` at all. So the free key transcribes your calls perfectly
+well and cannot write the notes. The engine picker greys Recap out when it sees a sandbox key, and a run
+that asks for it anyway fails **before** transcribing, so no minutes are spent finding out.
+
 `npx tsx scripts/probe/recap-probe.ts` checks the key and prints exactly what Recap returns.
 
 To choose explicitly rather than auto-detect, set `LLM_PROVIDER` (`anthropic_bedrock` · `anthropic` ·

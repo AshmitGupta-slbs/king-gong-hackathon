@@ -161,6 +161,24 @@ async function cmdShow(db: Db, id: string, asMarkdown: boolean) {
 }
 
 async function cmdAnalyse(db: Db, source: string, flags: Record<string, string | true>) {
+  /*
+    Checked before the dev server is even started, let alone before any audio is sent. The harness
+    gates on this too (loop.ts), so this is not the enforcement -- it is just not making someone wait
+    for Next to boot in order to be told their key cannot do the thing they asked for.
+  */
+  const engineFlag = str(flags.engine);
+  if (engineFlag) {
+    const { engineAvailability } = await import('@/lib/engine-availability');
+    const a = engineAvailability(engineFlag);
+    if (a.available === false) {
+      console.log(`\n  ${c.bad(`Cannot analyse with "${engineFlag}".`)}`);
+      console.log(`  ${a.message}`);
+      console.log(`\n  ${c.dim(a.remedy)}\n`);
+      process.exitCode = 1;
+      return;
+    }
+  }
+
   const { ensureServer, analyse } = await import('./kg/http');
   const up = await ensureServer();
   if (!up.ok) {
@@ -267,6 +285,30 @@ async function cmdDoctor(db: Db, envFile: string | null) {
     }
   } catch {
     row('data/', c.bad('NOT writable - the app will 500 on first render'));
+  }
+
+  heading('Engines');
+  /*
+    The same function the harness gates on and the picker greys out with, so all three agree. `doctor`
+    can be more precise than the no-network check when a live key is present, because pyai-identity.cjs
+    above already spent one request to learn the real scopes -- so use that when we have it.
+  */
+  const { engineAvailability } = await import('@/lib/engine-availability');
+  for (const name of ['claude', 'bedrock', 'recap'] as const) {
+    const a = engineAvailability(name);
+    if (name === 'recap' && a.available === 'unknown' && keyCanRecap) {
+      row(name, c.ok('usable') + c.dim('  recap:read confirmed on this key'), 14);
+      continue;
+    }
+    row(
+      name,
+      a.available === false
+        ? `${c.bad('unusable')}  ${c.dim(a.message)}`
+        : a.available === 'unknown'
+          ? `${c.warn('probably')}  ${c.dim(a.note)}`
+          : c.ok('usable'),
+      14,
+    );
   }
 
   heading('What would run');

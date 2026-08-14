@@ -12,6 +12,7 @@
  * route it through here instead.
  */
 import { describeExtractor, isRealModelExtractor } from '@/lib/provenance';
+import { engineAvailability } from '@/lib/engine-availability';
 import type { ExtractProvider, STTProvider, TTSProvider } from './types';
 
 /**
@@ -288,6 +289,26 @@ export function describeRegistry() {
      * stop the "Skills loaded" row implying a corpus that a prompt-blind engine never receives.
      */
     extractTakesPrompt: extract !== 'recap',
+    /**
+     * Per-engine availability for the upload picker, so it can refuse to offer the impossible.
+     *
+     * Computed from the SAME function the harness gates on (lib/engine-availability.ts), so a greyed-out
+     * option and a rejected run can never disagree. Plain serializable data, and the module it comes
+     * from imports no vendor SDK -- reaching into a provider for this would drag the Bedrock SDK into
+     * every render of the home page and trip check:ship's boundary rule.
+     *
+     * The picker is a hint, not enforcement: a disabled <option> is trivially bypassable, so
+     * loop.ts does the real gating. This just stops someone walking into it.
+     */
+    engines: SELECTABLE_EXTRACTORS.map((name) => {
+      const a = engineAvailability(name);
+      return {
+        name,
+        usable: a.available !== false,
+        reason: a.available === false ? a.message : a.available === 'unknown' ? a.note : null,
+        remedy: a.available === false ? a.remedy : null,
+      };
+    }),
     tts: REGISTRY_CONFIG.tts,
     supportThreshold: REGISTRY_CONFIG.supportThreshold,
     budget: REGISTRY_CONFIG.budget,

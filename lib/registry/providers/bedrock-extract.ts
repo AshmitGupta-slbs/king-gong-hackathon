@@ -32,6 +32,7 @@ import { AnthropicBedrock } from '@anthropic-ai/bedrock-sdk';
 import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
 import { REGISTRY_CONFIG } from '..';
 import { bedrockModelId, needsAccountId } from '@/lib/bedrock-model-id';
+import { engineAvailability } from '@/lib/engine-availability';
 import type { ExtractProvider, ExtractRequest, ExtractResult } from '../types';
 import {
   buildExtractUserMessage,
@@ -283,6 +284,7 @@ async function toolExtract(
 export function bedrockExtractor(): ExtractProvider {
   return {
     name: 'bedrock',
+    precheck: () => engineAvailability('bedrock'),
 
     async extract(req: ExtractRequest): Promise<ExtractResult> {
       const region = process.env.AWS_REGION ?? process.env.AWS_DEFAULT_REGION;
