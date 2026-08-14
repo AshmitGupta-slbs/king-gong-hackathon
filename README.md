@@ -145,7 +145,7 @@ both engines and compare.
 | Value | Sent as |
 |---|---|
 | *unset* | `global.anthropic.claude-sonnet-4-6` — a cross-region inference profile that works with nothing else configured |
-| `3s3wyt6beb2x` — a bare **application inference profile id** (a team's cost-attribution handle) | expanded to `arn:aws:bedrock:{region}:{account}:application-inference-profile/{id}`. The account comes from `AWS_ACCOUNT_ID`, or from `sts:GetCallerIdentity` if that is blank |
+| A bare **application inference profile id** (a team's cost-attribution handle) | expanded to `arn:aws:bedrock:{region}:{account}:application-inference-profile/{id}`. The account comes from `AWS_ACCOUNT_ID`, or from `sts:GetCallerIdentity` if that is blank |
 | `arn:aws:bedrock:…` | verbatim |
 | `global.anthropic.claude-sonnet-4-6` — cross-region profile | verbatim |
 | `claude-opus-5` — foundation id | routed through a cross-region profile: `global.anthropic.claude-opus-5` |
