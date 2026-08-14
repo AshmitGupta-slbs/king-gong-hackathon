@@ -62,7 +62,7 @@ const FALLBACK_TOOL = 'record_deal_notes';
  * `awsAccessKey` / `awsSecretKey` — the Mantle client uses `awsSecretAccessKey`, and mixing them up
  * silently drops the credential.
  */
-function bedrockClient(region: string): AnthropicBedrock {
+export function bedrockClient(region: string): AnthropicBedrock {
   const awsAccessKey = process.env.AWS_ACCESS_KEY_ID?.trim();
   const awsSecretKey = process.env.AWS_SECRET_ACCESS_KEY?.trim();
   const awsSessionToken = process.env.AWS_SESSION_TOKEN?.trim() ?? null;
@@ -154,7 +154,7 @@ export async function resolveBedrockModelId(model: string, region: string): Prom
   return bedrockModelId(model, region, accountId);
 }
 
-function hasAwsCredentials(): boolean {
+export function hasAwsCredentials(): boolean {
   return Boolean(
     (process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY) ||
       process.env.AWS_BEARER_TOKEN_BEDROCK ||

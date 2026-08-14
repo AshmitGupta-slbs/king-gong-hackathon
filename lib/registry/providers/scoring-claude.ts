@@ -33,7 +33,7 @@ export async function runScoringModel<T>(
   const client = new Anthropic();
   const res = await client.messages.parse({
     model: REGISTRY_CONFIG.extractModel,
-    max_tokens: 8_000,
+    max_tokens: 12_000,
     thinking: { type: 'adaptive' },
     output_config: {
       effort: REGISTRY_CONFIG.extractEffort,

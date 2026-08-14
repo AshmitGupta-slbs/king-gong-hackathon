@@ -13,7 +13,9 @@
  * Best-effort by design: returns `null` on any missing credential, refusal, or malformed output,
  * so the caller (lib/harness/loop.ts) can skip scoring without affecting the call's own run_status.
  */
+import { REGISTRY_CONFIG } from '@/lib/registry';
 import { runScoringModel } from '@/lib/registry/providers/scoring-claude';
+import { hasBedrockCredentials, runScoringModelBedrock } from '@/lib/registry/providers/scoring-bedrock';
 import type { UsageReport } from '@/lib/registry/types';
 import {
   ScoringDraftSchema,
@@ -133,18 +135,31 @@ export type ScoreCallOutcome = { scoring: ScoringBundle; usage: UsageReport };
 /**
  * Score a call's already-gated extraction against every methodology in METHODOLOGIES.
  *
- * Returns `null` (never throws past this point in normal use) when there is no Anthropic
- * credential, the model refused, output didn't validate, or nothing usable came back — the caller
- * treats absence as "scoring not available for this call" and moves on.
+ * Uses whichever provider `REGISTRY_CONFIG.extract` says the MAIN extraction actually used —
+ * deliberately not an independent credential check. Scoring following a different provider than
+ * the one actually configured is exactly how this silently did nothing on a Bedrock deployment
+ * with no Anthropic key: `REGISTRY_CONFIG.extract` already knows which provider is real here.
+ *
+ * Returns `null` (never throws past this point in normal use) when there is no usable credential
+ * for that provider, the model refused, output didn't validate, or nothing usable came back — the
+ * caller treats absence as "scoring not available for this call" and moves on.
  */
 export async function scoreCall(
   ex: ExtractionResult,
   segments: TranscriptSegment[],
 ): Promise<ScoreCallOutcome | null> {
-  if (!process.env.ANTHROPIC_API_KEY && !process.env.ANTHROPIC_AUTH_TOKEN) return null;
-
   const { message, allowed } = buildUserMessage(ex);
-  const res = await runScoringModel(SCORING_SYSTEM, message, ScoringDraftSchema);
+
+  let res;
+  if (REGISTRY_CONFIG.extract === 'bedrock') {
+    if (!hasBedrockCredentials()) return null;
+    res = await runScoringModelBedrock(SCORING_SYSTEM, message, ScoringDraftSchema);
+  } else if (REGISTRY_CONFIG.extract === 'claude') {
+    if (!process.env.ANTHROPIC_API_KEY && !process.env.ANTHROPIC_AUTH_TOKEN) return null;
+    res = await runScoringModel(SCORING_SYSTEM, message, ScoringDraftSchema);
+  } else {
+    return null; // stub-heuristic: no real model configured, nothing to score with
+  }
 
   if (res.stop_reason === 'refusal' || res.stop_reason === 'max_tokens' || !res.parsed_output) {
     return null;
