@@ -278,3 +278,7 @@ matrix that says exactly what is real today.
 
 MIT licensed. Runs on [PyAI](https://docs.pyai.com/quickstart) — a sandbox key mints itself, free,
 no signup, subject to the per-network allowance noted in [Five-minute setup](#five-minute-setup).
+
+---
+
+![King Gong](docs/king-gong.png)
