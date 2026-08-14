@@ -354,10 +354,33 @@ if [ "$INTERACTIVE" = "1" ]; then
       [Nn]*) dim "  Not started. The two commands above are ready to paste." ;;
       *)
         echo ""
-        say "Starting the web app. Open http://localhost:3000 -- Ctrl-C here stops it."
-        echo ""
-        # exec, so Ctrl-C reaches npm directly instead of being trapped by this script.
-        exec npm run dev
+        # Do NOT start a second server, and do not promise a URL we did not start.
+        #
+        # This is the bug that made a tester's browser upload silently do nothing. Setup printed
+        # "Open http://localhost:3000" and ran `npm run dev` regardless. Port 3000 was already held, so
+        # Next took 3001 and then refused outright ("Another next dev server is already running") --
+        # leaving her pointed at a server this flow never launched. Worse, both processes had the same
+        # project directory, so two Turbopack builds were writing one .next: the served HTML referenced
+        # chunks the other process had replaced, React never hydrated, and her upload form fell back to
+        # a native GET that looked exactly like the page refreshing itself.
+        #
+        # So: ask the port first. /api/usage is the same endpoint ./kg uses to answer this question.
+        if curl -fsS -o /dev/null --max-time 3 "http://localhost:3000/api/usage" 2>/dev/null; then
+          ok "Something is already serving http://localhost:3000 -- almost certainly this app."
+          dim "  Not starting a second one: two dev servers sharing one .next directory serve each"
+          dim "  other broken JavaScript, and the page then looks loaded but nothing on it works."
+          echo ""
+          echo "  Open it:            http://localhost:3000"
+          echo "  Or restart it:      lsof -ti:3000 | xargs kill    then    cd \"$HERE\" && npm run dev"
+          echo ""
+        else
+          say "Starting the web app. Ctrl-C here stops it."
+          dim "  Watch for the 'Local:' line below -- if 3000 is taken, Next picks another port and"
+          dim "  that line is the one to trust, not this message."
+          echo ""
+          # exec, so Ctrl-C reaches npm directly instead of being trapped by this script.
+          exec npm run dev
+        fi
         ;;
     esac
   fi

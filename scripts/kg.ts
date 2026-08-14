@@ -179,6 +179,21 @@ async function cmdAnalyse(db: Db, source: string, flags: Record<string, string |
     }
   }
 
+  /*
+    Check the file exists BEFORE starting a server. `analyse()` validates it too, but only after
+    ensureServer has spent up to 90 seconds booting Next -- so a typo'd filename used to cost a full
+    server start before anyone was told the path was wrong.
+  */
+  if (!/^https:\/\//.test(source)) {
+    const { existsSync } = await import('node:fs');
+    if (!existsSync(source)) {
+      console.log(`\n  ${c.bad(`No such file: ${source}`)}`);
+      console.log(`  ${c.dim('Give a path to an audio file, or an https:// URL.')}\n`);
+      process.exitCode = 1;
+      return;
+    }
+  }
+
   const { ensureServer, analyse } = await import('./kg/http');
   const up = await ensureServer();
   if (!up.ok) {
@@ -372,13 +387,40 @@ async function cmdInteractive(db: Db) {
       calls.forEach((call, i) => {
         console.log(`  ${c.mono(padVisible(String(i + 1), 3))} ${call.title}`);
       });
+      console.log(`  ${c.mono(padVisible('a', 3))} ${c.dim('analyse a new call from an audio file')}`);
       console.log(`  ${c.mono(padVisible('d', 3))} ${c.dim('doctor - what is configured')}`);
       console.log(`  ${c.mono(padVisible('q', 3))} ${c.dim('quit')}`);
+      console.log(
+        `\n  ${c.dim('Non-interactive: ')}${c.mono('./kg analyse <file> --engine recap --account <id>')}`,
+      );
       const answer = (await rl.question('\n  > ')).trim().toLowerCase();
       if (!answer || answer === 'q') break;
       if (answer === 'd') {
         await cmdDoctor(db, null);
         continue;
+      }
+      /*
+        `./kg analyse <file>` has always existed; this menu simply never offered it, so from the
+        interactive UI it looked as though the terminal could only READ calls. Same code path -- which
+        means it inherits the engine precheck, so an engine that cannot work still fails before any
+        audio is sent.
+      */
+      if (answer === 'a') {
+        const suggestion = 'public/samples/clean-close.wav';
+        console.log('');
+        console.log(`  ${c.dim('Path to an audio file (wav, mp3, m4a, flac), or an https URL.')}`);
+        const raw = (await rl.question(`  file [${suggestion}]: `)).trim();
+        const source = raw || suggestion;
+        const title = (await rl.question('  title [Untitled call]: ')).trim();
+        const engine = (await rl.question('  engine [configured default]: ')).trim();
+        // Closed before cmdAnalyse runs: it opens its own prompt for the citation player, and two
+        // readline interfaces on one stdin fight over every keypress.
+        rl.close();
+        await cmdAnalyse(db, source, {
+          ...(title ? { title } : {}),
+          ...(engine ? { engine } : {}),
+        });
+        return cmdInteractive(db);
       }
       const n = Number(answer);
       if (!Number.isFinite(n) || n < 1 || n > calls.length) {
