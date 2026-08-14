@@ -62,6 +62,11 @@ export type ProcessInput = {
   budgetCaps?: Partial<BudgetCaps>;
   /** Override the STT provider for this run (e.g. 'fixture' to replay a committed transcript). */
   sttProvider?: string;
+  /**
+   * Override the notes engine for this run (e.g. 'recap'). Validated by the caller against the
+   * registry's own table — the same rule as `mode`: validate, never coerce.
+   */
+  extractProvider?: string;
   /** Account this call belongs to. Its context grounds the extraction; optional by design. */
   companyId?: string;
   /**
@@ -175,7 +180,7 @@ export async function processCall(input: ProcessInput): Promise<ProcessOutcome> 
       });
 
       // ── 2. Extract, then GATE, with the gate's own complaint aimed at the retry ────
-      const extractor = await getExtractor();
+      const extractor = await getExtractor(input.extractProvider);
       /**
        * Rendered ONCE and reused across retries, so every attempt sees identical context and the
        * snapshot we persist is exactly what the model was given.
@@ -215,6 +220,10 @@ export async function processCall(input: ProcessInput): Promise<ProcessOutcome> 
             learnedContext,
             skillContext: skills.text ?? undefined,
             openActionItems: openItems.text ?? undefined,
+            // Ignored by every prompt-driven provider. An engine that keys notes to a call id of its
+            // own uses these instead of a prompt — see lib/registry/types.ts.
+            callId,
+            customerName: company?.name,
           };
 
           /*
@@ -273,13 +282,21 @@ export async function processCall(input: ProcessInput): Promise<ProcessOutcome> 
        * context makes that auditable after the fact, and survives the company record being edited
        * later.
        */
+      /**
+       * Both fields below assert that the prompt CONTAINED something. An engine that takes no prompt
+       * (`ignoresPromptContext`) was handed neither, so stamping them would make the workspace claim
+       * a playbook shaped notes it never reached — the same "approximately honest" failure the
+       * citation gate exists to refuse. The context is still rendered above, because it is rendered
+       * once for all providers and the cost is a string; it is simply not RECORDED as having applied.
+       */
+      const promptCarriedContext = !extractor.ignoresPromptContext;
       extraction = {
         ...exRun.value.result,
-        ...(accountContext ? { company_context: accountContext } : {}),
+        ...(promptCarriedContext && accountContext ? { company_context: accountContext } : {}),
         // Same reasoning one level up: notes written under a playbook are a different output from
         // notes written without one, so "which instructions were live" has to survive the run the
         // way `extracted_by` records which model did.
-        ...(skills.ids.length ? { skills_used: skills.ids } : {}),
+        ...(promptCarriedContext && skills.ids.length ? { skills_used: skills.ids } : {}),
       };
       on({
         t: 'stage',

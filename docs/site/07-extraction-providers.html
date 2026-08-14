@@ -107,8 +107,9 @@ export const REGISTRY_CONFIG = {
       <tbody>
         <tr><td rowspan="2"><strong>stt</strong></td><td><code>pyai-jobs</code></td><td><span class="chip teal">verified</span></td><td>PyAI Hear batch jobs. The default. Burns real minutes.</td></tr>
         <tr><td><code>fixture</code></td><td><span class="chip teal">verified</span></td><td>Replays committed sample transcripts. No network, no key, no cost — this is what makes the zero-setup demo real.</td></tr>
-        <tr><td rowspan="3"><strong>extract</strong></td><td><code>claude</code></td><td><span class="chip mustard">never run</span></td><td>First-party Anthropic API. Needs <code>ANTHROPIC_API_KEY</code>.</td></tr>
+        <tr><td rowspan="4"><strong>extract</strong></td><td><code>claude</code></td><td><span class="chip mustard">never run</span></td><td>First-party Anthropic API. Needs <code>ANTHROPIC_API_KEY</code>. The default when a key is present.</td></tr>
         <tr><td><code>bedrock</code></td><td><span class="chip mustard">never run</span></td><td>Claude on AWS Bedrock. Needs AWS credentials + model access.</td></tr>
+        <tr><td><code>recap</code></td><td><span class="chip teal">verified live</span></td><td>PyAI Recap writes the notes itself. Needs a <code>PYAI_API_KEY</code> with <code>recap:read</code> and Recap enabled on the org. Never auto-detected — opt in with <code>LLM_PROVIDER=recap</code> or the per-upload picker. Takes no prompt and returns no citations; see below.</td></tr>
         <tr><td><code>stub-heuristic</code></td><td><span class="chip accent">not a model</span></td><td>Deterministic keyword rules. The current default because no credential exists. Loudly labelled everywhere.</td></tr>
         <tr><td rowspan="2"><strong>tts</strong></td><td><code>macos-say</code></td><td><span class="chip teal">verified</span></td><td>Built-in macOS speech. Generates sample audio. Never on the request path.</td></tr>
         <tr><td><code>pyai-speak</code></td><td><span class="chip mustard">partial</span></td><td>PyAI Speak. Works, but sandbox quota blocks sustained generation.</td></tr>
@@ -121,7 +122,18 @@ export const REGISTRY_CONFIG = {
 
   <h2 id="extraction">How extraction works</h2>
 
-  <p>PyAI's Recap would nominally do this job, but the sandbox key carries neither <code>recap:read</code> nor <code>recap:configure</code>, and Recap needs an org add-on. PyAI's own conversation-intelligence guide says to bring your own model for this step, so we do.</p>
+  <p>Two kinds of engine do this job, and they are not interchangeable. <strong>Claude</strong> (first-party or Bedrock) is sent our prompt — the system contract, the <code>skills/</code> corpus, the account context, the open commitments — and returns our schema with its own <code>segment_ids</code>. <strong>PyAI Recap</strong> is a finished notes product: it takes the transcript and returns its own call intelligence, with no prompt in between.</p>
+
+  <p>Recap was unavailable for most of this build, and the reason was a credential: the self-minting sandbox key carries neither <code>recap:read</code> nor <code>recap:configure</code>. A live key that does carry them turns it on, and it has been run end to end — real Hear transcription into real Recap notes, through the same citation gate, at zero tokens. <strong>Claude remains the default</strong>, for the three reasons below.</p>
+
+  <div class="card accent">
+    <h3>What choosing Recap costs, exactly</h3>
+    <ul>
+      <li><strong>No instructions reach it.</strong> Recap accepts no system prompt, so <code>skills/</code>, account context and learned context are not applied, and it judges none of the commitments carried in from earlier calls. The provider declares <code>ignoresPromptContext</code>, and the harness then refuses to stamp <code>skills_used</code> or <code>company_context</code> — recording a playbook that never reached the engine would be a lie in the audit trail. The home page's "Skills loaded" row says <em>loaded, but not applied</em>.</li>
+      <li><strong>It returns no citations, so we resolve them.</strong> Each claim is matched back to a transcript line: by Recap's own quote where it gave one (a lookup — exact on 14 of 16 quotes probed, and the two misses were Recap silently repairing Hear's ASR damage), by nearest utterance start for its <code>moments</code>, and by best word overlap only where it gave neither. The grounder uses the gate's own <code>supportScore</code> rather than a second copy of it, and it cites the best candidate <em>unconditionally</em> — filtering first would leave the gate a formality that could only agree with us.</li>
+      <li><strong>The delete path becomes unreachable.</strong> The gate removes a claim only when its citation does not resolve; a citation we matched from the real segment list always resolves. So for Recap the strongest available sanction is a visible flag on a partial run, not deletion. "Unprovable claims are deleted rather than softened" is true of a model that mis-cites its own lines; for Recap the accurate statement is the weaker one. <code>npm run test:gate</code> §9 pins down both halves, and each of those checks has been seen to fail on purpose.</li>
+    </ul>
+  </div>
 
   <div class="grid-2">
     <div class="card accent">

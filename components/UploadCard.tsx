@@ -78,7 +78,44 @@ const MODES = [
   },
 ] as const;
 
-export function UploadCard({ companies = [] }: { companies?: { id: string; name: string }[] }) {
+/**
+ * The engines a user may pick per upload, and what changes if they do.
+ *
+ * Recap's description says the two things that actually differ for the reader — no playbooks, and
+ * citations matched here rather than cited by the engine — because a picker that only listed vendor
+ * names would make them look interchangeable, and they are not.
+ */
+const ENGINES = [
+  {
+    value: 'default',
+    name: 'Configured default',
+    desc: 'Whatever this deployment is set up for.',
+  },
+  {
+    value: 'claude',
+    name: 'Claude (Anthropic API)',
+    desc: 'Reads the call under your playbooks and account context, and cites its own lines. Needs ANTHROPIC_API_KEY.',
+  },
+  {
+    value: 'bedrock',
+    name: 'Claude (AWS Bedrock)',
+    desc: 'The same prompt and the same schema, on Bedrock. Needs AWS credentials and model access.',
+  },
+  {
+    value: 'recap',
+    name: 'PyAI Recap',
+    desc: 'PyAI writes the notes. It takes no instructions, so playbooks and account context are not applied, and each claim is matched back to a transcript line here rather than cited by the engine. Needs a PyAI key with recap:read.',
+  },
+] as const;
+
+export function UploadCard({
+  companies = [],
+  defaultEngine,
+}: {
+  companies?: { id: string; name: string }[];
+  /** The resolved `LLM_PROVIDER`, so "Configured default" can say what it actually means. */
+  defaultEngine?: string;
+}) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -87,6 +124,8 @@ export function UploadCard({ companies = [] }: { companies?: { id: string; name:
   const [note, setNote] = useState<string | null>(null);
   const [detected, setDetected] = useState<string | null>(null);
   const [mode, setMode] = useState<string>('auto');
+  /** Held in state only so the description under the picker tracks the selection. */
+  const [engine, setEngine] = useState<string>('default');
   const [stages, setStages] = useState<StageView[] | null>(null);
   const [startedAt, setStartedAt] = useState(0);
   const [expectedMs, setExpectedMs] = useState<number | null>(null);
@@ -275,6 +314,31 @@ export function UploadCard({ companies = [] }: { companies?: { id: string; name:
       </label>
 
       <Field label="…or paste an https URL" name="url" placeholder="https://example.com/call.wav" />
+
+      {/*
+        Per-upload, and it does NOT change the deployment default — so one call can be run through
+        Recap for comparison without every later upload silently following it.
+      */}
+      <label className="flex flex-col gap-1.5">
+        <FieldLabel>Notes engine</FieldLabel>
+        <select
+          name="engine"
+          value={engine}
+          onChange={(e) => setEngine(e.currentTarget.value)}
+          className={cx(inputStyles, 'appearance-none')}
+        >
+          {ENGINES.map((e) => (
+            <option key={e.value} value={e.value}>
+              {e.value === 'default' && defaultEngine
+                ? `${e.name} — ${defaultEngine}`
+                : e.name}
+            </option>
+          ))}
+        </select>
+        <span className="text-caption leading-relaxed text-fg-dim">
+          {ENGINES.find((e) => e.value === engine)?.desc}
+        </span>
+      </label>
 
       <fieldset className="flex flex-col gap-2">
         <legend className="mb-2 text-micro font-medium text-fg-muted">Speaker separation</legend>

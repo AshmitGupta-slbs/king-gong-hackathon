@@ -85,6 +85,17 @@ export type ExtractRequest = {
    * the registry must not learn what an action item is.
    */
   openActionItems?: string;
+  /**
+   * This call's stable id, when the caller has one.
+   *
+   * Optional because two callers legitimately do not: `scripts/extract-samples.ts` re-extracts
+   * committed transcripts that are not calls yet. Prompt-driven providers ignore this entirely — it
+   * exists for engines that key their own server-side record by call id (Recap does), where reusing
+   * an id is what makes a re-run idempotent instead of a second billable extraction.
+   */
+  callId?: string;
+  /** Account name, when known. Only used by engines that take call metadata instead of a prompt. */
+  customerName?: string;
 };
 
 export type ExtractResult = {
@@ -95,6 +106,16 @@ export type ExtractResult = {
 
 export interface ExtractProvider {
   readonly name: string;
+  /**
+   * TRUE for engines that cannot be given instructions — an external notes API that takes a
+   * transcript and returns notes, with no system prompt.
+   *
+   * The harness reads this to decide what it may honestly RECORD about a run: `skills_used` and
+   * `company_context` are claims that the prompt contained those things, so stamping them for an
+   * engine that never saw a prompt would make the workspace assert something untrue. Absent or
+   * false on every prompt-driven provider, which is why it is optional.
+   */
+  readonly ignoresPromptContext?: boolean;
   extract(req: ExtractRequest): Promise<ExtractResult>;
 }
 

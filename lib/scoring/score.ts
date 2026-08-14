@@ -150,15 +150,36 @@ export async function scoreCall(
 ): Promise<ScoreCallOutcome | null> {
   const { message, allowed } = buildUserMessage(ex);
 
+  const hasAnthropicKey = Boolean(
+    process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN,
+  );
+
   let res;
   if (REGISTRY_CONFIG.extract === 'bedrock') {
     if (!hasBedrockCredentials()) return null;
     res = await runScoringModelBedrock(SCORING_SYSTEM, message, ScoringDraftSchema);
   } else if (REGISTRY_CONFIG.extract === 'claude') {
-    if (!process.env.ANTHROPIC_API_KEY && !process.env.ANTHROPIC_AUTH_TOKEN) return null;
+    if (!hasAnthropicKey) return null;
+    res = await runScoringModel(SCORING_SYSTEM, message, ScoringDraftSchema);
+  } else if (hasBedrockCredentials()) {
+    /*
+      The configured extractor is not itself a model we can score with — 'recap' (an external notes
+      API with no scoring endpoint) or 'stub-heuristic'. Scoring is nonetheless still possible and
+      still meaningful, because it reads the ALREADY-GATED extraction rather than the transcript: it
+      does not care which engine wrote the notes, only that the claims it scores survived the gate.
+
+      Falling back to credential detection here does NOT reintroduce the bug the comment above warns
+      about. That bug was an independent credential check OVERRIDING a configured provider, picking
+      Anthropic on a Bedrock-only deployment. Both configured model providers are still honoured
+      first and exactly as before; this branch runs only where the previous behaviour was to return
+      null and leave the call unscored. On a machine with no model credential at all, both checks
+      fail and we return null as before.
+    */
+    res = await runScoringModelBedrock(SCORING_SYSTEM, message, ScoringDraftSchema);
+  } else if (hasAnthropicKey) {
     res = await runScoringModel(SCORING_SYSTEM, message, ScoringDraftSchema);
   } else {
-    return null; // stub-heuristic: no real model configured, nothing to score with
+    return null; // no real model configured anywhere, nothing to score with
   }
 
   if (res.stop_reason === 'refusal' || res.stop_reason === 'max_tokens' || !res.parsed_output) {

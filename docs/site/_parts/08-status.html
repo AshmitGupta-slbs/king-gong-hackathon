@@ -85,6 +85,7 @@
         <tr><td>Uploaded audio playback in production</td><td><span class="chip teal">Working &amp; verified</span></td><td>Was <strong>broken and invisible locally</strong>: a file written to <code>public/</code> after <code>next build</code> 404s under <code>next start</code> while <code>next dev</code> serves it, so an uploaded call would have played silence on the hosted app only. Uploads now live in <code>data/uploads/</code> behind <code>/api/audio</code>. Verified against a production build: 200 full, 206 range, traversal attempts refused</td></tr>
         <tr><td><strong>Note generation — <code>claude</code></strong></td><td><span class="chip accent">Blocked</span></td><td>Written, typechecked, <strong>never executed</strong>. Needs <code>ANTHROPIC_API_KEY</code></td></tr>
         <tr><td><strong>Note generation — <code>bedrock</code></strong></td><td><span class="chip accent">Blocked</span></td><td>Written; client surface verified by inspection. Needs AWS creds + Bedrock model access</td></tr>
+        <tr><td><strong>Note generation — <code>recap</code></strong></td><td><span class="chip teal">Working &amp; verified</span></td><td>Run end to end on a live <code>pyai_live_</code> key: real Hear transcription into real Recap notes, through the real citation gate, at zero tokens. Its two upstream quirks are worked around and measured (floored moment offsets, near-verbatim quotes) and its limits are labelled rather than papered over — see the footnote below</td></tr>
         <tr><td>PyAI Speak sample audio</td><td><span class="chip mustard">Partial</span></td><td>Works for single calls; sandbox quota blocks a full 50-turn regeneration. Sample audio is macOS <code>say</code></td></tr>
         <tr><td><strong>Silence fabrication on our batch path</strong></td><td><span class="chip teal">Working &amp; verified</span></td><td><strong>Measured clean</strong> — this was the project's highest-consequence unknown. Real on streaming; on batch, tested with 25s of digital silence <em>and</em> 20s of room tone at RMS 0.035, the exact level that fabricated on the stream. No segment landed in either gap. So dead air on an uploaded call cannot manufacture quotable evidence, and the gate's guarantee holds against the audio rather than only the transcript. See <a href="10-decisions-risks.html#silence">§10</a></td></tr>
         <tr><td>Hear streaming ingest</td><td><span class="chip">Not used</span></td><td>Heavily probed and documented, but batch owns ingest. No product code depends on it</td></tr>
@@ -132,18 +133,19 @@
     <span class="chip">billing</span>
     <span class="chip">live on-stage transcription</span>
     <span class="chip">PyAI Trace</span>
-    <span class="chip">PyAI Recap</span>
     <span class="chip">coaching dashboards</span>
     <span class="chip">the stream-per-channel ingest fallback</span>
   </div>
 
   <p style="margin-top:18px;">The last one is worth a note: it was fully designed as a contingency in case <code>transcribe:jobs</code> turned out to be denied. It was not, so the design was dropped and recorded in <code>docs/api-truth.md</code> so nobody rebuilds it.</p>
 
-  <p><strong>Two of those chips need a footnote, because the truth got more specific.</strong></p>
+  <p><strong>One of those chips needs a footnote, and one has left the list entirely, because the truth got more specific.</strong></p>
 
   <p><code>CRM sync</code> remains absent and there is now a check that keeps it absent: <code>check:ship</code> fails the build if a HubSpot client or credential appears anywhere in <code>app/</code>, <code>lib/</code>, <code>components/</code> or <code>scripts/</code>. What the app <em>does</em> have is a read-only <strong>CRM payload preview</strong> — the exact JSON a push would post, with every claim linking back to the moment that proves it, and no way to send it. The brief lists CRM sync as out of scope, so that adjacency is flagged in the <a href="11-scorecard.html">scorecard</a> rather than left in a commit message.</p>
 
-  <p><code>PyAI Recap</code> is still unused, and the reason is a credential rather than a preference: the sandbox key carries neither <code>recap:read</code> nor <code>recap:configure</code>, and Recap needs an org add-on. Extraction runs on Claude instead, which PyAI's own conversation-intelligence guide recommends for free-form extraction. It is the single biggest cost to the API-gravity score.</p>
+  <p><strong><code>PyAI Recap</code> has moved off this list.</strong> It was blocked by a credential rather than a preference — the self-minting sandbox key carries neither <code>recap:read</code> nor <code>recap:configure</code> — and a live key that carries both turns it on. It is now a selectable notes engine: <code>LLM_PROVIDER=recap</code>, or the <strong>Notes engine</strong> picker on the home page, which overrides the default for one upload so the two engines can be compared on the same call.</p>
+
+  <p><strong>Claude is still the default, deliberately, and here is the honest reason.</strong> Recap accepts no system prompt, so the <code>skills/</code> corpus and account context cannot reach it and it judges no commitments carried in from earlier calls — the harness therefore records <code>skills_used</code> as empty rather than as the corpus that was merely loaded. And Recap returns no citations, so each claim is matched back to a transcript line by this repo rather than asserted by the engine. Because a matched citation always resolves, the gate's <em>delete</em> path is unreachable for Recap output: an unsupported claim ships visibly flagged on a partial run instead of being removed. That is a genuinely weaker form of the guarantee this product is built on, so it is stated on every call Recap produces rather than left in a doc.</p>
 
   <h2 id="shipcheck">Ship checklist state</h2>
 

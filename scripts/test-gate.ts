@@ -5,6 +5,7 @@
  * Run: npm run test:gate
  */
 import { runCitationGate, supportScore } from '@/lib/harness/gate';
+import { __groundingForTests } from '@/lib/registry/providers/recap-extract';
 import type { ExtractionDraft, TranscriptSegment } from '@/lib/types';
 
 const segments: TranscriptSegment[] = [
@@ -217,6 +218,97 @@ console.log('\n\x1b[1m8. supportScore sanity\x1b[0m');
   const bad = supportScore('legal team blocked the deal over data residency', segments[3].text);
   check('supporting text scores higher than unrelated text', good > bad, `${good.toFixed(2)} vs ${bad.toFixed(2)}`);
   check('unrelated text scores near zero', bad < 0.18, bad.toFixed(2));
+}
+
+/**
+ * PyAI Recap does not cite. `lib/registry/providers/recap-extract.ts` resolves a citation for each
+ * of its claims, which raises the obvious objection: if we choose the line, can the gate still say
+ * no? These checks answer that, and they import the REAL grounder rather than a copy of it, because
+ * a test against a reimplementation would only prove the reimplementation.
+ *
+ * The load-bearing check is 9.5. Its partner, 9.4, is what stops the drop being "fixed" by making the
+ * grounder refuse to cite a weak claim — that would move the failure out of the gate's rejection log
+ * and into silence, which looks like success and is the opposite of it.
+ */
+console.log('\n\x1b[1m9. Recap: derived citations, and a gate that can still refuse them\x1b[0m');
+{
+  const { ground, groundByQuote, groundByOffset } = __groundingForTests;
+
+  // 9.1 — a verbatim quote is a LOOKUP, not a judgement.
+  const exact = groundByQuote('the pricing is the real problem', segments);
+  check('9.1 a verbatim quote resolves to the segment containing it',
+    exact?.ids[0] === 'seg_003' && exact.method === 'quote', JSON.stringify(exact));
+
+  // 9.2 — measured upstream behaviour: Hear transcribed "stigma" as "stig", and Recap quoted it back
+  // REPAIRED. See docs/api-truth.md. Exact matching misses; the tolerant pass must still land it.
+  const repaired = groundByQuote('yeah no problem we have been looking at gong and chorus honestly', segments);
+  check('9.2 a quote Recap repaired still resolves, via the tolerant pass',
+    repaired?.ids[0] === 'seg_001', JSON.stringify(repaired));
+
+  // 9.3 — Recap's moment offsets are FLOORED utterance starts. Containment therefore returns the
+  // previous segment, which in every probed case was the other speaker. seg_000 spans 0–6160 and
+  // seg_001 starts at 6000, so offset 6 is the exact trap: containment says seg_000 (rep), and the
+  // moment belongs to seg_001 (prospect).
+  const byOffset = groundByOffset(6, segments);
+  check('9.3 a floored offset resolves by nearest start, not containment',
+    byOffset?.ids[0] === 'seg_001', JSON.stringify(byOffset));
+  check('9.3 …so the moment is not attributed to the wrong speaker',
+    segments.find((s) => s.id === byOffset?.ids[0])?.speaker === 'prospect');
+
+  // 9.4 / 9.5 — THE NEGATIVE TEST. A claim Recap could plausibly have written that nothing in this
+  // transcript supports. Grounded exactly as a real run grounds it, then handed to the real gate.
+  const invented = 'The security review was completed and legal signed off on the data residency terms';
+  const groundedInvention = ground(segments, invented);
+  check('9.4 the grounder cites unconditionally — it does NOT pre-filter weak claims',
+    (groundedInvention?.ids.length ?? 0) > 0 && groundedInvention?.method === 'lexical',
+    JSON.stringify(groundedInvention));
+  check('9.4 …and every id it chose is a real segment (so tier 1 cannot be what rejects this)',
+    (groundedInvention?.ids ?? []).every((id) => segments.some((s) => s.id === id)));
+  {
+    const draft = baseDraft({
+      objections: [{ claim: invented, segment_ids: groundedInvention?.ids ?? [] }],
+    });
+    const { result, rejections } = runCitationGate(draft, segments, 'recap');
+    const rejection = rejections.find((r) => r.claim === invented);
+
+    check('9.5 the gate rejects a Recap-derived claim the transcript does not support',
+      rejection !== undefined && rejection.reason === 'unsupported_by_segment',
+      rejection?.reason ?? 'no rejection logged');
+    check('9.5 …marks it unverified rather than letting it pass as evidenced',
+      result.objections.find((o) => o.claim === invented)?.verdict === 'unverified');
+    check('9.5 …and downgrades the run', result.run_status !== 'shipped', result.run_status);
+
+    /*
+      Recorded as a check, not a comment, because it is the sharpest limit of the derived-citation
+      approach and it should break loudly if it ever silently changes.
+
+      The gate DELETES a claim only when its citation does not resolve (`gate.ts` gateList: tier-2
+      failures are "shipped flagged, not dropped"). A derived citation always resolves — we picked it
+      from the real segment list — so for this engine the delete path is unreachable, and the
+      strongest available sanction is a visible flag plus a partial run. That is the same sanction a
+      self-citing model gets for the same failure, but it means "unprovable claims are deleted" is
+      NOT true of Recap's output the way it is of a model that cites its own lines badly.
+    */
+    check('9.5 …though it FLAGS rather than deletes — the delete path needs an unresolvable id, ' +
+      'which a derived citation can never be',
+      rejection?.dropped === false && result.objections.some((o) => o.claim === invented),
+      `dropped=${rejection?.dropped}`);
+  }
+
+  // A well-supported Recap claim must still get through, or 9.5 would be passing for the trivial
+  // reason that the gate rejects everything this provider produces.
+  {
+    const supported = 'Pricing is the real problem and hard to justify per seat';
+    const g = ground(segments, supported);
+    const { result } = runCitationGate(
+      baseDraft({ objections: [{ claim: supported, segment_ids: g?.ids ?? [] }] }),
+      segments,
+      'recap',
+    );
+    check('9.6 a Recap claim the transcript DOES support still ships',
+      result.objections[0]?.claim === supported && result.objections[0]?.verdict === 'verified',
+      `support=${result.objections[0]?.support.toFixed(2)}`);
+  }
 }
 
 console.log(

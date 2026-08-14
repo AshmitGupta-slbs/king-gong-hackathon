@@ -8,14 +8,32 @@
  * appears — swapping keyword-stub output for model output without touching the audio.
  *
  * Provider is auto-detected: ANTHROPIC_API_KEY -> claude, AWS creds + AWS_REGION -> bedrock,
- * otherwise the keyword stub. Override with LLM_PROVIDER.
+ * PYAI key with recap:read -> LLM_PROVIDER=recap (never auto-detected), otherwise the keyword stub.
+ *
+ * ⚠ THIS COMMAND OVERWRITES `samples/*.result.json`, which are the committed demo notes. It used to
+ * do that unconditionally and print "these are KEYWORD STUB extractions" AFTERWARDS — so running it
+ * on a machine with no credential destroyed five real extractions and replaced them with keyword
+ * output, and the only signal was a dim line after the fact. It now refuses up front unless
+ * `--allow-stub` is passed. See the guard in main().
  */
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { getExtractor, isRealModelExtractor, REGISTRY_CONFIG } from '@/lib/registry';
-import { runCitationGate } from '@/lib/harness/gate';
 import type { TranscriptSegment } from '@/lib/types';
-import { sampleManifest } from '@/lib/samples';
+
+/*
+  `next dev` loads .env.local; a tsx script does not — and `REGISTRY_CONFIG` reads `LLM_PROVIDER` at
+  MODULE level, so a static import would snapshot the environment before this ran. Same pattern as
+  check-store.ts, with the extra constraint that the registry imports have to be dynamic.
+*/
+for (const f of ['.env.local', '.env']) {
+  if (!existsSync(f)) continue;
+  try {
+    process.loadEnvFile(f);
+    break;
+  } catch {
+    /* a malformed env file should not stop us reporting which provider resolved */
+  }
+}
 
 const SAMPLES = join(process.cwd(), 'samples');
 const c = {
@@ -27,6 +45,12 @@ const c = {
 };
 
 async function main() {
+  // Imported here, not at the top, so the env file above is already loaded when REGISTRY_CONFIG
+  // evaluates `LLM_PROVIDER`.
+  const { getExtractor, isRealModelExtractor, REGISTRY_CONFIG } = await import('@/lib/registry');
+  const { runCitationGate } = await import('@/lib/harness/gate');
+  const { sampleManifest } = await import('@/lib/samples');
+
   const manifest = sampleManifest();
   if (manifest.length === 0) {
     console.error(c.bad('\nNo samples/index.json — run `npm run samples` first.\n'));
@@ -35,6 +59,34 @@ async function main() {
 
   const extractor = await getExtractor();
   const real = isRealModelExtractor(extractor.name);
+  const allowStub = process.argv.includes('--allow-stub');
+
+  /*
+    REFUSE BEFORE WRITING ANYTHING.
+
+    The five committed `*.result.json` files are the zero-setup demo. Overwriting them with keyword
+    output is not a degraded result, it is data loss — and it is the exact thing this script did by
+    default, with a warning printed after the files were already gone. Nothing below this point runs
+    unless a real model is resolved or the caller has explicitly said they want the stub.
+  */
+  if (!real && !allowStub) {
+    console.error(
+      c.bad(`\nRefusing to run: the resolved extractor is "${extractor.name}", not a model.\n`) +
+        c.dim(
+          '  This command OVERWRITES samples/*.result.json — the committed demo notes — so running\n' +
+            '  it without a model credential would replace five real extractions with keyword output.\n\n',
+        ) +
+        '  Set one of:\n' +
+        c.dim('    ANTHROPIC_API_KEY=…                          ') +
+        'first-party Claude\n' +
+        c.dim('    AWS_REGION=… + AWS credentials               ') +
+        'Claude on Bedrock\n' +
+        c.dim('    PYAI_API_KEY=… LLM_PROVIDER=recap            ') +
+        'PyAI Recap writes the notes\n\n' +
+        c.dim('  Or pass --allow-stub if you really do want keyword-stub samples.\n'),
+    );
+    process.exit(1);
+  }
 
   console.log(c.b('\nExtracting sample calls'));
   console.log(

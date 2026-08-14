@@ -68,7 +68,7 @@ export default async function Home() {
         <div className="flex flex-col gap-5">
           <div id="upload" className="scroll-mt-24">
             <Card title="Analyse your own call">
-              <UploadCard companies={companies} />
+              <UploadCard companies={companies} defaultEngine={registry.extract} />
             </Card>
           </div>
 
@@ -77,9 +77,19 @@ export default async function Home() {
               <Row k="Speech-to-text" v={registry.stt} />
               <Row k="Extraction" v={registry.extractDetail} />
               <Row k="Support threshold" v={String(registry.supportThreshold)} />
+              {/*
+                The corpus is loaded either way, but "loaded" would read as "in effect" — and a
+                prompt-blind engine never receives it. Saying which is true costs one clause.
+              */}
               <Row
                 k="Skills loaded"
-                v={registry.skills.length ? registry.skills.join(' · ') : 'none'}
+                v={
+                  !registry.skills.length
+                    ? 'none'
+                    : registry.extractTakesPrompt
+                      ? registry.skills.join(' · ')
+                      : `${registry.skills.join(' · ')} — loaded, but not applied: ${registry.extract} takes no prompt`
+                }
               />
               <Row
                 k="Budget caps"
