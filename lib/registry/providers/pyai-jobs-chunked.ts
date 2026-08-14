@@ -83,7 +83,8 @@ function findQuietSplit(
 
 type Chunk = { wav: Uint8Array; durationMs: number };
 
-function splitIntoChunks(bytes: Uint8Array): Chunk[] {
+/** Exported for direct inspection/testing — not used by anything outside this file otherwise. */
+export function splitIntoChunks(bytes: Uint8Array): Chunk[] {
   const header = readWavHeader(bytes);
   if (!header) throw new Error('pyai-jobs-chunked: expected a readable WAV header');
 

@@ -6,7 +6,7 @@
  * without a listener, which is what makes it safe to add to a pipeline whose whole claim is that
  * every run ends in exactly one recorded status.
  */
-export type StageName = 'upload' | 'transcribe' | 'extract' | 'gate';
+export type StageName = 'upload' | 'transcribe' | 'extract' | 'gate' | 'score';
 
 export type StageEvent =
   | { t: 'run'; callId: string; runId: string }
@@ -86,6 +86,7 @@ export const INITIAL_STAGES: StageView[] = [
   { key: 'transcribe', label: 'Transcribing (PyAI Hear)', state: 'pending' },
   { key: 'extract', label: 'Extracting notes', state: 'pending' },
   { key: 'gate', label: 'Checking citations', state: 'pending' },
+  { key: 'score', label: 'Scoring the call', state: 'pending' },
 ];
 
 /**
