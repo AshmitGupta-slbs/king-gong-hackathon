@@ -96,10 +96,19 @@ function providerFromEnv(): ExtractProviderName | null {
 
 export const REGISTRY_CONFIG = {
   /**
-   * 'pyai-jobs' — PyAI Hear batch jobs. Real transcription, burns Hear minutes. Default.
-   * 'fixture'   — replay committed sample JSON. No network. Powers the zero-setup demo.
+   * 'pyai-jobs-chunked' — PyAI Hear batch jobs, auto-chunked for long mono calls. Default.
+   *                       Falls through to the plain single-job path, unchanged, for anything
+   *                       under 6 minutes or not mono 16-bit WAV — see pyai-jobs-chunked.ts for
+   *                       why: a 13-minute real call reliably 500'd on PyAI's own stt/diarize
+   *                       stage as one job and succeeded every time split into ~200s chunks.
+   * 'pyai-jobs'         — the plain single-job path, with no chunking. Still available via
+   *                       OPENGONG_STT=pyai-jobs for anyone who wants it.
+   * 'fixture'           — replay committed sample JSON. No network. Powers the zero-setup demo.
    */
-  stt: (process.env.OPENGONG_STT ?? 'pyai-jobs') as 'pyai-jobs' | 'fixture',
+  stt: (process.env.OPENGONG_STT ?? 'pyai-jobs-chunked') as
+    | 'pyai-jobs-chunked'
+    | 'pyai-jobs'
+    | 'fixture',
 
   /**
    * 'claude'         — first-party Anthropic API. Needs ANTHROPIC_API_KEY.
@@ -181,6 +190,8 @@ export const PRICING_USD_PER_MTOK = { input: 5, output: 25 } as const;
 // ─────────────────────────────────────────────────────────────────────────────
 
 const sttFactories: Record<string, () => Promise<STTProvider>> = {
+  'pyai-jobs-chunked': async () =>
+    (await import('./providers/pyai-jobs-chunked')).pyaiJobsChunkedSTT(),
   'pyai-jobs': async () => (await import('./providers/pyai-jobs')).pyaiJobsSTT(),
   fixture: async () => (await import('./providers/fixture')).fixtureSTT(),
 };
