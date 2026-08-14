@@ -123,7 +123,6 @@ export function UploadCard({
   const statusFor = (value: string) =>
     engines.find((e) => e.name === (value === 'default' ? defaultEngine : value));
   const selectedStatus = statusFor(engine);
-  const unusable = engines.filter((e) => !e.usable);
   const [stages, setStages] = useState<StageView[] | null>(null);
   const [startedAt, setStartedAt] = useState(0);
   const [expectedMs, setExpectedMs] = useState<number | null>(null);
@@ -344,28 +343,6 @@ export function UploadCard({
           got a 403 for a scope sandbox keys never carry -- six times. The option is disabled rather than
           hidden, because the capability is real and someone with a live key should still learn it exists.
         */}
-        {/*
-          Shown for the UNUSABLE ones, not just the selected one.
-          A disabled option cannot be selected, so hanging the explanation off the selection meant the
-          "(not available here)" label had no "why" anywhere on the page -- the reason existed only in
-          the serialized props. One line each, so three unusable engines do not become a wall.
-        */}
-        {unusable.length > 0 && (
-          <span className="flex items-start gap-2 rounded-control border border-warn-border bg-warn-wash px-2.5 py-2 text-caption leading-relaxed text-warn">
-            <KeyRound size={13} className="mt-0.5 shrink-0" aria-hidden />
-            <span className="min-w-0">
-              <span className="font-semibold">Not available on this machine:</span>
-              {unusable.map((u) => (
-                <span key={u.name} className="mt-1 block text-fg-muted">
-                  <span className="font-mono text-warn">{u.name}</span> {u.reason}
-                </span>
-              ))}
-              <span className="mt-1.5 block text-fg-dim">
-                <span className="font-mono">./kg doctor</span> lists what each one needs.
-              </span>
-            </span>
-          </span>
-        )}
         {selectedStatus && !selectedStatus.usable && selectedStatus.remedy && (
           <span className="text-caption leading-relaxed text-fg-muted">{selectedStatus.remedy}</span>
         )}
