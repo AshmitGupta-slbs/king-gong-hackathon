@@ -31,7 +31,7 @@
       <thead><tr><th>Finding</th><th>Consequence</th></tr></thead>
       <tbody>
         <tr><td><code>transcribe:jobs</code> <strong>is</strong> granted, though <code>authentication.md</code> lists only four scopes and the mint page advertises a shorter list</td><td>This was the single decision the whole architecture hung on. Had it been denied, ingest would have needed a stream-per-channel workaround.</td></tr>
-        <tr><td>No <code>recap:*</code> and no <code>trace:*</code></td><td>Recap and Trace are unavailable to us. So the "Recap writes your summaries" premise does not hold, and extraction is our own model call.</td></tr>
+        <tr><td>No <code>recap:*</code> and no <code>trace:*</code> <em>on a sandbox key</em></td><td>True of the self-minting key, and the original reason extraction is our own model call. A <code>pyai_live_</code> key carries <code>recap:configure</code> and <code>recap:read</code>, so Recap is now a selectable notes engine — probed live, see <code>docs/api-truth.md</code>. Trace is still unreachable for us.</td></tr>
         <tr><td><code>nova:run</code> and <code>cast:render</code> are granted but <strong>404 on every path we tried</strong></td><td>Scopes for unshipped products. Ignore them.</td></tr>
         <tr><td><code>GET /v1/models</code> says the Speak model id is <code>pyai-voice</code></td><td>Not <code>pyai-speak</code>, which is what we guessed first and what produced confusing errors.</td></tr>
       </tbody>

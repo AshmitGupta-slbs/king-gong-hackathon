@@ -79,9 +79,27 @@ export AWS_ACCESS_KEY_ID=...  AWS_SECRET_ACCESS_KEY=...  AWS_REGION=us-east-1
 With neither set, notes fall back to a keyword stub that is **loudly labelled in the UI** and is not
 a substitute for a model. See [Honest caveats](#honest-caveats).
 
+**Or bring no model at all, and let PyAI write the notes.** `LLM_PROVIDER=recap` routes the
+transcript to [PyAI Recap](https://docs.pyai.com/guides/recap-call-intelligence), which needs only a
+`PYAI_API_KEY` carrying `recap:read` on an org with Recap enabled. It is never auto-detected — a PyAI
+key exists on every machine that runs this, because one mints itself, and detecting Recap from its
+presence would silently move everybody off Claude. Three differences, all shown in the interface:
+
+- Recap **takes no prompt**, so `skills/` and account context are not applied, and it judges none of
+  the commitments carried in from earlier calls.
+- Recap **returns no citations**. Each claim is matched back to a transcript line here — by Recap's
+  own quote where it gave one, otherwise by word overlap. `npm run test:gate` §9 pins down what that
+  does and does not prove.
+- Because a matched citation always resolves, an unsupported claim ships **visibly flagged on a
+  partial run** rather than being deleted.
+
+`npx tsx scripts/probe/recap-probe.ts` checks the key and prints exactly what Recap returns.
+
 To choose explicitly rather than auto-detect, set `LLM_PROVIDER` (`anthropic_bedrock` · `anthropic` ·
-`stub`). An unrecognised value **fails loudly** rather than falling back, so a typo cannot quietly
-turn into stub notes that look like model output.
+`recap` · `stub`). An unrecognised value **fails loudly** rather than falling back, so a typo cannot
+quietly turn into stub notes that look like model output. The **Notes engine** picker on the home page
+overrides it for a single upload without changing the default — which is how you run one call through
+both engines and compare.
 
 `LLM_MODEL` accepts any of the four shapes Bedrock understands, each handled differently
 (`lib/bedrock-model-id.ts`) — getting this wrong yields a 404 that reads like a region problem:
@@ -110,16 +128,22 @@ Copy `.env.example` for every option.
 ## How it works
 
 ```
-audio ──▶ PyAI Hear ──▶ segments ──▶ Claude ──▶ draft ──▶ CITATION GATE ──▶ notes
-          (diarized)    seg_000…     (schema-     (untrusted)  drops / flags   + receipts
-                                      forced)
+                                     Claude ─────┐
+audio ──▶ PyAI Hear ──▶ segments ──▶ (schema-    ├──▶ draft ──▶ CITATION GATE ──▶ notes
+          (diarized)    seg_000…      forced)    │   (untrusted)  drops / flags   + receipts
+                                     PyAI Recap ─┘
+                                     (cited here,
+                                      not by it)
 ```
 
 1. **Transcribe.** `POST /v1/transcription/jobs` with `channel: true` for stereo (exact,
    one-party-per-channel separation) or `diarize: true` for mono. Segment ids are assigned **once**,
    here, and never regenerated or invented by a model.
 2. **Extract.** Claude with `output_config.format` forcing a schema, so there is no free-text JSON
-   parsing and no parse-and-repair loop anywhere in this codebase.
+   parsing and no parse-and-repair loop anywhere in this codebase. Or PyAI Recap, which writes the
+   notes itself and returns no citations — those are resolved against the transcript here, by Recap's
+   own quote where it gave one and by word overlap otherwise, and the gate then rules on them exactly
+   as it rules on a model's.
 3. **Gate.** Two tiers — does the citation resolve, and does the segment support the claim. Details
    and the reasoning in [`docs/decisions.md`](docs/decisions.md).
 4. **Ship** with a status: `shipped` · `partial` · `failed` · `deadline`. Never nothing.
@@ -215,6 +239,18 @@ Things a demo would normally hide:
 - **Skills change the notes.** Anything under `skills/` is loaded into the extraction prompt, so
   editing a `SKILL.md` — or pointing `OPENGONG_SKILLS_DIR` at a different corpus — changes what the
   model looks for. "What actually ran" on the home page lists which skills were live.
+- **`LLM_PROVIDER=recap` is a weaker product than the Claude path, and is labelled as one.** Recap
+  takes no prompt, so no playbook and no account context reaches it, and `skills_used` is recorded as
+  empty rather than as the corpus that was merely loaded. It judges no carried commitments, so a
+  Recap call never auto-closes an earlier action item — a person still can. And because its citations
+  are matched here rather than asserted by it, the gate's *delete* path is unreachable: an unsupported
+  Recap claim ships flagged on a partial run instead of being removed. The call header, the notes
+  panel and "What actually ran" all say which engine produced what.
+- **Recap's own numbers are not all trustworthy, and we do not show the ones we cannot check.**
+  Its `moments[].offset_s` is a floored utterance start, so the obvious timestamp lookup lands on the
+  previous segment and attributes the quote to the wrong speaker — measured 0/6 correct, versus 6/6
+  for nearest-start. Its `analytics.filler_rate` and `question_count` were `0` on every call probed.
+  Details in [`docs/api-truth.md`](docs/api-truth.md).
 - **MongoDB makes records durable, not audio.** With `MONGODB_URI` set the call, transcript and
   notes survive a redeploy; the uploaded WAV is a filesystem object and needs a mounted volume. See
   `DEPLOY.md`.
@@ -231,7 +267,7 @@ Things a demo would normally hide:
 |---|---|
 | `npm run dev` | Start the app |
 | `npm run samples` | Rebuild the five sample calls (audio + transcripts + notes) |
-| `npm run extract:samples` | Re-run notes over existing transcripts — no re-recording, no re-transcribing |
+| `npm run extract:samples` | Re-run notes over existing transcripts — no re-recording, no re-transcribing. Refuses without a real model rather than overwriting the committed notes with stub output |
 | `npm run test:gate` | Citation gate verification |
 | `npm run test:harness` | Harness verification |
 | `npm run test:skills` | Skill corpus loads, selects, and does not poison the gate |
@@ -240,6 +276,7 @@ Things a demo would normally hide:
 | `npm run check:ship` | Ship checklist |
 | `npm run check:key` | Is the PyAI key live, and what scopes does it carry |
 | `npm run check:model` | Prints `input → resolved` per model id, and which your account accepts |
+| `npx tsx scripts/probe/recap-probe.ts` | Is Recap reachable, and what does its `record` actually contain |
 | `npm run check:store` | Which storage backend is active, and does a round trip actually work |
 | `npm run fixtures` | Rebuild the hand-authored demo notes (never labelled as model output) |
 | `npm run reindex:samples` | Rebuild `samples/index.json` from what is on disk |
@@ -251,7 +288,7 @@ Things a demo would normally hide:
 
 ```
 lib/types.ts              the data contract — nothing else defines a segment or a claim
-lib/registry/             capability registry + providers (pyai, claude, bedrock, fixtures)
+lib/registry/             capability registry + providers (pyai hear, claude, bedrock, recap, fixtures)
 lib/harness/              the seven parts
 lib/db.ts                 the storage dispatcher — SQLite by default, Mongo if MONGODB_URI is set
 lib/db-sqlite.ts          node:sqlite — no native deps, no server

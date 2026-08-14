@@ -19,8 +19,16 @@ import type { ExtractProvider, STTProvider, TTSProvider } from './types';
  * because it needs less setup; either is a real model. The stub is the last resort and is loudly
  * flagged everywhere it is used.
  */
-type ExtractProviderName = 'claude' | 'bedrock' | 'stub-heuristic';
+type ExtractProviderName = 'claude' | 'bedrock' | 'recap' | 'stub-heuristic';
 
+/**
+ * `recap` is deliberately NOT auto-detected.
+ *
+ * A PyAI key exists on effectively every machine that runs this — `lib/pyai.ts` mints a sandbox one
+ * on first use — so detecting Recap from credential presence would silently move every install off
+ * Claude and onto an engine that cannot honour `skills/` or account context. Recap is opt-in, by
+ * `LLM_PROVIDER` or the per-upload picker, and never by accident.
+ */
 function detectExtractProvider(): ExtractProviderName {
   if (process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN) return 'claude';
   const awsRegion = process.env.AWS_REGION ?? process.env.AWS_DEFAULT_REGION;
@@ -47,6 +55,9 @@ const PROVIDER_ALIASES: Record<string, ExtractProviderName> = {
   anthropic: 'claude',
   anthropic_api: 'claude',
   claude: 'claude',
+  recap: 'recap',
+  pyai_recap: 'recap',
+  pyai: 'recap',
   stub: 'stub-heuristic',
   stub_heuristic: 'stub-heuristic',
   heuristic: 'stub-heuristic',
@@ -93,10 +104,15 @@ export const REGISTRY_CONFIG = {
   /**
    * 'claude'         — first-party Anthropic API. Needs ANTHROPIC_API_KEY.
    * 'bedrock'        — Claude on AWS Bedrock. Needs AWS creds + AWS_REGION + model access.
+   * 'recap'          — PyAI Recap. Needs a PYAI_API_KEY with `recap:read`, and Recap enabled on the
+   *                    org. A real model writes the notes, but it takes no prompt, so `skills/` and
+   *                    account context cannot reach it and citations are resolved by us rather than
+   *                    asserted by it. Opt-in only — see detectExtractProvider.
    * 'stub-heuristic' — deterministic keyword stub. NOT a model, never demo it.
    *
    * Auto-detected from available credentials so a fresh clone works with whatever you have;
-   * `LLM_PROVIDER` overrides (and an unrecognised value throws — see providerFromEnv).
+   * `LLM_PROVIDER` overrides (and an unrecognised value throws — see providerFromEnv). A single
+   * upload can override it again via the picker, without changing this default.
    */
   extract: providerFromEnv() ?? detectExtractProvider(),
 
@@ -172,9 +188,20 @@ const sttFactories: Record<string, () => Promise<STTProvider>> = {
 const extractFactories: Record<string, () => Promise<ExtractProvider>> = {
   claude: async () => (await import('./providers/claude-extract')).claudeExtractor(),
   bedrock: async () => (await import('./providers/bedrock-extract')).bedrockExtractor(),
+  recap: async () => (await import('./providers/recap-extract')).recapExtractor(),
   'stub-heuristic': async () =>
     (await import('./providers/stub-heuristic')).stubHeuristicExtractor(),
 };
+
+/**
+ * The engine names a request may ask for by name.
+ *
+ * Exported so `app/api/calls/route.ts` can validate an uploaded form value against the real table
+ * rather than keeping a second hand-maintained list that could drift out of sync with it. The stub
+ * is excluded on purpose: it is a fallback for a machine with no credentials, never something a user
+ * should be able to select and be shown non-model notes from.
+ */
+export const SELECTABLE_EXTRACTORS = ['claude', 'bedrock', 'recap'] as const;
 
 const ttsFactories: Record<string, () => Promise<TTSProvider>> = {
   'macos-say': async () => (await import('./providers/macos-say')).macosSayTTS(),
@@ -199,8 +226,13 @@ function resolve<T>(
 export const getSTT = (override?: string) =>
   resolve('stt', sttFactories, override ?? REGISTRY_CONFIG.stt);
 
-export const getExtractor = () =>
-  resolve('extract', extractFactories, REGISTRY_CONFIG.extract);
+/**
+ * `override` lets a single upload choose its notes engine without changing the deployment's default,
+ * matching what `getSTT` has always allowed. It is a NAME, already validated by the caller — this
+ * function does not coerce, and `resolve` throws on anything it does not recognise.
+ */
+export const getExtractor = (override?: string) =>
+  resolve('extract', extractFactories, override ?? REGISTRY_CONFIG.extract);
 
 export const getTTS = (override?: string) =>
   resolve('tts', ttsFactories, override ?? REGISTRY_CONFIG.tts);
@@ -225,10 +257,26 @@ export function describeRegistry() {
      * sample may have been produced by something else entirely). That distinction is drawn in the
      * UI rather than blurred here.
      */
-    extractDetail: isRealModelExtractor(extract)
-      ? `${extract} · ${REGISTRY_CONFIG.extractModel} · effort=${REGISTRY_CONFIG.extractEffort}`
-      : `${extract} · ${describeExtractor(extract).detail}`,
+    /**
+     * `recap` is a real model but not OUR model: `LLM_MODEL` and `OPENGONG_EFFORT` do not reach it,
+     * so printing them here would describe a configuration that had no effect on the notes.
+     */
+    extractDetail:
+      extract === 'recap'
+        ? `recap · PyAI Recap${
+            process.env.OPENGONG_RECAP_PACK_ID
+              ? ` · pack=${process.env.OPENGONG_RECAP_PACK_ID}`
+              : " · org's default pack"
+          } · takes no prompt, so skills are not applied`
+        : isRealModelExtractor(extract)
+          ? `${extract} · ${REGISTRY_CONFIG.extractModel} · effort=${REGISTRY_CONFIG.extractEffort}`
+          : `${extract} · ${describeExtractor(extract).detail}`,
     extractIsRealModel: isRealModelExtractor(extract),
+    /**
+     * Whether the configured engine can be given instructions at all. The home page reads this to
+     * stop the "Skills loaded" row implying a corpus that a prompt-blind engine never receives.
+     */
+    extractTakesPrompt: extract !== 'recap',
     tts: REGISTRY_CONFIG.tts,
     supportThreshold: REGISTRY_CONFIG.supportThreshold,
     budget: REGISTRY_CONFIG.budget,

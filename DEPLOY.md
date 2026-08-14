@@ -23,6 +23,17 @@ labelled keyword stub, set **either** `ANTHROPIC_API_KEY` **or** `AWS_ACCESS_KEY
 `AWS_SECRET_ACCESS_KEY` + `AWS_REGION` (with Bedrock model access enabled). See `.env.example` for
 every option.
 
+**Or deploy with no model of your own.** If the `PYAI_API_KEY` already set on this service carries
+`recap:read` and the org has Recap enabled, `LLM_PROVIDER=recap` has PyAI write the notes — one
+credential for the whole pipeline instead of two. It is a deliberately weaker product than the Claude
+path (no playbooks, citations matched rather than asserted, unsupported claims flagged rather than
+deleted), and the interface says so on every call it produces; the trade-offs are listed in the README's
+honest caveats. Verify the key before relying on it:
+
+```bash
+npx tsx scripts/probe/recap-probe.ts     # prints scopes, config, and Recap's real response shape
+```
+
 ### The PyAI key, and what to do when it caps
 
 Uploading **new** audio is the only thing that needs a live PyAI key. The five bundled sample calls
@@ -118,6 +129,14 @@ MONGODB_DB=opengong                # optional, this is the default
 MONGO_COLLECTION_PREFIX=opengong_  # optional; isolates this app inside a shared cluster
 OPENGONG_UPLOAD_DIR=/app/data/uploads
 PYAI_API_KEY=pyai_live_…           # already set
+```
+
+**Which engine writes the notes** is a separate knob, and the picker on the home page overrides it per
+upload either way — so you can leave the default on Claude and still demo Recap live.
+
+```
+LLM_PROVIDER=anthropic_bedrock     # or: anthropic | recap | stub
+OPENGONG_RECAP_PACK_ID=sales_outbound   # only for recap; unset uses the org's default pack
 ```
 
 **Skills are a deployment knob too.** `skills/` ships in the image, so nothing is required — but

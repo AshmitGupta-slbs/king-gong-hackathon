@@ -11,6 +11,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { listCalls, medianRecentRunMs } from '@/lib/db';
 import { processCall } from '@/lib/harness/loop';
+import { SELECTABLE_EXTRACTORS } from '@/lib/registry';
 import { resolveSeparation } from '@/lib/separation';
 import { uploadDir } from '@/lib/uploads';
 import { RequestedSeparationSchema } from '@/lib/types';
@@ -69,6 +70,20 @@ async function prepareUpload(req: Request) {
   // diarized — so a typo'd mode was indistinguishable from a deliberate one.
   const requested = RequestedSeparationSchema.safeParse(form.get('mode') ?? 'auto');
   if (!requested.success) throw new BadUpload('mode must be one of: auto, channel, diarize');
+
+  /*
+    Which engine writes the notes. Same rule as `mode`, and for a sharper reason: the failure mode of
+    coercing this is that a typo silently falls back to the deployment default, so someone who chose
+    Recap for a demo would be shown Claude's notes labelled as their choice.
+
+    'default' means "whatever LLM_PROVIDER resolved to" and is the only value that maps to undefined.
+    The allowed names come from the registry's own table, so this cannot drift out of sync with it.
+  */
+  const engineField = String(form.get('engine') ?? 'default');
+  const engine = z.enum(['default', ...SELECTABLE_EXTRACTORS]).safeParse(engineField);
+  if (!engine.success) {
+    throw new BadUpload(`engine must be one of: default, ${SELECTABLE_EXTRACTORS.join(', ')}`);
+  }
 
   // Validated, not cast — same rule as `mode` above. Empty means "no account", which is allowed:
   // a quick one-off upload must never be blocked waiting for someone to fill in a CRM record.
@@ -137,6 +152,7 @@ async function prepareUpload(req: Request) {
       audioPath: `/api/audio/${stored}`,
       mode: separation.mode,
       numerals: true,
+      extractProvider: engine.data === 'default' ? undefined : engine.data,
     },
   };
 }

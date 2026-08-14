@@ -34,6 +34,7 @@ npm run dev
       <tbody>
         <tr><td><code>ANTHROPIC_API_KEY</code></td><td><code>claude</code> — first-party</td></tr>
         <tr><td><code>AWS_ACCESS_KEY_ID</code> + <code>AWS_SECRET_ACCESS_KEY</code> + <code>AWS_REGION</code></td><td><code>bedrock</code> — also needs Anthropic model access enabled in the Bedrock console</td></tr>
+        <tr><td><code>PYAI_API_KEY</code> with <code>recap:read</code> + <code>LLM_PROVIDER=recap</code></td><td><code>recap</code> — PyAI writes the notes, so no model of your own is needed. Never auto-detected, because a PyAI key exists on every machine. Check it with <code>npx tsx scripts/probe/recap-probe.ts</code></td></tr>
         <tr><td>Neither</td><td><code>stub-heuristic</code> — keyword rules, loudly labelled, not shippable</td></tr>
       </tbody>
     </table>

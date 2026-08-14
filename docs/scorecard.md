@@ -112,15 +112,22 @@ claims blocked — and `components/UsageBar.tsx` states the rule it follows: rep
 sample records **nothing**, so the number only moves when work actually happens. A counter that
 inflated itself would undercut the one thing this product sells.
 
-**Then three things count against it, and they are not small.**
+**Then two things count against it, and they are not small.**
 
-**One PyAI product, not two.** The portfolio slide specifies this build's surface as a **"Hear +
-Recap loop"**. Hear is genuinely used for every upload. **Recap is not used at all** — extraction
-runs on Claude via the Anthropic API or Bedrock. The reason is real and documented in
-`lib/registry/providers/claude-extract.ts`: the sandbox key carries neither `recap:read` nor
-`recap:configure`, Recap needs an org add-on, and PyAI's own conversation-intelligence guide says to
-bring your own model for free-form extraction. Defensible. Still one product where the brief
-specified two.
+**The Hear + Recap loop is now closed — with an asterisk.** The portfolio slide specifies this build's
+surface as a **"Hear + Recap loop"**. For most of the build Recap was not used at all: the sandbox key
+carried neither `recap:read` nor `recap:configure`. With a live key that does, Recap is now a
+selectable notes engine (`lib/registry/providers/recap-extract.ts`) — `LLM_PROVIDER=recap`, or the
+per-upload picker — and it has been run end to end against the live API: real Hear transcription into
+real Recap notes, through the same citation gate, at zero tokens.
+
+The asterisk is the honest part, and it is why **Claude remains the default**. Recap accepts no prompt,
+so the `skills/` corpus and account context cannot reach it and it judges no carried commitments; and
+it returns no citations, so each claim is matched back to a transcript line by this repo rather than
+asserted by the engine. That last point costs a real guarantee: because a matched citation always
+resolves, the gate's *delete* path is unreachable for Recap output and an unsupported claim ships
+flagged on a partial run instead of being removed. So: two PyAI products where the brief specified two,
+and a clear statement of which one the product's central promise is weaker under.
 
 **Speak is coded and switched off.** `lib/registry/providers/pyai-speak.ts` exists, is tested, and
 would burn Speak minutes — but the default is `macos-say` because Speak returned `503

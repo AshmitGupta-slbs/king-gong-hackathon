@@ -90,7 +90,7 @@ flowchart LR
         <tr><td><code>lib/harness/loop.ts</code></td><td><code>processCall()</code> — the named loop, and the only place all seven parts meet.</td></tr>
         <tr><td><code>lib/harness/{retry,budget,parallel}.ts</code></td><td>Aimed retry · budget governor · per-call write lock.</td></tr>
         <tr><td><code>lib/registry/index.ts</code></td><td>The capability registry. <strong>The one file you edit to swap a provider.</strong></td></tr>
-        <tr><td><code>lib/registry/providers/</code></td><td>The only directory allowed to import a vendor SDK. Eight providers across STT, extraction and TTS.</td></tr>
+        <tr><td><code>lib/registry/providers/</code></td><td>The only directory allowed to import a vendor SDK. Eight providers across STT, extraction and TTS — including <code>recap</code>, which is the sole owner of PyAI Recap's response shape.</td></tr>
         <tr><td><code>lib/db.ts</code></td><td>Six tables via <code>node:sqlite</code>. Calls, segments, extractions, runs, gate rejections, usage events.</td></tr>
         <tr><td><code>lib/readability.ts</code></td><td>Casing-only transcript display pass, with a word-preservation guard.</td></tr>
         <tr><td><code>components/CallWorkspace.tsx</code></td><td>The workspace: player, transcript, notes, citation chips. One client component because they share audio state.</td></tr>

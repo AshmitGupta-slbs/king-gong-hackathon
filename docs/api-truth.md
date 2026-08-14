@@ -16,8 +16,9 @@ base_url: https://api.pyai.com/v1     environment: test     expires: +7 days
 - **`transcribe:jobs` IS granted.** `authentication.md` lists only four scopes and omits it, and
   `sandbox/mint-a-sandbox-key` advertises a shorter list. Both are stale. This was the single
   decision the architecture hung on, and it went our way.
-- **No `recap:*` and no `trace:*`.** Recap and Trace are confirmed unavailable to us — Recap
-  additionally requires the "Recap add-on enabled" per its own docs. We do extraction with Claude.
+- **No `recap:*` and no `trace:*` on a SANDBOX key.** That was the original reason extraction runs on
+  Claude. It no longer applies to the live key — see "Recap" below, probed Fri 14 Aug. Trace is
+  still unreachable for us.
 - `nova:run` and `cast:render` are granted but **have no reachable endpoint** (404 on
   `/cast/render`, `/audio/cast`, `/cast`, `/nova/run`). Scopes for unshipped products. Ignore.
 - Key expires **Thu 20 Aug**, comfortably past Friday's demo. Re-mint is one unauthenticated call,
@@ -509,6 +510,81 @@ Related, and separately confirmed: `extracted_by` is **sticky per call**. `gate.
 it into the persisted extraction JSON, so a call processed while the stub was active keeps
 reporting `stub-heuristic` regardless of later credential changes. Only re-processing
 overwrites it — re-upload rather than debugging the badge.
+
+## Recap — reachable on a live key, and it returns far more than it documents
+
+Probed **Fri 14 Aug 2026** with `scripts/probe/recap-probe.ts` against two committed samples
+(`clean-close`, `heavy-objections`). The key is a `pyai_live_` key on a payg org:
+
+```
+GET /v1/me            scopes: … recap:configure, recap:read  (plus hear:transcribe, transcribe:jobs)
+GET /v1/recap/config  { enabled: true, default_pack_id: "sales_outbound", webhook_url: null }
+```
+
+Recap was **already enabled** on the org, so no `PUT /v1/recap/config` was needed. Submitting an
+existing transcript works exactly as documented: `POST /v1/recap/calls/{call_id}` with `utterances`
+→ **202 `pending`**, then `GET /v1/recap/calls/{call_id}` reaches `complete` in **3.5–4.7s** for a
+10-utterance call. Stage reported throughout as `extract+coverage`.
+
+### `record` is typed as a bare `object` in the OpenAPI. Here is what it actually contains
+
+Identical key set across both samples (`pack_id: sales_outbound`):
+
+| key | shape | notes |
+| --- | --- | --- |
+| `tldr` | string | one line. Same text as the top-level `headline`. |
+| `summary_draft` | string | the detailed notes. **There is no `summary` key on this pack** — the docs' troubleshooting table is right to say read `summary_draft`. |
+| `next_steps` | **string** | prose, *not* a list. Easy to misread from the docs. |
+| `action_items[]` | `{task, owner, due}` | `owner` is `agent`/`customer`; `due` is free text and **can be `null`**. |
+| `objections[]` | `{text, note, response_quality, agent_response_type}` | `text` is a transcript quote; `note` is Recap's read of the agent's response. |
+| `moments[]` | `{category, offset_s, description}` | categories seen: `buying_signal`, `objection_raised`, `risk_flagged`, `commitment_made`. |
+| `buying_signals[]` | `{quote, category}` | can be empty. |
+| `risk_signals[]` | `{quote, category, severity}` | can be empty. |
+| `competitor_mentions[]` | — | empty on both samples; element shape unobserved. |
+| `key_decisions[]` | string[] | can be empty. |
+| `coverage_gaps[]` | `{fact, type, transcript_quote}` | facts Recap could not fully verify. `type` seen: `name`, `number`, `other`. **Duplicates occur** (the same quote appeared twice). |
+| `extracted_fields` | object | pack-driven and **per-call**: `{number_of_seats, option_to_add_seats, onboarding_process}` on one call, `{industry, …}` on the other. Free-form. |
+| `sentiment_phases[]` | `{phase, agent_sentiment, customer_sentiment, note}` | |
+| `analytics` | `{talk_ratio, filler_rate, question_count}` | `filler_rate` and `question_count` were both `0` on both samples — suspect, unverified. |
+
+### ⚠ `moments[].offset_s` is a FLOORED utterance start, so containment resolves the wrong segment
+
+The offsets come back as whole seconds (`7`, `22`, `49`) and are the *truncated* start offset of the
+utterance Recap means. Because flooring lands the value just **below** that utterance's start, the
+obvious "which segment's `[start, end]` window contains this offset?" lookup returns the **previous**
+segment — which on all three moments of `clean-close` was the other speaker. Measured:
+
+| offset_s | containment | nearest start | Recap's description matches |
+| --- | --- | --- | --- |
+| 7 | seg_000 (rep) | **seg_001** (prospect) | seg_001 |
+| 22 | seg_002 (rep) | **seg_003** (prospect) | seg_003 |
+| 49 | seg_006 (rep) | **seg_007** (prospect) | seg_007 |
+
+Nearest-segment-start scored **6/6 across both samples** (deltas +0.24s … +0.76s, always positive,
+consistent with flooring); containment scored **0/6** and inverted the speaker every time. So:
+resolve moments by **nearest segment start**, never by containment. This is exactly the class of bug
+`docs/decisions.md` §8 was written about — a plausible lookup that silently attributes a quote to the
+wrong party.
+
+### Quotes are near-verbatim, not verbatim — Recap repairs ASR damage
+
+`objections[].text`, `buying_signals[].quote`, `risk_signals[].quote` and
+`coverage_gaps[].transcript_quote` are quotes of the utterances we submitted, so they can be resolved
+back to a segment by substring match. Exact match hit **14/16**. Both misses were the same quote, and
+the cause is informative: Hear transcribed *"it became a stigma, managers used…"* as
+`it became a stig managers used`, and **Recap silently corrected it to `stigma`**. That quote still
+resolves at 0.88 token overlap.
+
+So quote resolution needs a tolerant second pass, and — importantly — Recap's prose can differ from
+the transcript. `lib/harness/gate.ts` already guarantees the right thing here: quoted evidence and
+timestamps are always taken from the **segment**, never from provider prose.
+
+### What Recap does not give you
+
+No per-claim segment ids, no follow-up email, and no way to pass a system prompt — so `skills/`,
+account context, learned context and carried commitments cannot reach it. See
+`lib/registry/providers/recap-extract.ts` for how each field is grounded and what is deliberately
+left unmapped.
 
 ## Environment notes
 

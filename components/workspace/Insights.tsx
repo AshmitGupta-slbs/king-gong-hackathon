@@ -7,7 +7,7 @@
  * REJECTED is a first-class panel rather than an error state. Notes you cannot audit are a guess;
  * publishing our own rejections is the argument.
  */
-import { CircleX, TriangleAlert } from 'lucide-react';
+import { CircleX, Info, TriangleAlert } from 'lucide-react';
 import type { CitedClaim, Evidence, ExtractionResult, GateRejection } from '@/lib/types';
 import { Badge } from '@/components/ui/Badge';
 import { Card } from '@/components/ui/Card';
@@ -127,6 +127,22 @@ export function Insights({
             <span className="text-fg-muted">
               Source <span className="font-mono">{provenance.label}</span> — {provenance.detail}.
             </span>
+          </span>
+        </p>
+      )}
+      {/*
+       * Written by a model, but not by the path the rest of this interface describes. Deliberately
+       * NOT styled as a warning: nothing is wrong with these notes, they were just produced under
+       * different rules, and dressing that as an alert would train people to dismiss it.
+       */}
+      {provenance.isReal && provenance.caveated && (
+        <p className="flex items-start gap-2 rounded-control border border-border-subtle bg-surface-inset px-3 py-2 text-caption leading-relaxed text-fg-muted">
+          <Info size={13} className="mt-0.5 shrink-0" aria-hidden />
+          <span>
+            <span className="font-semibold text-fg">
+              These notes came from a different engine.
+            </span>{' '}
+            Source <span className="font-mono">{provenance.label}</span> — {provenance.detail}.
           </span>
         </p>
       )}
@@ -262,7 +278,11 @@ export function EmptyNotes() {
           </p>
           <p className="mt-2.5 text-caption text-fg-dim">
             Set ANTHROPIC_API_KEY, or AWS_REGION + AWS credentials for Bedrock, then run{' '}
-            <span className="font-mono text-fg-muted">npm run extract:samples</span>
+            <span className="font-mono text-fg-muted">npm run extract:samples</span>. With no model
+            of your own, a PYAI_API_KEY carrying{' '}
+            <span className="font-mono text-fg-muted">recap:read</span> also works —{' '}
+            <span className="font-mono text-fg-muted">LLM_PROVIDER=recap</span> has PyAI write the
+            notes instead.
           </p>
         </div>
       </div>
