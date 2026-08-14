@@ -352,6 +352,9 @@ export async function processCall(input: ProcessInput): Promise<ProcessOutcome> 
        * — see lib/scoring/score.ts. Its own try/catch is load-bearing: anything that goes wrong here
        * must never reach the outer catch below and flip an already-shipped call to 'failed'.
        */
+      const tScore = Date.now();
+      on({ t: 'stage', stage: 'score', state: 'start' });
+      let scoreDetail = 'skipped';
       try {
         // Same governor instance, same caps as the main extraction above — a run's total spend is
         // capped, not just the main call's. If the extraction's own retries already used the
@@ -363,10 +366,17 @@ export async function processCall(input: ProcessInput): Promise<ProcessOutcome> 
           budget.record(scored.usage);
           await recordUsage(callId, 'scoring', scored.usage);
           await saveExtraction(callId, extraction);
+          scoreDetail = 'scored';
         }
       } catch {
         // Scoring is additive. The call still ships/partials/fails exactly as it would have
         // without this feature, and simply has no scoring section.
+        scoreDetail = 'skipped (error)';
+      } finally {
+        // Reported unconditionally, success or not: a run-ending model call with no matching
+        // progress event is exactly the gap that left a client watching a fully-ticked stage list
+        // while the server kept working — see the "score" stage's own history for why it exists.
+        on({ t: 'stage', stage: 'score', state: 'done', ms: Date.now() - tScore, detail: scoreDetail });
       }
     } catch (err) {
       if (err instanceof DeadlineError) {
