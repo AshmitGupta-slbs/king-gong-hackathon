@@ -16,6 +16,7 @@
  */
 import { pyaiJobsSTT, segId } from './pyai-jobs';
 import { readWavHeader, buildWav } from '@/lib/wav';
+import { retryAimed } from '@/lib/harness/retry';
 import type { TranscriptSegment } from '@/lib/types';
 import type { STTProvider, STTRequest, STTResult } from '../types';
 
@@ -27,6 +28,20 @@ const SPLIT_SEARCH_SECONDS = 5;
 const SPLIT_WINDOW_MS = 50;
 /** A gap this short at a chunk boundary is assumed to be the same speaker continuing across it. */
 const CONTINUITY_GAP_MS = 2000;
+
+/**
+ * Retries PER CHUNK, not per call.
+ *
+ * `loop.ts` already wraps the whole `stt.transcribe()` call in `retryAimed` — but for a chunked
+ * call, "the whole call" is every chunk. Without this, one flaky chunk near the end of a long
+ * call throws away every chunk that already succeeded and restarts the entire sequence from
+ * chunk 0, capped at the harness's 2 total attempts. Retrying the ONE chunk that actually failed
+ * is strictly cheaper and, since docs/api-truth.md records PyAI's bad windows lasting minutes,
+ * needs more attempts and longer backoff than the default — matching the pattern already proven
+ * in scripts/probe/mic_diarize_test.py (4 attempts, 5/15/30s backoff) rather than reinventing one.
+ */
+const CHUNK_RETRY_ATTEMPTS = 4;
+const CHUNK_RETRY_BACKOFF_MS = [5_000, 15_000, 30_000];
 
 function windowRms(view: DataView, byteOffset: number, frames: number): number {
   let sumSq = 0;
@@ -154,12 +169,24 @@ export function pyaiJobsChunkedSTT(): STTProvider {
       const stem = req.filename.replace(/\.[^./\\]+$/, '') || 'upload';
 
       for (let i = 0; i < chunks.length; i++) {
-        const result = await single.transcribe({
-          audio: chunks[i].wav,
-          filename: `${stem}.chunk${i}.wav`,
-          mode: req.mode,
-          numerals: req.numerals,
+        const attempt = await retryAimed({
+          attempts: CHUNK_RETRY_ATTEMPTS,
+          run: () =>
+            single.transcribe({
+              audio: chunks[i].wav,
+              filename: `${stem}.chunk${i}.wav`,
+              mode: req.mode,
+              numerals: req.numerals,
+            }),
+          // A 4xx on one chunk means bad scope/request, not bad luck — retrying cannot help, and
+          // every other chunk would hit the exact same wall, so fail the whole call immediately.
+          isFatal: (e) =>
+            typeof e === 'object' && e !== null && 'retryable' in e
+              ? !(e as { retryable: boolean }).retryable
+              : false,
+          backoffMs: (n) => CHUNK_RETRY_BACKOFF_MS[n - 1] ?? CHUNK_RETRY_BACKOFF_MS.at(-1)!,
         });
+        const result = attempt.value;
 
         let segs = result.segments.map((s) => ({
           ...s,
