@@ -6,7 +6,7 @@
  * The deal strip only renders when full account context was passed. The public share route passes
  * participants without it, so a recipient sees who spoke and nothing about pipeline.
  */
-import { Download, ShieldAlert, Share2 } from 'lucide-react';
+import { Download, ShieldAlert, Share2, Trash2 } from 'lucide-react';
 import type { CallContext, Participant } from '@/lib/crm/types';
 import type { CallBundle } from '@/lib/types';
 import { Badge, type BadgeTone } from '@/components/ui/Badge';
@@ -33,12 +33,17 @@ export function CallHeader({
   participants,
   onGateDemo,
   gateBusy,
+  onDelete,
+  deleteBusy,
 }: {
   bundle: CallBundle;
   crm: CallContext | null;
   participants: Participant[];
   onGateDemo?: () => void;
   gateBusy: boolean;
+  /** Undefined on the public share route, same as onGateDemo — a viewer never gets either. */
+  onDelete?: () => void;
+  deleteBusy?: boolean;
 }) {
   const { call, segments, extraction } = bundle;
 
@@ -96,6 +101,18 @@ export function CallHeader({
             >
               <ShieldAlert size={14} aria-hidden />
               {gateBusy ? 'Testing gate…' : 'Test the gate'}
+            </Button>
+          )}
+          {/*
+            `danger` styling used to belong only to "Test the gate" above -- destructive-LOOKING,
+            not a destructive action. This one actually is: it removes the call, its transcript
+            and its notes for good. Same variant, since it's still the only destructive-styled
+            option this app has, but worth the note now that the styling means it for real too.
+          */}
+          {onDelete && (
+            <Button variant="danger" onClick={onDelete} disabled={deleteBusy} title="Delete this call">
+              <Trash2 size={14} aria-hidden />
+              {deleteBusy ? 'Deleting…' : 'Delete call'}
             </Button>
           )}
         </div>

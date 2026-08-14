@@ -14,6 +14,7 @@
  * all, whether or not a component would have drawn it.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { FileText, Building2, Share2 } from 'lucide-react';
 import { analyseCall } from '@/lib/analytics';
 import { readableFor, renderedSpansFor } from '@/lib/readability';
@@ -59,6 +60,7 @@ export function CallWorkspace({
   readOnly?: boolean;
 }) {
   const { call, segments, extraction } = bundle;
+  const router = useRouter();
   const audioRef = useRef<HTMLAudioElement>(null);
   const segRefs = useRef<Map<string, HTMLDivElement>>(new Map());
   const scrollerRef = useRef<HTMLDivElement>(null);
@@ -68,6 +70,7 @@ export function CallWorkspace({
   const [follow, setFollow] = useState(true);
   const [gateDemo, setGateDemo] = useState<GateDemoResult | null>(null);
   const [gateBusy, setGateBusy] = useState(false);
+  const [deleteBusy, setDeleteBusy] = useState(false);
   /** Segments backing the claim currently under the cursor. */
   const [cited, setCited] = useState<string[] | null>(null);
   const [tab, setTab] = useState<'notes' | 'context' | 'crm'>('notes');
@@ -158,6 +161,30 @@ export function CallWorkspace({
     }
   };
 
+  const handleDelete = async () => {
+    if (
+      !window.confirm(
+        `Delete "${call.title}"? This removes the call, its transcript and its notes. This cannot be undone.`,
+      )
+    ) {
+      return;
+    }
+    setDeleteBusy(true);
+    try {
+      const res = await fetch(`/api/calls/${call.id}`, { method: 'DELETE' });
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        window.alert(body?.error ?? `Could not delete this call (HTTP ${res.status}).`);
+        setDeleteBusy(false);
+        return;
+      }
+      router.push('/');
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'Could not delete this call.');
+      setDeleteBusy(false);
+    }
+  };
+
   const displayText = useMemo(() => readableFor(call.title), [call.title]);
   const displaySpans = useMemo(() => renderedSpansFor(call.title), [call.title]);
   const meta = useMemo(
@@ -182,6 +209,8 @@ export function CallWorkspace({
                 participants={people}
                 onGateDemo={readOnly ? undefined : runGateDemo}
                 gateBusy={gateBusy}
+                onDelete={readOnly ? undefined : handleDelete}
+                deleteBusy={deleteBusy}
               />
             </div>
 

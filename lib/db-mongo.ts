@@ -152,6 +152,25 @@ export const mongoStore: Store = {
     });
   },
 
+  /**
+   * Removes everything scoped to this call: itself, its transcript, its notes, its run/audit
+   * history, and its company link. Deliberately leaves `company_learnings` and `action_items`
+   * alone (the account's own accumulated context, not this call's) and `usage_events` (billing
+   * history for work already done) untouched — same policy as the SQLite store.
+   */
+  async deleteCall(id) {
+    // No deleteOne on this abstraction (the REST-gateway backend only implements deleteMany) --
+    // deleteMany on an _id filter deletes exactly the one matching document either way.
+    await Promise.all([
+      col(collections().gateRejections).deleteMany({ call_id: id }),
+      col(collections().runs).deleteMany({ call_id: id }),
+      col(collections().segments).deleteMany({ call_id: id }),
+      col(collections().extractions).deleteMany({ _id: id }),
+      col(collections().callCompanies).deleteMany({ _id: id }),
+    ]);
+    await col(collections().calls).deleteMany({ _id: id });
+  },
+
   // ── segments ───────────────────────────────────────────────────────────────
   async replaceSegments(callId, segs) {
     const c = col(collections().segments);

@@ -16,7 +16,15 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex h-dvh overflow-hidden">
       <Sidebar />
-      <div className="flex min-w-0 flex-1 flex-col">
+      {/*
+        min-h-0 here too, not just on <main> — this column is itself a flex ITEM of the outer row
+        above, and a flex item's default min-height is `auto` (its content's natural height), not 0.
+        Without this, a page whose content is taller than one viewport could force THIS column past
+        h-dvh despite the outer row's overflow-hidden, which pushes scrolling onto the whole document
+        instead of containing it inside <main> — exactly the failure mode the comment above promises
+        does not happen.
+      */}
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <TopBar />
         <StubBanner />
         <main className="min-h-0 flex-1 overflow-y-auto">{children}</main>
