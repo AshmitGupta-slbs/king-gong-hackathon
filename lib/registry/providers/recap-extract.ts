@@ -46,21 +46,31 @@ import type { ExtractProvider, ExtractRequest, ExtractResult } from '../types';
  * PyAI shipping one new field into a failed extraction, which is the wrong trade for notes.
  * What we do NOT do is drop the difference silently: `unmappedKeys` below reports it.
  */
-const RecapQuoteSchema = z.object({ quote: z.string().optional(), category: z.string().optional() });
+/**
+ * Every optional string field below is `.nullish()`, not `.optional()`.
+ *
+ * `due` was already `.nullish()` with a note that it had been "observed null" — that was Recap
+ * sending an explicit `null` rather than omitting the key. A real 13-minute call hit the same
+ * behaviour on `objections[].response_quality`, which was still `.optional()` (accepts a missing
+ * key, rejects an explicit `null`) and threw `ZodError: invalid_type, expected string, received
+ * null` out of `RecapRecordSchema.parse()`. `due` was one instance of a pattern, not the only
+ * field it applies to — every other declared-optional string here can plausibly arrive as `null`
+ * the same way, so all of them take the fix `due` already had, not just the one that broke first.
+ */
+const RecapQuoteSchema = z.object({ quote: z.string().nullish(), category: z.string().nullish() });
 
 const RecapRecordSchema = z
   .object({
-    tldr: z.string().optional(),
-    summary: z.string().optional(),
-    summary_draft: z.string().optional(),
+    tldr: z.string().nullish(),
+    summary: z.string().nullish(),
+    summary_draft: z.string().nullish(),
     /** Prose, NOT a list — easy to misread from the docs. */
-    next_steps: z.string().optional(),
+    next_steps: z.string().nullish(),
     action_items: z
       .array(
         z.object({
           task: z.string(),
-          owner: z.string().optional(),
-          /** Free text, and observed null. */
+          owner: z.string().nullish(),
           due: z.string().nullish(),
         }),
       )
@@ -70,9 +80,9 @@ const RecapRecordSchema = z
         z.object({
           /** A quote of the submitted utterance — see `groundByQuote` for why "a" and not "the". */
           text: z.string(),
-          note: z.string().optional(),
-          response_quality: z.string().optional(),
-          agent_response_type: z.string().optional(),
+          note: z.string().nullish(),
+          response_quality: z.string().nullish(),
+          agent_response_type: z.string().nullish(),
         }),
       )
       .optional(),
@@ -87,7 +97,7 @@ const RecapRecordSchema = z
       )
       .optional(),
     buying_signals: z.array(RecapQuoteSchema).optional(),
-    risk_signals: z.array(RecapQuoteSchema.extend({ severity: z.string().optional() })).optional(),
+    risk_signals: z.array(RecapQuoteSchema.extend({ severity: z.string().nullish() })).optional(),
     /**
      * A DIFFERENT shape from the other signal arrays — `{name, context, sentiment, mentioned_by}`,
      * with no quote anywhere. Worth the note: this was empty on both calls used to derive this
@@ -100,11 +110,11 @@ const RecapRecordSchema = z
       .array(
         z
           .object({
-            name: z.string().optional(),
-            context: z.string().optional(),
-            sentiment: z.string().optional(),
-            mentioned_by: z.string().optional(),
-            quote: z.string().optional(),
+            name: z.string().nullish(),
+            context: z.string().nullish(),
+            sentiment: z.string().nullish(),
+            mentioned_by: z.string().nullish(),
+            quote: z.string().nullish(),
           })
           .passthrough(),
       )
@@ -113,9 +123,9 @@ const RecapRecordSchema = z
     coverage_gaps: z
       .array(
         z.object({
-          fact: z.string().optional(),
-          type: z.string().optional(),
-          transcript_quote: z.string().optional(),
+          fact: z.string().nullish(),
+          type: z.string().nullish(),
+          transcript_quote: z.string().nullish(),
         }),
       )
       .optional(),
@@ -304,8 +314,8 @@ function ground(
 
 // ── Mapping Recap's record onto our draft ────────────────────────────────────
 
-/** Recap speaks agent/customer; this product speaks rep/prospect. */
-const ownerLabel = (owner: string | undefined) => (owner === 'customer' ? 'Prospect' : 'Rep');
+/** Recap speaks agent/customer; this product speaks rep/prospect. A missing or null owner defaults to Rep. */
+const ownerLabel = (owner: string | null | undefined) => (owner === 'customer' ? 'Prospect' : 'Rep');
 
 /** 'explicit_interest' → 'explicit interest'. Recap's own vocabulary, just readable. */
 const humanise = (s: string) => s.replace(/[_-]+/g, ' ').trim().toLowerCase();
@@ -406,7 +416,7 @@ function toDraft(
     ?? record.risk_signals?.find((s) => s.category || s.quote);
   let intent: ExtractionDraft['intent'] | null = null;
   if (signal?.category) {
-    const g = count(ground(segments, signal.category, { quote: signal.quote }));
+    const g = count(ground(segments, signal.category, { quote: signal.quote ?? undefined }));
     if (g) intent = { label: humanise(signal.category), segment_ids: g.ids };
   }
   if (!intent && record.moments?.length) {
