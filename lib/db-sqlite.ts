@@ -260,6 +260,24 @@ function listCallSummaries(): CallSummary[] {
   }));
 }
 
+/**
+ * Removes everything scoped to this call: itself, its transcript, its notes, its run/audit
+ * history, and its company link. Deliberately leaves `company_learnings` and `action_items`
+ * alone — those are the account's own accumulated context, not this call's, and `usage_events`
+ * — billing history for work already done. No FK constraints exist anywhere in this schema (see
+ * the header comment on `db()`), so each table is cleared explicitly rather than relying on a
+ * cascade that was never there.
+ */
+function deleteCall(id: string) {
+  const d = db();
+  d.prepare(`DELETE FROM gate_rejections WHERE call_id = ?`).run(id);
+  d.prepare(`DELETE FROM runs WHERE call_id = ?`).run(id);
+  d.prepare(`DELETE FROM segments WHERE call_id = ?`).run(id);
+  d.prepare(`DELETE FROM extractions WHERE call_id = ?`).run(id);
+  d.prepare(`DELETE FROM call_companies WHERE call_id = ?`).run(id);
+  d.prepare(`DELETE FROM calls WHERE id = ?`).run(id);
+}
+
 // ── segments ─────────────────────────────────────────────────────────────────
 
 function replaceSegments(callId: string, segs: TranscriptSegment[]) {
@@ -530,6 +548,7 @@ export const sqliteStore: Store = {
   async getCallByShareId(shareId) { return getCallByShareId(shareId); },
   async listCalls() { return listCalls(); },
   async listCallSummaries() { return listCallSummaries(); },
+  async deleteCall(id) { deleteCall(id); },
 
   async replaceSegments(callId, segs) { replaceSegments(callId, segs); },
   async getSegments(callId) { return getSegments(callId); },

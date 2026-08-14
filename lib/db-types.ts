@@ -72,6 +72,15 @@ export interface Store {
   listCalls(): Promise<Call[]>;
   /** Every call with its extraction status, in a fixed number of round trips. See CallSummary. */
   listCallSummaries(): Promise<CallSummary[]>;
+  /**
+   * Removes the call and everything scoped to it: segments, extraction, runs (and their gate
+   * rejections), and its company link. Deliberately does NOT touch `company_learnings` or
+   * `action_items` — those are the account's own accumulated context, not this one call's, and
+   * survive deleting whichever call happened to produce or resolve them. Also deliberately does
+   * NOT touch `usage_events` — billing history for work already done and paid for. A no-op if the
+   * call does not exist.
+   */
+  deleteCall(id: string): Promise<void>;
 
   // segments
   replaceSegments(callId: string, segs: TranscriptSegment[]): Promise<void>;

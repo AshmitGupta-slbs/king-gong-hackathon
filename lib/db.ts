@@ -61,6 +61,7 @@ export const getCallByShareId = (...a: Parameters<Store['getCallByShareId']>) =>
   store().getCallByShareId(...a);
 export const listCalls = () => store().listCalls();
 export const listCallSummaries = () => store().listCallSummaries();
+export const deleteCall = (...a: Parameters<Store['deleteCall']>) => store().deleteCall(...a);
 
 // ── segments ─────────────────────────────────────────────────────────────────
 export const replaceSegments = (...a: Parameters<Store['replaceSegments']>) =>

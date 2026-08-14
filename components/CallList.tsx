@@ -12,9 +12,9 @@
  * keystroke. The URL here is a record of what you are looking at, not a navigation.
  */
 import { useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { ChevronRight, Search, X } from 'lucide-react';
+import { ChevronRight, Search, Trash2, X } from 'lucide-react';
 import type { CallSummary } from '@/lib/db';
 import { RunStatusBadge } from '@/components/RunStatusBadge';
 import { inputStyles, FieldLabel } from '@/components/ui/Field';
@@ -59,6 +59,7 @@ export function CallList({
   companies: { id: string; name: string }[];
 }) {
   const params = useSearchParams();
+  const router = useRouter();
 
   // Read once, on mount: after that this component owns the state and writes the URL, so re-reading
   // would fight its own updates.
@@ -69,6 +70,33 @@ export function CallList({
     const s = params.get('sort') ?? '';
     return isSort(s) ? s : 'newest';
   });
+
+  // Removed locally the moment the DELETE call succeeds, so the row disappears immediately
+  // rather than waiting on a server round trip; `router.refresh()` still runs alongside it so the
+  // next server render (and this page's own `count`) agrees with what actually happened.
+  const [deletedIds, setDeletedIds] = useState<ReadonlySet<string>>(() => new Set());
+  const [pendingId, setPendingId] = useState<string | null>(null);
+
+  async function handleDelete(id: string, title: string) {
+    if (!window.confirm(`Delete "${title}"? This removes the call, its transcript and its notes. This cannot be undone.`)) {
+      return;
+    }
+    setPendingId(id);
+    try {
+      const res = await fetch(`/api/calls/${id}`, { method: 'DELETE' });
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        window.alert(body?.error ?? `Could not delete this call (HTTP ${res.status}).`);
+        return;
+      }
+      setDeletedIds((prev) => new Set(prev).add(id));
+      router.refresh();
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'Could not delete this call.');
+    } finally {
+      setPendingId(null);
+    }
+  }
 
   useEffect(() => {
     const next = new URLSearchParams();
@@ -84,6 +112,7 @@ export function CallList({
     const needle = q.trim().toLowerCase();
     return calls
       .filter((c) => {
+        if (deletedIds.has(c.id)) return false;
         if (needle && !c.title.toLowerCase().includes(needle)) return false;
         // 'none' is a filter in its own right — "which calls did I analyse with no account
         // context?" is the question that finds the ones missing their CRM link.
@@ -93,7 +122,7 @@ export function CallList({
         return true;
       })
       .sort(SORTS[sort].cmp);
-  }, [calls, q, account, status, sort]);
+  }, [calls, q, account, status, sort, deletedIds]);
 
   const filtered = Boolean(q || account || status);
 
@@ -169,10 +198,12 @@ export function CallList({
       ) : (
         <ul className="divide-y divide-border-subtle">
           {shown.map((c) => (
-            <li key={c.id}>
+            <li key={c.id} className="group flex items-center">
+              {/* Delete lives OUTSIDE the Link, as a sibling, not a descendant -- a button nested
+                  inside an <a> would fire the navigation on any click that lands on the row at all. */}
               <Link
                 href={`/calls/${c.id}`}
-                className="group flex items-center gap-4 px-4 py-3.5 transition-colors hover:bg-surface-inset"
+                className="flex min-w-0 flex-1 items-center gap-4 px-4 py-3.5 transition-colors hover:bg-surface-inset"
               >
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-body font-medium text-fg group-hover:text-brand">
@@ -205,6 +236,16 @@ export function CallList({
                   className="shrink-0 text-fg-dim transition-colors group-hover:text-brand"
                 />
               </Link>
+              <button
+                type="button"
+                onClick={() => handleDelete(c.id, c.title)}
+                disabled={pendingId === c.id}
+                aria-label={`Delete ${c.title}`}
+                title="Delete this call"
+                className="mr-3 shrink-0 rounded-control p-1.5 text-fg-dim opacity-0 transition-colors hover:bg-bad-wash hover:text-bad focus-visible:opacity-100 group-hover:opacity-100 disabled:opacity-50"
+              >
+                <Trash2 size={15} aria-hidden />
+              </button>
             </li>
           ))}
         </ul>

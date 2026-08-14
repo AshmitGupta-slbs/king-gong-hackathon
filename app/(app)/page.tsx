@@ -50,7 +50,12 @@ export default async function Home() {
         </p>
       </header>
 
-      <div className="mt-7 grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
+      {/*
+        No items-start: a grid row is always sized to its tallest column, and top-aligning the
+        shorter one just left bare page background showing below it instead of the card's own
+        border/background — the default stretch fills that space with the card itself.
+      */}
+      <div className="mt-7 grid gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
         <Card title="Calls" count={calls.length} bodyClassName="p-0">
           {calls.length === 0 ? (
             <p className="px-4 py-10 text-center text-meta text-fg-dim">
