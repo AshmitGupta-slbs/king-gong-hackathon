@@ -104,8 +104,17 @@ export function UploadCard({
   const [note, setNote] = useState<string | null>(null);
   const [detected, setDetected] = useState<string | null>(null);
   const [mode, setMode] = useState<string>('auto');
-  /** Held in state only so the description under the picker tracks the selection. */
-  const [engine, setEngine] = useState<string>('default');
+  /**
+   * Held in state only so the description under the picker tracks the selection.
+   *
+   * Defaults to PyAI Recap when this deployment can actually use it — falling back to
+   * "Configured default" otherwise, so a clone without a `recap:read` key doesn't default to an
+   * engine the picker itself would grey out. Still just a default: every other engine is one
+   * click away in the same dropdown.
+   */
+  const [engine, setEngine] = useState<string>(() =>
+    engines.find((e) => e.name === 'recap')?.usable ? 'recap' : 'default',
+  );
   /**
    * `default` has no availability of its own -- it resolves to whatever LLM_PROVIDER picked, so it
    * borrows that engine's status. Without this, choosing "Configured default" on a machine where the
