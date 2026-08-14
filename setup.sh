@@ -20,6 +20,42 @@ die()  { printf '\033[1;31m%s %s\033[0m\n' "x" "$*" >&2; exit 1; }
 dim()  { printf '\033[2m%s\033[0m\n' "$*"; }
 head2() { printf '\n\033[1m%s\033[0m\n' "$*"; }
 
+# --- Can we actually talk to a human? ---------------------------------------
+#
+# THIS IS THE BUG THIS SCRIPT SHIPPED WITH, so it is worth spelling out.
+#
+# Every prompt used to be `read -r -p "..." VAR || true`. Under `curl ... | bash`, bash reads THIS
+# SCRIPT from stdin, so stdin is spent by the time the prompts run: each `read` returned immediately
+# at EOF, `|| true` discarded the failure, and an empty answer was recorded as if a human had pressed
+# Enter. The result on a teammate's laptop was a run that asked nothing, silently selected the keyword
+# stub, and reported "Setup complete". Answering on someone's behalf and calling it consent is worse
+# than failing.
+#
+# Two changes fix it, and the second is what makes it robust:
+#
+#   1. `ask` reads from /dev/tty EXPLICITLY, so each prompt opens the terminal itself rather than
+#      trusting whatever stdin it inherited. install.sh also re-execs itself with /dev/tty as stdin,
+#      but that is now a convenience rather than the single point of failure it was.
+#   2. A failed read is never treated as an answer. `ask` returns non-zero and the caller decides.
+#
+# `tty_ok` checks readable AND writable AND that /dev/tty is genuinely a terminal -- a subshell that
+# redirects stdin from it and asks `[ -t 0 ]`. The last part matters because /dev/tty can exist and
+# still not be a terminal (cron, some CI containers, a detached process with no controlling tty).
+tty_ok() { [ -r /dev/tty ] && [ -w /dev/tty ] && (exec </dev/tty; [ -t 0 ]) 2>/dev/null; }
+
+if tty_ok; then INTERACTIVE=1; else INTERACTIVE=0; fi
+
+# ask VARNAME "prompt: "   -> 0 and sets VARNAME, or non-zero and sets nothing
+ask() {
+  [ "$INTERACTIVE" = "1" ] || return 1
+  # `read` into a name held in a variable is a bash feature; -p renders because stdin is a terminal.
+  if read -r -p "$2" "$1" </dev/tty; then return 0; fi
+  # A real EOF on a real terminal is Ctrl-D. Emit the newline the terminal did not, so the next line
+  # of output does not collide with the prompt -- which is exactly how the broken version looked.
+  printf '\n'
+  return 1
+}
+
 # --- 0. Node, before anything else ------------------------------------------
 # The repo's own capability check is the authority: it asks Node whether node:sqlite actually loads
 # rather than comparing version numbers, because the numbers are misleading (see the file).
@@ -43,6 +79,48 @@ if [ -f .env.local ]; then
   dim "Read existing .env.local"
 fi
 
+# --- 2b. Cannot ask? Then configure nothing and hand off --------------------
+#
+# Not a failure, and it exits 0: the install is real, and the five bundled calls are fully analysed and
+# need no credential, so there is a working app on the other side of this. What we must NOT do is invent
+# answers. In particular nothing is written to .env.local -- a file containing `PYAI_API_KEY=""` and a
+# comment about the keyword stub looks like a decision somebody made, and no decision was made.
+#
+# Reached two ways: no terminal at all (piped, CI, cron), or a prompt that failed mid-run, which on a
+# real terminal means Ctrl-D. Both mean "nobody answered", so both get the same honest ending rather
+# than a bare error -- the whole point is that the app is still usable.
+handoff() {
+  head2 "Installed. Not configured."
+  printf '  %s\n\n' "$1"
+  if npm run --silent test:gate >/tmp/kg-gate.log 2>&1; then
+    ok "Citation gate verified ($(grep -c 'PASS' /tmp/kg-gate.log) checks) -- the install itself is sound"
+  else
+    warn "The citation gate suite FAILED. See /tmp/kg-gate.log before trusting this install."
+  fi
+  rm -f /tmp/kg-gate.log
+  cat <<EOF
+
+  Nothing was configured and nothing was guessed. The app works right now anyway,
+  with the five bundled calls:
+
+    cd $(basename "$HERE") && ./kg
+
+  To add your keys, with a terminal attached:
+
+    cd $(basename "$HERE") && ./setup.sh
+
+  If the installer is what could not reach your terminal, this form keeps stdin free:
+
+    bash <(curl -fsSL https://raw.githubusercontent.com/AshmitGupta-slbs/king-gong-hackathon/main/install.sh)
+
+EOF
+  exit 0
+}
+
+if [ "$INTERACTIVE" != "1" ]; then
+  handoff "There is no terminal attached, so I could not ask you anything."
+fi
+
 head2 "1. PyAI key (transcription, and optionally the notes too)"
 cat <<'EOF'
   Every upload is transcribed by PyAI Hear. A key with the recap:read scope can ALSO write the notes,
@@ -55,7 +133,7 @@ cat <<'EOF'
 EOF
 
 if [ -z "${PYAI_API_KEY:-}" ]; then
-  read -r -p "  PyAI API key (Enter to skip): " PYAI_API_KEY || true
+  ask PYAI_API_KEY "  PyAI API key (Enter to skip): " || handoff "No answer given, so I stopped rather than choose for you."
   PYAI_API_KEY="${PYAI_API_KEY:-}"
 else
   dim "  Using the PYAI_API_KEY already in your environment."
@@ -109,14 +187,14 @@ if [ "$PY_RECAP" = "1" ]; then
   Alternatives: anthropic (needs ANTHROPIC_API_KEY) or anthropic_bedrock (needs AWS credentials).
 
 EOF
-  read -r -p "  Notes engine [recap]: " ENGINE || true
+  ask ENGINE "  Notes engine [recap]: " || handoff "No answer given, so I stopped rather than choose for you."
   ENGINE="${ENGINE:-recap}"
 else
   echo "  No recap:read on your PyAI key, so the notes need a model."
   echo "  Get a key at https://console.anthropic.com, or leave blank to use AWS Bedrock or the stub."
   echo ""
   if [ -z "${ANTHROPIC_API_KEY:-}" ]; then
-    read -r -p "  Anthropic API key (Enter to skip): " ANTHROPIC_API_KEY || true
+    ask ANTHROPIC_API_KEY "  Anthropic API key (Enter to skip): " || handoff "No answer given, so I stopped rather than choose for you."
     ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY:-}"
   else
     dim "  Using the ANTHROPIC_API_KEY already in your environment."
@@ -144,7 +222,7 @@ if [ "$ENGINE" = "recap" ] && [ "$PY_RECAP" != "1" ]; then
   warn "You chose recap but this PyAI key has no recap:read scope. Notes will fail until it does."
 fi
 if [ "$ENGINE" = "anthropic" ] && [ -z "${ANTHROPIC_API_KEY:-}" ]; then
-  read -r -p "  Anthropic API key: " ANTHROPIC_API_KEY || true
+  ask ANTHROPIC_API_KEY "  Anthropic API key: " || true
 fi
 
 # --- 5. write .env.local ----------------------------------------------------
@@ -201,7 +279,9 @@ if [ "$PY_OK" = "1" ] && [ "$PY_TRANSCRIBE" = "1" ] && [ "$ENGINE" != "stub" ]; 
   echo "  This transcribes one bundled call with PyAI Hear and writes notes with '$ENGINE', for real."
   echo "  It costs a few cents of your own credit. Nothing else in setup spends anything."
   echo ""
-  read -r -p "  Run it now? [Y/n]: " RUN_E2E || true
+  # Defaults to yes ONLY because a human was asked and pressed Enter. `ask` failing means nobody was
+  # asked, and spending someone's credit on that basis is not a default anyone chose.
+  if ! ask RUN_E2E "  Run it now? [Y/n]: "; then RUN_E2E=n; fi
   case "${RUN_E2E:-y}" in
     [Nn]*) dim "  Skipped. Run it later with:  ./kg analyse public/samples/clean-close.wav" ;;
     *)
@@ -216,8 +296,30 @@ else
 fi
 
 # --- 8. what next -----------------------------------------------------------
-head2 "Setup complete"
+#
+# The heading is chosen from what actually got configured. "Setup complete" over a run that has no
+# notes engine is the cheerful-but-untrue register this whole product argues against: the install IS
+# usable, and it is ALSO missing the thing the app is for, and both halves have to be said.
+if [ "$ENGINE" = "stub" ] || [ "$PY_OK" != "1" ]; then
+  head2 "Installed, and not finished"
+  echo "  The app runs and the five bundled calls are real. What is missing:"
+  echo ""
+  [ "$PY_OK" != "1" ] &&
+    echo "    - No working PyAI key, so you cannot transcribe a call of your own yet."
+  [ "$ENGINE" = "stub" ] &&
+    echo "    - No notes engine, so new uploads get keyword-stub notes, not a model."
+  cat <<EOF
+
+  Fix either by re-running:  ./setup.sh
+  Or see exactly what is wrong and why:  ./kg doctor
+EOF
+else
+  head2 "Setup complete"
+  echo "  Transcription and notes are both configured (engine: $ENGINE)."
+fi
+
 cat <<EOF
+
   Two ways to use it:
 
     npm run dev            the web app, at http://localhost:3000

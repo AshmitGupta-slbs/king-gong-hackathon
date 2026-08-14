@@ -80,6 +80,15 @@ npm run dev      # web app  -> http://localhost:3000
   <p>Already cloned? <code>npm ci &amp;&amp; ./setup.sh</code>. Re-running <code>setup.sh</code> is safe and keeps every answer already given.</p>
 
   <div class="card accent">
+    <h3>The prompts once answered themselves, and that is worth recording</h3>
+    <p>Every prompt in <code>setup.sh</code> was <code>read -r -p "..." VAR || true</code>. Under <code>curl | bash</code>, bash reads the script <em>from stdin</em>, so stdin is already spent by the time the prompts run: each <code>read</code> returned instantly at EOF, <code>|| true</code> discarded the failure, and the empty answer was recorded as though a human had pressed Enter. A teammate got a run that asked him nothing, silently selected the keyword stub, and announced &quot;Setup complete&quot;.</p>
+    <p>Two changes, and the second is the one that matters: every prompt now reads from <code>/dev/tty</code> explicitly, so it opens the terminal itself rather than trusting inherited stdin; and a prompt that cannot reach a human never counts as an answer &mdash; it hands off with the install intact and <strong>writes no <code>.env.local</code> at all</strong>, because a file saying <code>PYAI_API_KEY=""</code> looks like a decision somebody made.</p>
+    <p><strong>The reason it shipped is the interesting part.</strong> The development environment has no TTY, so the interactive path was tested with the re-exec disabled and piped answers &mdash; which is precisely the broken path. Prompt behaviour can only be tested on a pseudo-terminal:</p>
+    <pre style="background:var(--ink); color:var(--paper); padding:14px; border-radius:6px; overflow-x:auto; font-size:12.5px; font-family:var(--mono);">expect -c 'spawn ./setup.sh; expect "PyAI API key*" { send "x\r" }; expect eof'</pre>
+    <p><code>check:ship</code> now asserts that no prompt reads inherited stdin and none swallows its own failure &mdash; a guard on the <em>pattern</em>. The behaviour is proved by the command above, which cannot join the suite because it clones and installs.</p>
+  </div>
+
+  <div class="card accent">
     <h3>The Node floor is 22.13, not 22.5 — and the repo used to get this wrong</h3>
     <p><code>engines</code> declared <code>&gt;=22.5.0</code>, because that is the release where <code>node:sqlite</code> first appeared. But it stayed behind <code>--experimental-sqlite</code> until <strong>22.13</strong>, so every Node from 22.5 to 22.12 satisfied the declared requirement and then threw <code>ERR_UNKNOWN_BUILTIN_MODULE</code> at the first database call — the failure shape where everything looks fine until it does not.</p>
     <p>Measured with nvm rather than recalled: <code>22.12.0</code> throws, <code>22.13.0</code> loads and <code>DatabaseSync</code> is a function. So <code>scripts/node-check.cjs</code> asks Node whether it can <em>actually</em> open a database, and uses the version only to write a better error message. It is plain CommonJS with no imports, because its whole job is to run on the wrong Node, before <code>npm ci</code> has installed anything.</p>
