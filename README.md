@@ -4,7 +4,7 @@
 summary, objections, intent, next steps and a follow-up email — where every claim points at the
 exact line in the call that proves it. Click a claim, hear the moment.
 
-![King Gong — transcript on the left, cited deal notes on the right](docs/hero.png)
+![King Gong — the transcript on the left, cited deal notes on the right, and a banner naming the engine that wrote them](docs/call-detail.png)
 
 Gong charges around $1,400 a seat. The actual job after a call is three questions: what happened,
 what did they push back on, what do I do next. This does that job, in a repo you can clone.
@@ -350,7 +350,3 @@ there so you don't have to take that on faith.
 
 Runs on [PyAI](https://docs.pyai.com/quickstart) — a sandbox key mints itself, free, no signup,
 subject to the per-network allowance noted in [Five-minute setup](#five-minute-setup).
-
----
-
-![King Gong](docs/king-gong.png)
