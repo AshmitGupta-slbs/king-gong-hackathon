@@ -302,6 +302,7 @@ Things a demo would normally hide:
 | `npm run check:model` | Prints `input → resolved` per model id, and which your account accepts |
 | `npx tsx scripts/probe/recap-probe.ts` | Is Recap reachable, and what does its `record` actually contain |
 | `npm run check:store` | Which storage backend is active, and does a round trip actually work |
+| `npm run check:licenses` | Audits every dependency's license against MIT distribution — see [`THIRD_PARTY_LICENSES.md`](THIRD_PARTY_LICENSES.md) |
 | `npm run fixtures` | Rebuild the hand-authored demo notes (never labelled as model output) |
 | `npm run reindex:samples` | Rebuild `samples/index.json` from what is on disk |
 | `npm run lint` · `npm run build` · `npm start` | The usual Next.js three |
@@ -337,8 +338,18 @@ matrix that says exactly what is real today.
 
 ---
 
-MIT licensed. Runs on [PyAI](https://docs.pyai.com/quickstart) — a sandbox key mints itself, free,
-no signup, subject to the per-network allowance noted in [Five-minute setup](#five-minute-setup).
+## License
+
+[MIT](LICENSE) — the code in this repository, no restrictions. That's a claim about this
+project's own code; it says nothing on its own about the ~640 npm packages it depends on, each
+carrying its own license. [`THIRD_PARTY_LICENSES.md`](THIRD_PARTY_LICENSES.md) is the audit that
+closes that gap — every license actually present in the installed dependency tree, checked
+against MIT distribution, reproducible with `npm run check:licenses`. Short version: nothing in
+the tree conflicts with MIT, so nothing needed to change to make this claim true — the audit is
+there so you don't have to take that on faith.
+
+Runs on [PyAI](https://docs.pyai.com/quickstart) — a sandbox key mints itself, free, no signup,
+subject to the per-network allowance noted in [Five-minute setup](#five-minute-setup).
 
 ---
 

@@ -27,6 +27,7 @@
     "check:model": "tsx scripts/check-model.ts",
     "check:key": "tsx scripts/check-key.ts",
     "check:store": "tsx scripts/check-store.ts",
+    "check:licenses": "license-checker-rseidelsohn --summary",
     "test:store": "tsx scripts/test-store.ts",
     "verify": "tsx scripts/test-gate.ts && tsx scripts/test-harness.ts && tsx scripts/test-skills.ts && tsx scripts/test-readability.ts && tsx scripts/check-ship.ts",
     "test:readability": "tsx scripts/test-readability.ts",
@@ -54,6 +55,7 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.3.0",
+    "license-checker-rseidelsohn": "^5.0.1",
     "tailwindcss": "^4",
     "tsx": "^4.23.12",
     "typescript": "^5"

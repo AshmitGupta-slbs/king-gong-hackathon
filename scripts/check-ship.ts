@@ -48,6 +48,19 @@ console.log(c.b('\nShip checklist\n'));
 const license = read('LICENSE');
 assert(Boolean(license?.includes('MIT License')), 'MIT LICENSE present');
 
+/**
+ * MIT covers the code in this repo; it says nothing about the ~640 npm packages package.json
+ * pulls in. This just checks the audit file exists and looks like a real audit (dated, names an
+ * actual license category) — re-deriving the whole license tree here would mean running
+ * license-checker against node_modules on every ship check, for a number that only changes when
+ * a dependency does. `npm run check:licenses` is the thing to re-run by hand after that.
+ */
+const thirdPartyLicenses = read('THIRD_PARTY_LICENSES.md');
+assert(
+  Boolean(thirdPartyLicenses?.includes('Audited') && thirdPartyLicenses?.includes('MIT')),
+  'third-party dependency license audit present',
+);
+
 // ── 2. README: screenshot, pitch, setup, PyAI line ───────────────────────────
 const readme = read('README.md');
 if (!readme) {
