@@ -27,7 +27,8 @@
     "verify": "tsx scripts/test-gate.ts && tsx scripts/test-harness.ts && tsx scripts/test-skills.ts && tsx scripts/test-readability.ts && tsx scripts/check-ship.ts",
     "test:readability": "tsx scripts/test-readability.ts",
     "reindex:samples": "tsx scripts/reindex-samples.ts",
-    "test:skills": "tsx scripts/test-skills.ts"
+    "test:skills": "tsx scripts/test-skills.ts",
+    "test:scoring": "tsx scripts/test-scoring.ts"
   },
   "dependencies": {
     "@anthropic-ai/bedrock-sdk": "^0.32.1",

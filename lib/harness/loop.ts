@@ -47,6 +47,7 @@ import { runCitationGate } from './gate';
 import { withLock } from './parallel';
 import { safeStage, type OnStage } from './progress';
 import { retryAimed } from './retry';
+import { scoreCall, scoringPromptText } from '../scoring/score';
 
 export type ProcessInput = {
   title: string;
@@ -324,6 +325,32 @@ export async function processCall(input: ProcessInput): Promise<ProcessOutcome> 
       await saveExtraction(callId, extraction);
       await recordRejections(callId, runId, extraction.rejections);
       status = extraction.run_status;
+
+      /**
+       * SCORING: a best-effort enrichment, deliberately AFTER `status` is already decided.
+       *
+       * Scored from `extraction`'s own already-cited fields (summary, objections, next_steps,
+       * key_moments, follow_up_email, outcomes) rather than from `segments` directly, so every
+       * citation it can possibly produce is one a real claim already earned through the gate above
+       * — see lib/scoring/score.ts. Its own try/catch is load-bearing: anything that goes wrong here
+       * must never reach the outer catch below and flip an already-shipped call to 'failed'.
+       */
+      try {
+        // Same governor instance, same caps as the main extraction above — a run's total spend is
+        // capped, not just the main call's. If the extraction's own retries already used the
+        // budget up, this throws DeadlineError and is caught below like any other scoring failure.
+        budget.preflight(estimateTokens(scoringPromptText(extraction)));
+        const scored = await scoreCall(extraction, segments);
+        if (scored) {
+          extraction = { ...extraction, scoring: scored.scoring };
+          budget.record(scored.usage);
+          await recordUsage(callId, 'scoring', scored.usage);
+          await saveExtraction(callId, extraction);
+        }
+      } catch {
+        // Scoring is additive. The call still ships/partials/fails exactly as it would have
+        // without this feature, and simply has no scoring section.
+      }
     } catch (err) {
       if (err instanceof DeadlineError) {
         status = 'deadline';

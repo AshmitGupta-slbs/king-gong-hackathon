@@ -209,6 +209,65 @@ export const CitedOutcomeSchema = OutcomeSchema.extend({
   evidence: z.array(EvidenceSchema),
 });
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Methodology scoring — a DOWNSTREAM enrichment, not part of the draft→gate flow above.
+//
+// Deliberately outside `ExtractionDraftSchema`/`runCitationGate`: it is computed AFTER the gate,
+// from the gate's own already-cited output (summary, objections, next_steps, key_moments,
+// follow_up_email, outcomes) rather than from a fresh read of the transcript. So a criterion's
+// citation is always inherited proof — a segment some other claim already earned through the real
+// gate — never a new citation this feature invents and verifies on its own. See lib/scoring/score.ts.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const MethodologyIdSchema = z.enum(['medpicc', 'bant', 'spiced', 'champ', 'anum']);
+export type MethodologyId = z.infer<typeof MethodologyIdSchema>;
+
+/** What the scoring model returns for one criterion — ungated, like `Claim`. */
+export const ScoreCriterionSchema = z.object({
+  key: z.string().describe('Criterion key for this methodology, e.g. "economic_buyer".'),
+  score: z.number().min(0).max(100).describe('0-100: how well this call\'s notes evidence this criterion.'),
+  rationale: z
+    .string()
+    .describe('Why this score, using only the already-extracted notes provided — never a raw transcript.'),
+  segment_ids: z
+    .array(z.string())
+    .describe(
+      'Segment ids already cited in this call\'s notes that support this score. Must be copied ' +
+        'from the ids shown in the notes provided; empty if nothing supports it.',
+    ),
+});
+export type ScoreCriterion = z.infer<typeof ScoreCriterionSchema>;
+
+export const MethodologyScoreDraftSchema = z.object({
+  methodology: MethodologyIdSchema,
+  overall: z.number().min(0).max(100),
+  criteria: z.array(ScoreCriterionSchema),
+});
+
+export const ScoringDraftSchema = z.object({
+  methodologies: z.array(MethodologyScoreDraftSchema),
+});
+export type ScoringDraft = z.infer<typeof ScoringDraftSchema>;
+
+/** A gated criterion: `segment_ids` resolved into `Evidence`, exactly like `Claim` → `CitedClaim`. */
+export const CitedScoreCriterionSchema = ScoreCriterionSchema.omit({ segment_ids: true }).extend({
+  evidence: z.array(EvidenceSchema),
+});
+export type CitedScoreCriterion = z.infer<typeof CitedScoreCriterionSchema>;
+
+export const MethodologyScoreSchema = z.object({
+  methodology: MethodologyIdSchema,
+  overall: z.number().min(0).max(100),
+  criteria: z.array(CitedScoreCriterionSchema),
+});
+export type MethodologyScore = z.infer<typeof MethodologyScoreSchema>;
+
+export const ScoringBundleSchema = z.object({
+  methodologies: z.array(MethodologyScoreSchema),
+  scored_at: z.number().int(),
+});
+export type ScoringBundle = z.infer<typeof ScoringBundleSchema>;
+
 /**
  * Why a claim was dropped or flagged. Every rejection is recorded with a reason — a silently
  * discarded claim is indistinguishable from a claim that was never made, which is exactly the
@@ -260,6 +319,12 @@ export const ExtractionResultSchema = z.object({
   skills_used: z.array(z.string()).optional(),
   /** Judgements on commitments carried in from earlier calls, after the gate. */
   outcomes: z.array(CitedOutcomeSchema).optional(),
+  /**
+   * Deal-methodology scores (MEDPICC, BANT, ...), computed AFTER this result exists — see the block
+   * below. Absent when scoring was never attempted or failed; a best-effort enrichment, never a
+   * requirement for a call to ship.
+   */
+  scoring: ScoringBundleSchema.optional(),
 });
 
 export type ExtractionResult = z.infer<typeof ExtractionResultSchema>;

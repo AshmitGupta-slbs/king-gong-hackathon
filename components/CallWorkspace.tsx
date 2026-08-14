@@ -23,6 +23,7 @@ import type { CallBundle } from '@/lib/types';
 import { Tabs } from '@/components/ui/Tabs';
 import { ActionItems } from '@/components/workspace/ActionItems';
 import { CallHeader } from '@/components/workspace/CallHeader';
+import { CallScoring } from '@/components/workspace/CallScoring';
 import { ContextPanel } from '@/components/workspace/ContextPanel';
 import { CrmPayload } from '@/components/workspace/CrmPayload';
 import { Insights, EmptyNotes } from '@/components/workspace/Insights';
@@ -299,6 +300,13 @@ export function CallWorkspace({
                         />
                       ) : (
                         <EmptyNotes />
+                      )}
+                      {/* Best-effort enrichment — absent when scoring was never attempted or
+                          failed, so a call with no scoring section is not an error state. */}
+                      {extraction?.scoring && (
+                        <div className="mt-4">
+                          <CallScoring scoring={extraction.scoring} onCite={seekToSegment} />
+                        </div>
                       )}
                     </>
                   ) : tab === 'crm' ? (
