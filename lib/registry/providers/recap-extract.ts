@@ -24,6 +24,7 @@
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { PyaiError, pyaiGet, pyaiPostJson } from '@/lib/pyai';
+import { engineAvailability, RECAP_SCOPE_REMEDY } from '@/lib/engine-availability';
 /**
  * The GATE's own scorer, imported rather than reimplemented.
  *
@@ -549,16 +550,12 @@ function derivedCallId(segments: TranscriptSegment[]): string {
   return `og-t-${h.digest('hex').slice(0, 24)}`;
 }
 
-const scopeRemedy =
-  'PyAI Recap needs a key with the `recap:read` scope and Recap enabled for the organisation. A ' +
-  'self-minted sandbox key has neither. Set PYAI_API_KEY to a pyai_live_ key from ' +
-  'https://console.pyai.com, check it with `npx tsx scripts/probe/recap-probe.ts`, or use ' +
-  'LLM_PROVIDER=anthropic (or the per-upload picker) to write notes with Claude instead.';
 
 export function recapExtractor(): ExtractProvider {
   return {
     name: 'recap',
     ignoresPromptContext: true,
+    precheck: () => engineAvailability('recap'),
 
     async extract(req: ExtractRequest): Promise<ExtractResult> {
       if (req.segments.length === 0) {
@@ -594,7 +591,12 @@ export function recapExtractor(): ExtractProvider {
           // A missing scope is worth failing on immediately — it is the one error where retrying as
           // a POST just produces the same 403 with less context about what to do about it.
           if (err instanceof PyaiError && (err.status === 401 || err.status === 403)) {
-            throw new PyaiError(err.status, err.code, `${err.message}\n\n${scopeRemedy}`);
+            // `remedy` as an OWN PROPERTY, not appended to the message. loop.ts reads `.remedy`
+            // structurally and UploadCard renders it in its own panel; concatenating it into the
+            // message left that panel empty and buried the fix inside the red error blob.
+            throw Object.assign(new PyaiError(err.status, err.code, err.message), {
+              remedy: RECAP_SCOPE_REMEDY,
+            });
           }
           // 404 is the expected answer for a transcript never submitted before, and is the whole
           // reason this is in a try. Anything else is left to recur on the POST below, where it
@@ -626,7 +628,12 @@ export function recapExtractor(): ExtractProvider {
           });
         } catch (err) {
           if (err instanceof PyaiError && (err.status === 401 || err.status === 403)) {
-            throw new PyaiError(err.status, err.code, `${err.message}\n\n${scopeRemedy}`);
+            // `remedy` as an OWN PROPERTY, not appended to the message. loop.ts reads `.remedy`
+            // structurally and UploadCard renders it in its own panel; concatenating it into the
+            // message left that panel empty and buried the fix inside the red error blob.
+            throw Object.assign(new PyaiError(err.status, err.code, err.message), {
+              remedy: RECAP_SCOPE_REMEDY,
+            });
           }
           throw err;
         }

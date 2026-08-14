@@ -14,6 +14,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
 import { REGISTRY_CONFIG } from '..';
+import { engineAvailability } from '@/lib/engine-availability';
 import type { ExtractProvider, ExtractRequest, ExtractResult } from '../types';
 import {
   buildExtractUserMessage,
@@ -25,6 +26,7 @@ import {
 export function claudeExtractor(): ExtractProvider {
   return {
     name: 'claude',
+    precheck: () => engineAvailability('claude'),
 
     async extract(req: ExtractRequest): Promise<ExtractResult> {
       if (!process.env.ANTHROPIC_API_KEY && !process.env.ANTHROPIC_AUTH_TOKEN) {

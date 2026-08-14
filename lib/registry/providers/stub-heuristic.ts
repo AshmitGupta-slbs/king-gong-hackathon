@@ -55,6 +55,8 @@ function gist(text: string, words = 16): string {
 export function stubHeuristicExtractor(): ExtractProvider {
   return {
     name: 'stub-heuristic',
+    // Needs nothing, which is the entire reason it exists as the last resort.
+    precheck: () => ({ available: true }),
 
     async extract(req: ExtractRequest): Promise<ExtractResult> {
       const segs = req.segments;

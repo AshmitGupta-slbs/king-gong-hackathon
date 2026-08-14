@@ -104,8 +104,30 @@ export type ExtractResult = {
   usage: UsageReport;
 };
 
+/**
+ * Re-exported so provider files can name the type without a second definition. It LIVES in
+ * lib/engine-availability.ts, which is dependency-free on purpose -- describeRegistry() needs the same
+ * answer and must not reach into a provider that imports a vendor SDK.
+ */
+import type { EngineAvailability } from '@/lib/engine-availability';
+export type { EngineAvailability };
+
 export interface ExtractProvider {
   readonly name: string;
+  /**
+   * Can this engine possibly work on this machine, right now?
+   *
+   * MUST NOT make a network call, because the harness calls it before spending anything and a slow or
+   * flaky check would defeat the purpose. Env vars and key prefixes only.
+   *
+   * This exists because of a real cost. `processCall` used to resolve the extractor AFTER
+   * transcription, so choosing PyAI Recap with a self-minted sandbox key transcribed the audio, then
+   * failed on a 403 for a scope that key can never have. A tester did it six times and spent 3.2
+   * minutes of Hear on nothing. The error message was already clear; it just arrived after the money.
+   *
+   * Optional so a provider that cannot fail this way need not implement it.
+   */
+  precheck?(): EngineAvailability;
   /**
    * TRUE for engines that cannot be given instructions — an external notes API that takes a
    * transcript and returns notes, with no system prompt.

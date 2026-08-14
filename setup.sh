@@ -101,9 +101,10 @@ handoff() {
   cat <<EOF
 
   Nothing was configured and nothing was guessed. The app works right now anyway,
-  with the five bundled calls:
+  with the five bundled calls. Both of these run from wherever you are:
 
-    cd "$HERE" && ./kg
+    cd "$HERE" && ./kg            the terminal UI
+    cd "$HERE" && npm run dev     the web app, on http://localhost:3000
 
   To add your keys, with a terminal attached:
 
@@ -324,25 +325,40 @@ fi
 #
 # Absolute and quoted, not `cd king-gong`: a relative path only works from the parent directory, and
 # quoting survives a path with a space in it.
+# EVERY command carries its own directory, and the list is short enough to read.
+#
+# Naming the directory was not enough, which is the point. A tester was shown the `cd` line twice --
+# including as the last line before her prompt -- and still typed a bare `npm run dev` from ~/Desktop
+# and got npm ENOENT. Two reasons, both mine: the one paste-ready line offered only `./kg`, so the web
+# app (the thing she actually wanted, twice) was the single command still requiring her to cd by hand;
+# and seventeen lines of prose sat between the instruction and the prompt.
+#
+# So: no bare commands, both surfaces paste-ready, and the whole block trimmed to four lines.
 cat <<EOF
 
-  One thing first: this ran inside the project, but your shell did not move.
+  These work from wherever you are right now -- this script ran inside the project,
+  but a child process cannot move your shell:
 
-    cd "$HERE"
+    cd "$HERE" && npm run dev     the web app, on http://localhost:3000
+    cd "$HERE" && ./kg            the terminal UI, with the five bundled calls
 
-  Then, two ways to use it:
-
-    npm run dev            the web app, at http://localhost:3000
-    ./kg                   the terminal UI (browse calls, read cited notes, hear the moment)
-
-  Useful:
-
-    ./kg analyse <file>    transcribe and analyse a call from the terminal
-    ./kg doctor            what is configured, and what is wrong
-    ./setup.sh             re-run this; it keeps every answer you gave
-
-  Start with the five bundled calls -- they are fully analysed and need no key.
-  In one paste:
-
-    cd "$HERE" && ./kg
+  From inside that directory: ./kg doctor, ./kg analyse <file>, ./setup.sh
 EOF
+
+# And then remove the step from the critical path entirely, for the one case where we can: if a human
+# is here, offer to start it. Someone who says yes never has to get the directory right at all.
+if [ "$INTERACTIVE" = "1" ]; then
+  echo ""
+  if ask START_NOW "  Start the web app now? [Y/n]: "; then
+    case "${START_NOW:-y}" in
+      [Nn]*) dim "  Not started. The two commands above are ready to paste." ;;
+      *)
+        echo ""
+        say "Starting the web app. Open http://localhost:3000 -- Ctrl-C here stops it."
+        echo ""
+        # exec, so Ctrl-C reaches npm directly instead of being trapped by this script.
+        exec npm run dev
+        ;;
+    esac
+  fi
+fi

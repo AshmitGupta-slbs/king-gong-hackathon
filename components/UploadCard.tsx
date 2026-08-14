@@ -75,13 +75,26 @@ const ENGINES = [
   },
 ] as const;
 
+export type EngineOption = {
+  name: string;
+  usable: boolean;
+  reason: string | null;
+  remedy: string | null;
+};
+
 export function UploadCard({
   companies = [],
   defaultEngine,
+  engines = [],
 }: {
   companies?: { id: string; name: string }[];
   /** The resolved `LLM_PROVIDER`, so "Configured default" can say what it actually means. */
   defaultEngine?: string;
+  /**
+   * Which engines can actually work here, from `describeRegistry()`. Plain data computed on the
+   * server by the same function the harness gates on, so this cannot disagree with what a run does.
+   */
+  engines?: EngineOption[];
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -93,6 +106,15 @@ export function UploadCard({
   const [mode, setMode] = useState<string>('auto');
   /** Held in state only so the description under the picker tracks the selection. */
   const [engine, setEngine] = useState<string>('default');
+  /**
+   * `default` has no availability of its own -- it resolves to whatever LLM_PROVIDER picked, so it
+   * borrows that engine's status. Without this, choosing "Configured default" on a machine where the
+   * default cannot work would look fine.
+   */
+  const statusFor = (value: string) =>
+    engines.find((e) => e.name === (value === 'default' ? defaultEngine : value));
+  const selectedStatus = statusFor(engine);
+  const unusable = engines.filter((e) => !e.usable);
   const [stages, setStages] = useState<StageView[] | null>(null);
   const [startedAt, setStartedAt] = useState(0);
   const [expectedMs, setExpectedMs] = useState<number | null>(null);
@@ -294,17 +316,50 @@ export function UploadCard({
           onChange={(e) => setEngine(e.currentTarget.value)}
           className={cx(inputStyles, 'appearance-none')}
         >
-          {ENGINES.map((e) => (
-            <option key={e.value} value={e.value}>
-              {e.value === 'default' && defaultEngine
-                ? `${e.name} — ${defaultEngine}`
-                : e.name}
-            </option>
-          ))}
+          {ENGINES.map((e) => {
+            const status = statusFor(e.value);
+            return (
+              <option key={e.value} value={e.value} disabled={status ? !status.usable : false}>
+                {e.value === 'default' && defaultEngine ? `${e.name} — ${defaultEngine}` : e.name}
+                {status && !status.usable ? ' (not available here)' : ''}
+              </option>
+            );
+          })}
         </select>
         <span className="text-caption leading-relaxed text-fg-dim">
           {ENGINES.find((e) => e.value === engine)?.desc}
         </span>
+        {/*
+          Why an engine cannot be used, said where the choice is made rather than after a failed run.
+          A tester selected PyAI Recap with a self-minted sandbox key, waited through transcription, and
+          got a 403 for a scope sandbox keys never carry -- six times. The option is disabled rather than
+          hidden, because the capability is real and someone with a live key should still learn it exists.
+        */}
+        {/*
+          Shown for the UNUSABLE ones, not just the selected one.
+          A disabled option cannot be selected, so hanging the explanation off the selection meant the
+          "(not available here)" label had no "why" anywhere on the page -- the reason existed only in
+          the serialized props. One line each, so three unusable engines do not become a wall.
+        */}
+        {unusable.length > 0 && (
+          <span className="flex items-start gap-2 rounded-control border border-warn-border bg-warn-wash px-2.5 py-2 text-caption leading-relaxed text-warn">
+            <KeyRound size={13} className="mt-0.5 shrink-0" aria-hidden />
+            <span className="min-w-0">
+              <span className="font-semibold">Not available on this machine:</span>
+              {unusable.map((u) => (
+                <span key={u.name} className="mt-1 block text-fg-muted">
+                  <span className="font-mono text-warn">{u.name}</span> {u.reason}
+                </span>
+              ))}
+              <span className="mt-1.5 block text-fg-dim">
+                <span className="font-mono">./kg doctor</span> lists what each one needs.
+              </span>
+            </span>
+          </span>
+        )}
+        {selectedStatus && !selectedStatus.usable && selectedStatus.remedy && (
+          <span className="text-caption leading-relaxed text-fg-muted">{selectedStatus.remedy}</span>
+        )}
       </label>
 
       <fieldset className="flex flex-col gap-2">

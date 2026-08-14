@@ -68,7 +68,11 @@ export default async function Home() {
         <div className="flex flex-col gap-5">
           <div id="upload" className="scroll-mt-24">
             <Card title="Analyse your own call">
-              <UploadCard companies={companies} defaultEngine={registry.extract} />
+              <UploadCard
+                companies={companies}
+                defaultEngine={registry.extract}
+                engines={registry.engines}
+              />
             </Card>
           </div>
 

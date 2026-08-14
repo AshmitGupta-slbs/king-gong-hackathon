@@ -14,7 +14,14 @@
 import { bedrockModelId, needsAccountId, __clearBedrockModelIdCache } from '@/lib/bedrock-model-id';
 import { REGISTRY_CONFIG } from '@/lib/registry';
 import { resolveBedrockModelId, __setStsTransport } from '@/lib/registry/providers/bedrock-extract';
-import { db, closeRun, getSegments, listRuns, openRun, reconcileOrphanRuns } from '@/lib/db';
+import {
+  db,
+  closeRun,
+  getSegments,
+  listRuns,
+  openRun,
+  reconcileOrphanRuns,
+} from '@/lib/db';
 import { BudgetGovernor, DeadlineError, estimateTokens } from '@/lib/harness/budget';
 import { processCall } from '@/lib/harness/loop';
 import { activeLockCount, parallelMap, withLock } from '@/lib/harness/parallel';
@@ -314,6 +321,55 @@ async function main() {
     });
     check('a provider failure ends as FAILED', bad.run_status === 'failed', bad.run_status);
     check('the error is reported to the caller', Boolean(bad.error), bad.error?.slice(0, 60));
+
+    /*
+      An engine that cannot work must be refused BEFORE anything is transcribed.
+
+      This is a regression test for a measured cost, not a hypothetical. Choosing PyAI Recap with a
+      self-minted sandbox key used to transcribe the audio first and then fail on a 403 for `recap:read`
+      -- a scope sandbox keys are never issued. A tester repeated it six times and spent 3.2 minutes of
+      Hear on runs that could not have succeeded.
+
+      An unknown engine NAME is used deliberately as the trigger: it is refused by exactly the same gate
+      as the sandbox-key case, but the verdict does not depend on which credentials happen to exist on
+      the machine running the suite.
+
+      `segments === 0` is the load-bearing assertion, because without the gate the fixture provider would
+      replay ten segments before the engine was ever consulted.
+
+      NOTE what this suite deliberately does NOT assert: that no audio seconds were billed. This runs on
+      `sttProvider: 'fixture'`, which reports no usage at all, so a billing assertion here would pass
+      whether the gate existed or not -- a check that cannot fail is not a check. The money claim is
+      proved against the real PyAI path instead, and that run is recorded in the commit message.
+    */
+    const unusableId = `${TEST_PREFIX}unusable-${Date.now()}`;
+    const unusable = await processCall({
+      ...base,
+      callId: unusableId,
+      title: 'Harness test - unusable engine',
+      filename: 'clean-close.wav',
+      extractProvider: 'no-such-engine',
+    });
+    check(
+      'an engine that cannot work is refused, and the run is still recorded as failed',
+      unusable.run_status === 'failed',
+      unusable.run_status,
+    );
+    check(
+      'NOTHING was transcribed first - no segments',
+      unusable.segments === 0,
+      `${unusable.segments} segments`,
+    );
+    check(
+      '...and no transcript was persisted',
+      (await getSegments(unusableId)).length === 0,
+      `${(await getSegments(unusableId)).length} segments in the store`,
+    );
+    check(
+      'the refusal carries a remedy the UI can render',
+      Boolean(unusable.remedy),
+      unusable.errorCode,
+    );
     const badRun = (await listRuns(200)).find((r) => r.id === bad.runId);
     check('a failed run still leaves a row', Boolean(badRun), badRun?.status);
     check('with the failure reason attached', Boolean(badRun?.error));

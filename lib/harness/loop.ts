@@ -16,6 +16,7 @@
  */
 import { randomUUID } from 'node:crypto';
 import { getExtractor, getSTT, REGISTRY_CONFIG } from '@/lib/registry';
+import { engineAvailability } from '@/lib/engine-availability';
 import type { SeparationMode } from '@/lib/registry/types';
 import type { ExtractionResult, RunStatus, TranscriptSegment } from '@/lib/types';
 import {
@@ -130,6 +131,33 @@ export async function processCall(input: ProcessInput): Promise<ProcessOutcome> 
     let remedy: string | undefined;
 
     try {
+      /*
+        ── 0. Can the notes engine work AT ALL? Asked before anything is spent. ────
+
+        This gate exists because the order used to be wrong. The extractor was resolved after
+        transcription, so choosing PyAI Recap with a self-minted sandbox key transcribed the audio and
+        THEN failed on a 403 for `recap:read` -- a scope sandbox keys are never issued. A tester did it
+        six times and spent 3.2 minutes of Hear minutes on runs that could not have succeeded. The error
+        message was already clear about the cause and the fix; it simply arrived after the money.
+
+        `precheck` is contractually network-free (see lib/registry/types.ts), so this costs nothing and
+        cannot hang. It only stops a CERTAIN no -- 'unknown' is allowed through, because refusing a live
+        key that would have worked is the same class of mistake in the other direction.
+
+        The run row is already open, so a rejection here is still a recorded `failed` run with a remedy
+        attached. What changes is that no audio was sent, so nothing was billed.
+      */
+      const engineName = input.extractProvider ?? REGISTRY_CONFIG.extract;
+      const availability = engineAvailability(engineName);
+      if (availability.available === false) {
+        errorCode = availability.code;
+        remedy = availability.remedy;
+        throw new Error(
+          `Cannot analyse with "${engineName}": ${availability.message} ` +
+            'Nothing was transcribed, so no minutes were spent.',
+        );
+      }
+
       // ── 1. Transcribe (registry-provided; retried on transient provider errors) ────
       const stt = await getSTT(input.sttProvider);
       on({ t: 'stage', stage: 'transcribe', state: 'start' });
@@ -180,6 +208,7 @@ export async function processCall(input: ProcessInput): Promise<ProcessOutcome> 
       });
 
       // ── 2. Extract, then GATE, with the gate's own complaint aimed at the retry ────
+      // Availability was settled by name before transcription, so this is known to be resolvable.
       const extractor = await getExtractor(input.extractProvider);
       /**
        * Rendered ONCE and reused across retries, so every attempt sees identical context and the
