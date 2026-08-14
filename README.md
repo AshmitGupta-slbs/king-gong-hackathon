@@ -41,29 +41,39 @@ proves the pipeline on a real call before claiming it worked:
 curl -fsSL https://raw.githubusercontent.com/AshmitGupta-slbs/king-gong-hackathon/main/install.sh | bash
 ```
 
-(`bash <(curl -fsSL …/install.sh)` works too, and keeps your terminal on stdin rather than the pipe.)
+(`bash <(curl -fsSL …/install.sh)` works too, and keeps your terminal on stdin rather than the pipe.
+`TARGET=~/code/king-gong` before the curl clones somewhere other than `./king-gong`.)
 
-Then `cd king-gong` and pick a surface — `npm run dev` for the web app on
-http://localhost:3000, or `./kg` for the terminal UI. Full walkthrough in
-[`ONBOARDING.md`](ONBOARDING.md).
-
-Already cloned it, or prefer to do it by hand:
+It ends by offering to start the web app. Take that, or start either surface yourself — the
+installer runs inside the clone, so it cannot move your shell, and both commands carry the `cd`:
 
 ```bash
-npm ci
-./setup.sh          # interactive: keys, checks, and a real end-to-end run
-npm run dev
+cd king-gong && npm run dev     # the web app, on http://localhost:3000
+cd king-gong && ./kg            # the terminal UI, over the same calls
 ```
 
-Open http://localhost:3000. Five fully-analysed sample calls are already there.
+Prefer to do it by hand, or already have the repo:
+
+```bash
+git clone https://github.com/AshmitGupta-slbs/king-gong-hackathon.git king-gong
+cd king-gong
+./setup.sh                      # deps, keys, checks, and a real end-to-end run
+```
+
+`setup.sh` runs `npm ci` itself when `node_modules` is missing, so there is no separate install
+step. It is safe to re-run at any time: it keeps every answer you already gave and only asks about
+what is still missing. Full walkthrough in [`ONBOARDING.md`](ONBOARDING.md).
+
+Five fully-analysed sample calls are already there, and they need no key at all.
 
 **Requires Node 22.13+** (for the built-in `node:sqlite`, which is why there is no database to install
 and nothing to compile). **Nothing else — no API key, no signup, no database server, no native builds,
 no Python, no ffmpeg.** Note the floor is 22.13 and not 22.5: `node:sqlite` first appeared in 22.5 but
 stayed behind `--experimental-sqlite` until 22.13, so 22.5 through 22.12 pass a naive version check and
-then throw `ERR_UNKNOWN_BUILTIN_MODULE` at the first query — measured, not inferred. `engines` and
-`.nvmrc` declare it, and `node scripts/node-check.cjs` tests whether Node can *actually* do it rather
-than trusting the number.
+then throw `ERR_UNKNOWN_BUILTIN_MODULE` at the first query — measured, not inferred. `engines`
+declares the floor, `.nvmrc` pins a known-good 24, and `node scripts/node-check.cjs` tests whether
+Node can *actually* do it rather than trusting the number. The installer fetches a good Node if you
+need one.
 
 That works with a completely empty environment because:
 
@@ -83,6 +93,10 @@ That works with a completely empty environment because:
 > no flag is needed to make the bundled demo work offline.
 
 ### To analyse your own calls
+
+`./setup.sh` asks all of this interactively and writes `.env.local` for you — reading the scopes off
+your PyAI key to work out which case you are in. The rest of this section is what it is choosing
+between, and how to set it by hand.
 
 Transcription needs nothing — the sandbox key handles it. Notes need a model, and the provider is
 auto-detected from whatever you have:
@@ -207,12 +221,12 @@ real, all verified by forcing the failure rather than reading the code:
 | Budget governor | `lib/harness/budget.ts` | token/time/dollar caps checked *before* each call → `deadline` |
 
 ```bash
-npm run test:gate         # 37 checks — the citation gate blocks, logs, and downgrades status
-npm run test:harness      # 127 checks — budgets stop runs, retries bound, no run vanishes, audio inspected
+npm run test:gate         # 48 checks — the citation gate blocks, logs, and downgrades status
+npm run test:harness      # 131 checks — budgets stop runs, retries bound, no run vanishes, audio inspected
 npm run test:skills       # 42 checks — skills load, select, and do not poison the gate
 npm run test:readability  # 46 checks — the display layer never changes what was said
-npm run check:ship        # the 27-item pass/fail ship checklist
-npm run verify            # all of the above, in order — 252 checks plus the checklist
+npm run check:ship        # the 39-item pass/fail ship checklist
+npm run verify            # all of the above, in order — 267 checks plus the checklist
 
 npm run test:store        # 66 checks — the storage contract. NOT in verify: it needs a backend
 ```
@@ -289,7 +303,11 @@ Things a demo would normally hide:
 
 | Command | What it does |
 |---|---|
+| `./setup.sh` | Interactive setup — installs dependencies if missing, asks for keys, verifies, offers to start the app. Safe to re-run |
 | `npm run dev` | Start the app |
+| `./kg` | The same calls in the terminal — list, read cited notes, play a cited moment, `./kg analyse <file>` |
+| `./kg doctor` | What is configured and what is wrong — key, scopes, engine, storage |
+| `node scripts/node-check.cjs` | Does this Node *actually* have `node:sqlite`. Run it before `npm ci`, not after |
 | `npm run samples` | Rebuild the five sample calls (audio + transcripts + notes) |
 | `npm run extract:samples` | Re-run notes over existing transcripts — no re-recording, no re-transcribing. Refuses without a real model rather than overwriting the committed notes with stub output |
 | `npm run test:gate` | Citation gate verification |
@@ -297,6 +315,7 @@ Things a demo would normally hide:
 | `npm run test:skills` | Skill corpus loads, selects, and does not poison the gate |
 | `npm run test:store` | Storage contract, against whichever backend is configured |
 | `npm run test:readability` | Proves the display layer never changes what was said |
+| `npm run test:scoring` | Proves a deal-score criterion can only cite evidence that was already citable and still exists |
 | `npm run check:ship` | Ship checklist |
 | `npm run check:key` | Is the PyAI key live, and what scopes does it carry |
 | `npm run check:model` | Prints `input → resolved` per model id, and which your account accepts |
