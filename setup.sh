@@ -103,11 +103,11 @@ handoff() {
   Nothing was configured and nothing was guessed. The app works right now anyway,
   with the five bundled calls:
 
-    cd $(basename "$HERE") && ./kg
+    cd "$HERE" && ./kg
 
   To add your keys, with a terminal attached:
 
-    cd $(basename "$HERE") && ./setup.sh
+    cd "$HERE" && ./setup.sh
 
   If the installer is what could not reach your terminal, this form keeps stdin free:
 
@@ -308,19 +308,29 @@ if [ "$ENGINE" = "stub" ] || [ "$PY_OK" != "1" ]; then
     echo "    - No working PyAI key, so you cannot transcribe a call of your own yet."
   [ "$ENGINE" = "stub" ] &&
     echo "    - No notes engine, so new uploads get keyword-stub notes, not a model."
-  cat <<EOF
-
-  Fix either by re-running:  ./setup.sh
-  Or see exactly what is wrong and why:  ./kg doctor
-EOF
+  echo ""
+  echo "  Both are fixable by re-running setup, or diagnosable with the doctor command below."
 else
   head2 "Setup complete"
   echo "  Transcription and notes are both configured (engine: $ENGINE)."
 fi
 
+# The `cd` comes FIRST, with the reason, because leaving it out cost a second user a broken first
+# command. The installer clones into a new directory and setup.sh runs inside it, but setup.sh is a
+# child process -- it cannot change the directory of the shell that launched it. So when this exits,
+# the user is still wherever they typed the install command, and every instruction below ("npm run dev",
+# "./kg") is wrong from there. One person pasted `npm run dev` at ~/Desktop and got a wall of npm
+# ENOENT about a missing package.json, which says nothing at all about the actual problem.
+#
+# Absolute and quoted, not `cd king-gong`: a relative path only works from the parent directory, and
+# quoting survives a path with a space in it.
 cat <<EOF
 
-  Two ways to use it:
+  One thing first: this ran inside the project, but your shell did not move.
+
+    cd "$HERE"
+
+  Then, two ways to use it:
 
     npm run dev            the web app, at http://localhost:3000
     ./kg                   the terminal UI (browse calls, read cited notes, hear the moment)
@@ -332,4 +342,7 @@ cat <<EOF
     ./setup.sh             re-run this; it keeps every answer you gave
 
   Start with the five bundled calls -- they are fully analysed and need no key.
+  In one paste:
+
+    cd "$HERE" && ./kg
 EOF

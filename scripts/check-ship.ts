@@ -134,6 +134,34 @@ if (!readme) {
           .map((l) => `line ${l.n}`)
           .join(', '),
   );
+  /*
+    Every command setup.sh suggests must come with the directory to run it from.
+
+    setup.sh is a child process, so it cannot change the directory of the shell that launched it. The
+    installer clones into a new directory, setup.sh runs inside it, and on exit the user is still where
+    they typed the install command -- so a closing message that says "npm run dev" and "./kg" is telling
+    them to run commands that cannot work. A second tester pasted `npm run dev` at ~/Desktop and got a
+    wall of npm ENOENT about a missing package.json, which describes the symptom and not the cause.
+
+    Absolute (`cd "$HERE"`), not relative (`cd king-gong`): a relative path only works from the parent.
+  */
+  /*
+    Asserted PER BLOCK, not per file, because per file is too weak to catch the actual bug. The first
+    version of this check just asked whether `cd "$HERE"` appeared anywhere in setup.sh -- and there are
+    several closing blocks, so deleting it from the one the user actually reads left the check green.
+    I found that by negative-testing it, which is the only reason it is written this way.
+  */
+  const heredocs = setup.split(/cat <<'?EOF'?\n/).slice(1).map((chunk) => chunk.split(/^EOF$/m)[0]);
+  const blocksSuggestingCommands = heredocs.filter((b) => /npm run dev|\.\/kg/.test(b));
+  assert(
+    blocksSuggestingCommands.length > 0 &&
+      blocksSuggestingCommands.every((b) => b.includes('cd "$HERE"')),
+    'every setup.sh message that suggests a command also says which directory to run it from',
+    blocksSuggestingCommands.length === 0
+      ? 'found no such block, so this check is testing nothing'
+      : `${blocksSuggestingCommands.filter((b) => !b.includes('cd "$HERE"')).length} block(s) missing it`,
+  );
+
   // Line-aware and comment-skipping, which the first version was not: it matched the comment inside
   // setup.sh that quotes the broken pattern in order to explain it, and failed the build for
   // documenting the bug. Scan code lines only, the same way the check above does.
