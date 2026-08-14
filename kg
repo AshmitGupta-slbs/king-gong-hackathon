@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# King Gong, in the terminal.
+#
+#   ./kg                    interactive
+#   ./kg calls              list analysed calls
+#   ./kg show <id>          cited notes, transcript, and what the gate rejected
+#   ./kg analyse <file>     transcribe and analyse a call
+#   ./kg doctor             what is configured, and what is wrong
+#
+# This wrapper exists for one reason beyond convenience: it makes the working directory the repo root,
+# always. `lib/db-sqlite.ts` and `lib/pyai.ts` both resolve their paths from process.cwd(), so running
+# the CLI from anywhere else would quietly open a SECOND, empty database next to wherever you happened
+# to be standing, and report that you have no calls.
+set -euo pipefail
+cd "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+exec npx --no-install tsx scripts/kg.ts "$@"

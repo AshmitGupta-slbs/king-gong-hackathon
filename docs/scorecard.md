@@ -222,10 +222,16 @@ public" is a question about the whole artefact, and a stranger reads the docs fi
 
 **\* The asterisk on item 2 is the brief's own condition and it has not been met.** The requirement
 is a setup *"tested on a machine you haven't touched, not your dev laptop"*, timed, with someone who
-has not seen the code. That test has not been run. Everything suggests it would pass — three
-commands, no native deps, no credential needed — but the checklist item asks for evidence, and
-"we're fairly sure" is not evidence. One genuine risk a clean machine would expose: Node must be
-≥22.5, and on an older Node the app boots and then fails on the first query.
+has not seen the code. That test has not been run on a second physical machine. It has now been run
+against a simulated one — scratch `HOME`, a `PATH` with no Node on it, a fresh clone — and there is a
+one-command installer (`install.sh`) that handles the prerequisites, so the gap is narrower than it
+was. What is still missing is somebody else's laptop.
+
+The clean-machine risk that this exposed was real, and it was ours: `engines` declared `>=22.5.0`, but
+`node:sqlite` stayed behind `--experimental-sqlite` until **22.13**, so every Node from 22.5 to 22.12
+would have passed the declared requirement and then failed on the first query. Measured with nvm
+(22.12.0 throws `ERR_UNKNOWN_BUILTIN_MODULE`, 22.13.0 loads), the floor is corrected, and
+`scripts/node-check.cjs` now tests the capability rather than the version number.
 
 ---
 

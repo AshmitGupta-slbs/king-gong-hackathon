@@ -34,18 +34,34 @@ claims.
 
 ## Five-minute setup
 
-**Requires Node 22.5+** (for the built-in `node:sqlite`, which is why there is no database to install
-and nothing to compile). **Nothing else — no API key, no signup, no database server, no native
-builds.** The version is declared in `engines` and `.nvmrc` so a host cannot silently pick an older
-one; on an older Node the app boots and then fails on the first query.
+One command on any Mac. It sorts out Node, clones the repo, installs, asks for your keys, and then
+proves the pipeline on a real call before claiming it worked:
 
 ```bash
-git clone <this repo> && cd opengong-lite
-npm install
+curl -fsSL https://raw.githubusercontent.com/AshmitGupta-slbs/king-gong-hackathon/main/install.sh | bash
+```
+
+Then `cd king-gong` and pick a surface — `npm run dev` for the web app on
+http://localhost:3000, or `./kg` for the terminal UI. Full walkthrough in
+[`ONBOARDING.md`](ONBOARDING.md).
+
+Already cloned it, or prefer to do it by hand:
+
+```bash
+npm ci
+./setup.sh          # interactive: keys, checks, and a real end-to-end run
 npm run dev
 ```
 
 Open http://localhost:3000. Five fully-analysed sample calls are already there.
+
+**Requires Node 22.13+** (for the built-in `node:sqlite`, which is why there is no database to install
+and nothing to compile). **Nothing else — no API key, no signup, no database server, no native builds,
+no Python, no ffmpeg.** Note the floor is 22.13 and not 22.5: `node:sqlite` first appeared in 22.5 but
+stayed behind `--experimental-sqlite` until 22.13, so 22.5 through 22.12 pass a naive version check and
+then throw `ERR_UNKNOWN_BUILTIN_MODULE` at the first query — measured, not inferred. `engines` and
+`.nvmrc` declare it, and `node scripts/node-check.cjs` tests whether Node can *actually* do it rather
+than trusting the number.
 
 That works with a completely empty environment because:
 

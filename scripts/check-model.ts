@@ -24,30 +24,37 @@
  * parameter an endpoint might reject, and that would confound a model-resolution test. Client
  * construction is kept identical to the provider so the credential path cannot drift.
  */
-import { REGISTRY_CONFIG } from '@/lib/registry';
-import { bedrockModelId } from '@/lib/bedrock-model-id';
-import { probeBedrockModel } from '@/lib/registry/providers/bedrock-extract';
+import { c } from './_ui';
+import { loadEnv } from './_env';
 
-const c = {
-  ok: (s: string) => `\x1b[32m${s}\x1b[0m`,
-  bad: (s: string) => `\x1b[31m${s}\x1b[0m`,
-  warn: (s: string) => `\x1b[33m${s}\x1b[0m`,
-  dim: (s: string) => `\x1b[2m${s}\x1b[0m`,
-  b: (s: string) => `\x1b[1m${s}\x1b[0m`,
-};
+/**
+ * Env first, then the modules that read it.
+ *
+ * This script used to tell the user, in its own failure message, that "a .env.local file does NOT work
+ * here" — documenting the trap instead of removing it. It works now. The imports must be dynamic and
+ * inside main(): `REGISTRY_CONFIG` resolves `LLM_MODEL` at module level, ES imports hoist above any
+ * loader call, and `tsx` compiles to CJS so a top-level await is rejected.
+ */
+type RegistryModule = typeof import('@/lib/registry');
+type ModelIdModule = typeof import('@/lib/bedrock-model-id');
+type BedrockModule = typeof import('@/lib/registry/providers/bedrock-extract');
 
 /** The configured model first, then the ones most likely to be enabled. */
-const CANDIDATES = Array.from(
-  new Set([
-    REGISTRY_CONFIG.extractModel,
-    'claude-opus-5',
-    'claude-sonnet-5',
-    'claude-opus-4-8',
-    'claude-haiku-4-5',
-  ]),
-);
+/** The configured model first, then the ones most likely to be enabled. */
+const candidates = (configured: string) =>
+  Array.from(
+    new Set([configured, 'claude-opus-5', 'claude-sonnet-5', 'claude-opus-4-8', 'claude-haiku-4-5']),
+  );
 
 async function main() {
+  const envFile = loadEnv().file;
+  const { REGISTRY_CONFIG }: RegistryModule = await import('@/lib/registry');
+  const { bedrockModelId }: ModelIdModule = await import('@/lib/bedrock-model-id');
+  const { probeBedrockModel }: BedrockModule = await import(
+    '@/lib/registry/providers/bedrock-extract'
+  );
+  const CANDIDATES = candidates(REGISTRY_CONFIG.extractModel);
+  if (envFile) console.log(c.dim(`\n  env file: ${envFile}`));
   const region = process.env.AWS_REGION ?? process.env.AWS_DEFAULT_REGION;
   if (!region) {
     console.error(c.bad('\nAWS_REGION is not set. Export it (and your AWS keys) first.\n'));
@@ -63,7 +70,7 @@ async function main() {
       c.bad('\nNo AWS credentials in the environment.') +
         c.dim(
           '\n  export AWS_ACCESS_KEY_ID=… AWS_SECRET_ACCESS_KEY=… AWS_REGION=…' +
-            '\n  (a .env.local file does NOT work here — tsx scripts read only the real shell)\n',
+            '\n  These are also read from .env.local, so either place works.\n',
         ),
     );
     process.exit(1);

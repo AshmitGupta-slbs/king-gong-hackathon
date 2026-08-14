@@ -11,20 +11,31 @@
  * Costs exactly one request (GET /me) — which itself counts against the daily cap, so this prints
  * the answer rather than polling.
  */
-import { describeKey, hoursUntilUtcMidnight, pyaiPreflight, PyaiError } from '@/lib/pyai';
+import { c, row } from './_ui';
+import { loadEnv } from './_env';
 
-const c = {
-  ok: (s: string) => `\x1b[32m${s}\x1b[0m`,
-  bad: (s: string) => `\x1b[31m${s}\x1b[0m`,
-  warn: (s: string) => `\x1b[33m${s}\x1b[0m`,
-  dim: (s: string) => `\x1b[2m${s}\x1b[0m`,
-  b: (s: string) => `\x1b[1m${s}\x1b[0m`,
-};
-
-const row = (k: string, v: string) => console.log(`  ${k.padEnd(12)} ${v}`);
+/**
+ * `@/lib/pyai` is imported INSIDE main(), after loadEnv(), and both halves of that are deliberate.
+ *
+ * This checker used to read only the real shell, so a key sitting in `.env.local` — working perfectly
+ * in the app — was reported as "no key configured". A diagnostic that reads a different environment
+ * from the app answers a different question.
+ *
+ * It cannot be a static import: `lib/pyai.ts:14` resolves `PYAI_BASE_URL` at module level and ES
+ * imports hoist above every statement, so the module would snapshot the environment before it was
+ * loaded. And it cannot be a top-level `await import(...)` either, because `tsx` compiles these
+ * scripts to CJS and rejects top-level await outright.
+ */
+type PyaiModule = typeof import('@/lib/pyai');
+let pyai: PyaiModule;
 
 async function main() {
+  const envFile = loadEnv().file;
+  pyai = await import('@/lib/pyai');
+  const { describeKey } = pyai;
+
   console.log(`\n${c.b('PyAI key')}\n`);
+  if (envFile) row('env file', c.dim(envFile));
 
   const info = describeKey();
 
@@ -54,7 +65,7 @@ async function main() {
   }
 
   process.stdout.write(`  ${'live check'.padEnd(12)} `);
-  const pre = await pyaiPreflight();
+  const pre = await pyai.pyaiPreflight();
 
   if (pre.ok) {
     console.log(c.ok('OK — the key answers requests'));
@@ -62,7 +73,7 @@ async function main() {
     process.exit(0);
   }
 
-  const err: PyaiError = pre.error;
+  const err: InstanceType<PyaiModule['PyaiError']> = pre.error;
   console.log(c.bad(`FAILED — ${err.code}`));
   console.log(`\n  ${c.bad(err.message)}`);
 
@@ -79,7 +90,7 @@ async function main() {
   }
 
   if (err.quotaExhausted) {
-    console.log(c.dim(`  Cap lifts in ${hoursUntilUtcMidnight()}.\n`));
+    console.log(c.dim(`  Cap lifts in ${pyai.hoursUntilUtcMidnight()}.\n`));
   }
   console.log(
     c.dim('  Meanwhile: the five bundled sample calls need no key and demo end to end.\n'),

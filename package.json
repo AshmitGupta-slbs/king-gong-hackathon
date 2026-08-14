@@ -6,9 +6,13 @@
   "license": "MIT",
   "author": "SaaS Labs",
   "engines": {
-    "node": ">=22.5.0"
+    "node": ">=22.13.0"
   },
   "scripts": {
+    "setup": "bash setup.sh",
+    "node:check": "node scripts/node-check.cjs",
+    "kg": "tsx scripts/kg.ts",
+    "doctor": "tsx scripts/kg.ts doctor",
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
