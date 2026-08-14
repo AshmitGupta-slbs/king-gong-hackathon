@@ -60,8 +60,8 @@ async function cmdCalls(db: Db) {
   if (!calls.length) {
     console.log(`\n  ${c.warn('No calls yet.')}`);
     console.log(
-      `  ${c.dim('The five bundled samples seed on first visit to the web app, or run:')} ` +
-        c.mono('npm run dev'),
+      `  ${c.dim('Expected five bundled samples here. If samples/index.json is missing, this is a')}\n` +
+        `  ${c.dim('partial checkout - re-run')} ${c.mono('./setup.sh')}${c.dim('.')}`,
     );
     return;
   }
@@ -318,8 +318,8 @@ async function cmdInteractive(db: Db) {
   const calls = await db.listCalls();
   console.log(`\n${c.b('King Gong')} ${c.dim('- deal notes with receipts')}`);
   if (!calls.length) {
-    console.log(`\n  ${c.warn('No calls yet.')} ${c.dim('Start the web app once to seed the samples:')}`);
-    console.log(`  ${c.mono('npm run dev')}`);
+    console.log(`\n  ${c.warn('No calls yet, and the bundled samples did not load.')}`);
+    console.log(`  ${c.dim('Run')} ${c.mono('./kg doctor')} ${c.dim('to see what is wrong.')}`);
     return;
   }
 
@@ -364,6 +364,26 @@ async function main() {
 
   const envFile = loadEnv().file;
   const db: Db = await import('@/lib/db');
+
+  /*
+    Seed the bundled samples, exactly as the web app does on its first render.
+
+    Without this, a fresh install was self-contradicting: setup.sh ends by saying "start with the five
+    bundled calls" and `./kg calls` then reported none, because seeding only happened when someone
+    opened the browser. The terminal UI has to stand on its own.
+
+    This is the one write the CLI does directly, and it is a deliberate exception to "reads direct,
+    writes over HTTP": it inserts committed fixtures rather than running the pipeline, so there is no
+    run row to strand, it is idempotent and memoised, and it touches no network. Wrapped because a
+    simultaneous seed from the dev server could lose a race on a UNIQUE share_id, and a browsing
+    session should not die over rows that are about to exist anyway.
+  */
+  try {
+    const { loadSamples } = await import('@/lib/samples');
+    await loadSamples();
+  } catch {
+    /* the sample manifest is optional; an empty list is reported honestly below */
+  }
 
   switch (command) {
     case '':
