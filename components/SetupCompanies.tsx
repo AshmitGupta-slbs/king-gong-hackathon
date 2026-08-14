@@ -13,7 +13,7 @@
  */
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
-import { Building2, Check, Loader2, Pencil, Plus, X } from 'lucide-react';
+import { Building2, Check, ChevronDown, Loader2, Pencil, Plus, X } from 'lucide-react';
 import type { Company } from '@/lib/companies';
 import type { Learning, NotesSuggestion as Suggestion } from '@/lib/learnings';
 import { CompanyLearnings } from '@/components/CompanyLearnings';
@@ -53,6 +53,18 @@ export function SetupCompanies({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Collapsed by default for every account — the suggestion box and the full "learned from
+  // calls" list (up to 20 items each) used to always render for all of them at once, which is
+  // what made this page a long scroll just to see the account list. Keyed by company id, so
+  // expanding one account never affects any other.
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
+  const toggleExpanded = (id: string) =>
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
 
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -170,27 +182,45 @@ export function SetupCompanies({
                       </p>
                     )}
 
-                    {/* The single bridge from what the calls established into what the user owns.
-                        Above the evidence, because it is the thing to act on; the list below is
-                        what you check it against. */}
-                    {suggestions[c.id] && (
-                      <div className="mt-3">
-                        <NotesSuggestion companyId={c.id} suggestion={suggestions[c.id]!} />
-                      </div>
-                    )}
-
-                    {/* Kept visually distinct from the notes above: different origin, different
-                        standard of proof. */}
+                    {/* Collapsed by default: the suggestion (the thing to act on) and the
+                        learnings it's checked against (up to 20 multi-line cards) are the whole
+                        reason this page used to be a long scroll. One toggle reveals both. */}
                     <div className="mt-3 border-t border-border-subtle pt-3">
-                      <p className="mb-2 flex items-center gap-1.5 text-caption font-semibold text-fg-muted">
-                        Learned from calls
+                      <button
+                        type="button"
+                        onClick={() => toggleExpanded(c.id)}
+                        aria-expanded={expanded.has(c.id)}
+                        className="flex items-center gap-1.5 rounded-chip text-caption font-semibold text-fg-muted transition-colors hover:text-brand"
+                      >
+                        Suggestions &amp; calls
                         {(learnings[c.id]?.length ?? 0) > 0 && (
                           <span className="rounded-chip bg-surface-inset px-1.5 py-0.5 text-[11px] font-semibold text-fg-muted">
                             {learnings[c.id]!.length}
                           </span>
                         )}
-                      </p>
-                      <CompanyLearnings learnings={learnings[c.id] ?? []} />
+                        {suggestions[c.id] && (
+                          <span className="rounded-chip bg-brand-wash px-1.5 py-0.5 text-[11px] font-semibold text-brand">
+                            1 suggested
+                          </span>
+                        )}
+                        <ChevronDown
+                          size={13}
+                          aria-hidden
+                          className={cx('transition-transform', expanded.has(c.id) && 'rotate-180')}
+                        />
+                      </button>
+
+                      {expanded.has(c.id) && (
+                        <div className="mt-3 flex flex-col gap-3">
+                          {/* The single bridge from what the calls established into what the user
+                              owns. Above the evidence, because it is the thing to act on; the list
+                              below is what you check it against. */}
+                          {suggestions[c.id] && (
+                            <NotesSuggestion companyId={c.id} suggestion={suggestions[c.id]!} />
+                          )}
+                          <CompanyLearnings learnings={learnings[c.id] ?? []} />
+                        </div>
+                      )}
                     </div>
                   </div>
                   <Button variant="secondary" onClick={() => setEditingId(c.id)}>
