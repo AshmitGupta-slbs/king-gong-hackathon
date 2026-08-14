@@ -61,7 +61,30 @@ if (!readme) {
     const kb = Math.round(statSync(join(ROOT, shot[1])).size / 1024);
     assert(kb > 40, 'README screenshot exists and is a real image', `${shot[1]} — ${kb}KB`);
   }
-  assert(/npm install/.test(readme) && /npm run dev/.test(readme), 'README documents the setup commands');
+  /*
+    Setup is now a one-command installer plus an interactive setup.sh, so grepping for `npm install`
+    alone stopped describing it — the manual path is `npm ci` (the lockfile is committed and a
+    reproducible install is the point). Widened to accept either installer, and TIGHTENED to require
+    that the two entry points a stranger needs are actually named.
+  */
+  assert(
+    /npm (install|ci)/.test(readme) && /npm run dev/.test(readme),
+    'README documents how to install and run',
+  );
+  assert(
+    /install\.sh/.test(readme) && /setup\.sh/.test(readme),
+    'README points at the one-command installer and at setup.sh',
+  );
+  assert(existsSync(join(ROOT, 'ONBOARDING.md')), 'ONBOARDING.md exists for a first-time reader');
+  for (const script of ['install.sh', 'setup.sh', 'kg']) {
+    const p = join(ROOT, script);
+    // Executable bit included: these are documented as `./install.sh` and `./kg`, and a committed
+    // file without +x makes that instruction wrong on a fresh clone.
+    assert(
+      existsSync(p) && (statSync(p).mode & 0o111) !== 0,
+      `${script} is committed and executable`,
+    );
+  }
   assert(/pyai/i.test(readme), 'README carries a "runs on PyAI" line with a link');
   assert(/caveat|limitation/i.test(readme), 'README states its limitations honestly');
 }

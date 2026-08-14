@@ -12,10 +12,13 @@ Docker, no build plugins, nothing to compile.
 | Node | pinned by `engines` + `.nvmrc` (see below) |
 | Env vars | none required to demo; see the PyAI key section below before uploading audio |
 
-**The Node version is not optional.** `lib/db.ts` uses Node's built-in `node:sqlite`, which needs
-**Node ≥ 22.5**. `package.json` declares `"engines": { "node": ">=22.5.0" }` and `.nvmrc` pins `24`.
-If a host ignores both and runs an older LTS, the import fails on the first database call. Check the
-build log for the Node version if the app boots and then 500s.
+**The Node version is not optional, and the number is not the obvious one.** `lib/db.ts` uses Node's
+built-in `node:sqlite`, which needs **Node ≥ 22.13** — not 22.5. It first appeared in 22.5 but stayed
+behind `--experimental-sqlite` until 22.13, so 22.5 through 22.12 satisfy a naive version check and then
+throw `ERR_UNKNOWN_BUILTIN_MODULE` on the first database call. Measured with nvm, not inferred:
+22.12.0 fails, 22.13.0 loads. `package.json` declares `"engines": { "node": ">=22.13.0" }` and `.nvmrc`
+pins `24`. If a host ignores both, the app boots and then 500s — check the build log for the Node
+version, or run `node scripts/node-check.cjs`, which asks Node whether it can really do it.
 
 No environment variable is required to serve the bundled demo: the five sample calls are committed,
 and a PyAI sandbox key mints itself on first use. To get real model-written notes rather than the

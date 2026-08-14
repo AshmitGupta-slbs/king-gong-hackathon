@@ -48,6 +48,21 @@ export function db(): DatabaseSync {
   const d = new DatabaseSync(join(DIR, 'opengong.db'));
   d.exec(`
     PRAGMA journal_mode = WAL;
+    /*
+      WAL lets readers and one writer coexist, which is what makes a second process — the ./kg terminal
+      UI — able to read this database while \`next dev\` is writing to it.
+
+      But WAL alone is not enough, because SQLite's DEFAULT busy handler does not wait: a writer that
+      loses the race gets SQLITE_BUSY thrown at it immediately. That is a bad failure here
+      specifically, because processCall opens its run row BEFORE doing any work, so a SQLITE_BUSY on a
+      later write leaves a row stuck in 'running' — the one state the failure invariant forbids, and
+      recoverable only by reconcileOrphanRuns().
+
+      Five seconds of patience turns that class of collision into a pause nobody notices. It is not a
+      substitute for withLock (which is a module-level Map, so per-process only and no help across
+      two processes) — it is the reason crossing that boundary is survivable at all.
+    */
+    PRAGMA busy_timeout = 5000;
 
     CREATE TABLE IF NOT EXISTS calls (
       id TEXT PRIMARY KEY, title TEXT NOT NULL, audio_path TEXT NOT NULL,

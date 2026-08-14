@@ -16,17 +16,13 @@ import { useEffect, useState } from 'react';
 import { Check, CircleDashed, Loader2, RotateCcw, X } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { cx } from '@/components/ui/cx';
-import type { StageName } from '@/lib/harness/progress';
-
-export type StageView = {
-  key: StageName;
-  label: string;
-  state: 'pending' | 'running' | 'done' | 'failed';
-  ms?: number;
-  detail?: string;
-  attempt?: number;
-  retryReason?: string;
-};
+/**
+ * `StageView` now lives in lib/harness/progress.ts, beside the wire format it is derived from, because
+ * the terminal UI renders the same rows and cannot import from a `'use client'` module. Re-exported
+ * here so every existing import site keeps working.
+ */
+export type { StageView } from '@/lib/harness/progress';
+import type { StageView } from '@/lib/harness/progress';
 
 const secs = (ms: number) => `${(ms / 1000).toFixed(1)}s`;
 

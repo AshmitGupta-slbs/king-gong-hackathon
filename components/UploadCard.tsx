@@ -19,46 +19,13 @@ import { useRef, useState } from 'react';
 import { Info, KeyRound, Loader2 } from 'lucide-react';
 import { resolveSeparation } from '@/lib/separation';
 import { readNdjson } from '@/lib/ndjson';
-import type { StageEvent } from '@/lib/harness/progress';
-import type { ProcessOutcome } from '@/lib/harness/loop';
-import { UploadProgress, type StageView } from '@/components/UploadProgress';
+import { applyStage, INITIAL_STAGES } from '@/lib/harness/progress';
+import type { StageView, UploadEvent } from '@/lib/harness/progress';
+import { UploadProgress } from '@/components/UploadProgress';
 import { Button } from '@/components/ui/Button';
 import { Field, FieldLabel, inputStyles } from '@/components/ui/Field';
 import { cx } from '@/components/ui/cx';
 
-/**
- * The wire format. `ProcessOutcome` is imported as a type only, so none of the harness — and none
- * of `node:sqlite` — follows it into the client bundle.
- */
-type UploadEvent =
-  | { t: 'open'; pad: string }
-  | { t: 'expect'; totalMs: number | null }
-  | { t: 'tick'; at: number }
-  | (StageEvent & { at: number })
-  | { t: 'result'; at: number; outcome: ProcessOutcome }
-  | { t: 'error'; at: number; message: string };
-
-const INITIAL_STAGES: StageView[] = [
-  { key: 'upload', label: 'Uploading audio', state: 'running' },
-  { key: 'transcribe', label: 'Transcribing (PyAI Hear)', state: 'pending' },
-  { key: 'extract', label: 'Extracting notes', state: 'pending' },
-  { key: 'gate', label: 'Checking citations', state: 'pending' },
-];
-
-/** Pure reduction of one stage event onto the row list — no timers, no inference. */
-function applyStage(prev: StageView[], ev: StageEvent & { t: 'stage' }): StageView[] {
-  return prev.map((row) => {
-    if (row.key !== ev.stage) return row;
-    if (ev.state === 'start') {
-      // A repeated `start` is a retry restarting the same stage; clear the previous timing.
-      return { ...row, state: 'running', ms: undefined, attempt: ev.attempt };
-    }
-    if (ev.state === 'done') {
-      return { ...row, state: 'done', ms: ev.ms, detail: ev.detail };
-    }
-    return { ...row, state: 'running', attempt: ev.attempt, retryReason: ev.reason };
-  });
-}
 
 const MODES = [
   {
