@@ -18,17 +18,39 @@
 # through a run. No smart quotes, no ellipses, no arrows.
 set -euo pipefail
 
+# --- say something IMMEDIATELY ----------------------------------------------
+# Before any network call, any check, anything that can be slow. The first version printed nothing
+# until after it had fetched itself and probed the OS, so on a slow connection the terminal just sat
+# there and the honest reading was "this has hung".
+printf '\n\033[1mKing Gong installer\033[0m\n'
+printf '\033[2m  5 steps. The Node step downloads ~50MB if you need it, so it is the slow one.\033[0m\n\n'
+KG_T0=$(date +%s)
+KG_STEP=0
+step() {
+  KG_STEP=$((KG_STEP + 1))
+  printf '\033[1;36m[%d/5] %s\033[0m\n' "$KG_STEP" "$*"
+}
+
 # --- robustness for `curl | bash` -------------------------------------------
-# When piped, this script's own body arrives on stdin. Anything that reads stdin later -- our
-# interactive prompts, or nvm's installer -- would consume the rest of the script instead of the
-# keyboard, and the run dies halfway through with a confusing error. Re-download to a temp file and
-# re-exec with the terminal as stdin, so reads come from a human and the script comes from a file.
+# When piped, this script's own body arrives on stdin. Anything that reads stdin later -- nvm's
+# installer, or setup.sh's prompts -- would consume the rest of the script instead of the keyboard.
+# Re-download to a temp file and re-exec with the terminal as stdin, so reads come from a human and
+# the script comes from a file.
+#
+# This is now a CONVENIENCE, not the mechanism. setup.sh reads every prompt from /dev/tty explicitly,
+# because relying on this one conditional is exactly how a teammate got a run that asked him nothing:
+# the re-exec did not fire, nothing said so, and the prompts silently answered themselves.
+# `KG_NO_REEXEC=1` skips it deliberately, for debugging.
 SELF_URL="${SELF_URL:-https://raw.githubusercontent.com/AshmitGupta-slbs/king-gong-hackathon/main/install.sh}"
-if [ -z "${KG_REEXEC:-}" ] && [ ! -t 0 ] && [ -r /dev/tty ]; then
+if [ -z "${KG_REEXEC:-}" ] && [ -z "${KG_NO_REEXEC:-}" ] && [ ! -t 0 ] && [ -r /dev/tty ]; then
   _self="$(mktemp 2>/dev/null || mktemp -t kg-install)"
   if curl -fsSL "$SELF_URL" -o "$_self" 2>/dev/null && [ -s "$_self" ]; then
     KG_REEXEC=1 exec bash "$_self" </dev/tty
   fi
+  # Used to fail silently, which is why nobody could tell whether it had run. It is survivable --
+  # setup.sh no longer depends on it -- but it should never again be invisible.
+  printf '\033[1;33m! Could not re-fetch this script to reattach your terminal (%s).\033[0m\n' "$SELF_URL"
+  printf '\033[2m  Continuing. Prompts still work: setup.sh reads them from /dev/tty directly.\033[0m\n'
   rm -f "$_self"
 fi
 
@@ -42,6 +64,7 @@ warn() { printf '\033[1;33m%s %s\033[0m\n' "!" "$*"; }
 die()  { printf '\033[1;31m%s %s\033[0m\n' "x" "$*" >&2; exit 1; }
 have() { command -v "$1" >/dev/null 2>&1; }
 
+step "Checking prerequisites"
 case "$(uname -s)" in
   Darwin) OS=mac ;;
   Linux)  OS=linux ;;
@@ -64,6 +87,7 @@ fi
 #   ffmpeg  - never used. All audio work is 16-bit PCM handled in pure Node (lib/wav.ts).
 
 # --- fetch or update the repo ------------------------------------------------
+step "Fetching the code (~14MB)"
 if [ -d "$KG_TARGET/.git" ]; then
   say "Updating the existing checkout at $KG_TARGET"
   git -C "$KG_TARGET" pull --ff-only \
@@ -119,7 +143,9 @@ install_via_nvm() {
   fi
   # No argument on purpose: run from the repo root, `nvm install` reads .nvmrc, so the version the
   # repo asks for is the version installed. One source of truth.
-  say "Installing the Node version this repo asks for (.nvmrc: $(cat .nvmrc 2>/dev/null || echo '?'))"
+  # The download itself is redirected to /dev/null, so WITHOUT this line there is nothing on screen
+  # for up to a minute while ~50MB arrives. That silence was read as a hang, and fairly.
+  say "Downloading Node $(cat .nvmrc 2>/dev/null || echo '24') via nvm -- about 50MB, up to a minute"
   # nvm's subcommands are as hostile to `set -e` as its loader is to `set -u`.
   set +eu
   nvm install </dev/null >/dev/null 2>&1
@@ -162,6 +188,7 @@ install_via_tarball() {
   return 0
 }
 
+step "Checking Node"
 if node_ok; then
   ok "Node is new enough ($(node -v))"
 else
@@ -187,13 +214,23 @@ fi
 # `npm ci` rather than `npm install`: package-lock.json is committed, and a reproducible install is
 # the whole point of a one-command setup. No native modules and no postinstall hook, so this runs no
 # project code.
-say "Installing dependencies (npm ci)"
+step "Installing dependencies (npm ci, ~480 packages, 10-30s)"
+dim_note() { printf '\033[2m  %s\033[0m\n' "$*"; }
+dim_note "npm may warn about 'allow-scripts' for esbuild and fsevents. That is npm's own policy"
+dim_note "notice, not an error, and nothing here depends on those install scripts."
 npm ci --no-audit --no-fund || die "npm ci failed. Scroll up for the reason; then re-run this script."
 ok "Dependencies installed"
 
 # --- hand off to the interactive part ---------------------------------------
 chmod +x ./setup.sh ./kg 2>/dev/null || true
-printf '\n'
-say "Running setup: it asks for your keys, then proves the pipeline on a real call."
-printf '\n'
-./setup.sh
+step "Setup: your keys, then a real call to prove it works"
+printf '\033[2m  Installed in %ss.\033[0m\n\n' "$(( $(date +%s) - KG_T0 ))"
+
+# stdin passed explicitly when a terminal exists, so setup.sh gets one even if the re-exec above did
+# not happen. setup.sh checks /dev/tty for itself too -- belt and braces, because this is the step
+# that silently failed before.
+if [ -r /dev/tty ]; then
+  ./setup.sh </dev/tty
+else
+  ./setup.sh
+fi

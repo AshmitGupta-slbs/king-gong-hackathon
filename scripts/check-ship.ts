@@ -85,6 +85,69 @@ if (!readme) {
       `${script} is committed and executable`,
     );
   }
+  /*
+    Guard the prompt bug, which shipped and reached a teammate's laptop.
+
+    Every prompt in setup.sh used to be `read -r -p "..." VAR || true`. Under `curl | bash` bash reads
+    the script from stdin, so stdin is spent by the time the prompts run: each read returned instantly
+    at EOF and `|| true` recorded the empty answer as if a human had pressed Enter. The install then
+    selected the keyword stub without asking and announced "Setup complete".
+
+    BE HONEST ABOUT WHAT THIS CHECK IS WORTH. It asserts the PATTERN, not the behaviour: that no read
+    in setup.sh takes its input from inherited stdin, and that no prompt swallows its own failure. It
+    cannot tell you a prompt actually waits for a human. That is proved by driving the script on a real
+    pseudo-terminal, which cannot live in this suite because it clones and installs:
+
+        expect -c 'spawn ./setup.sh; expect "PyAI API key*" { send "x\r" }; expect eof'
+
+    So: this catches a careless re-introduction, and the command above is what proves the fix.
+  */
+  /*
+    The shell files must be pure ASCII, and this is a check rather than a comment because the comment
+    did not hold: I wrote the rule at the top of both files and then put an em-dash in setup.sh anyway.
+    It matters because it has already broken a real installer -- the kit this one is ported from carries
+    a commit fixing `AIFL_TARGET: unbound variable`, caused by a Unicode ellipsis sitting after a
+    "$var". A stray smart quote from an editor or a paste is silent until it is not.
+  */
+  for (const script of ['install.sh', 'setup.sh', 'kg']) {
+    const text = readFileSync(join(ROOT, script), 'utf8');
+    const bad = [...text].filter((ch) => ch.codePointAt(0)! > 127);
+    assert(
+      bad.length === 0,
+      `${script} is pure ASCII (a stray Unicode char has broken an installer before)`,
+      bad.length ? `found ${[...new Set(bad)].join(' ')}` : '',
+    );
+  }
+
+  const setup = readFileSync(join(ROOT, 'setup.sh'), 'utf8');
+  const promptReads = setup
+    .split('\n')
+    .map((line, i) => ({ line: line.trim(), n: i + 1 }))
+    .filter((l) => /\bread\b/.test(l.line) && /-p\b/.test(l.line) && !l.line.startsWith('#'));
+  assert(
+    promptReads.length > 0 && promptReads.every((l) => l.line.includes('</dev/tty')),
+    'every prompt in setup.sh reads from /dev/tty, not inherited stdin',
+    promptReads.length === 0
+      ? 'found no prompts at all, which means this check is testing nothing'
+      : promptReads
+          .filter((l) => !l.line.includes('</dev/tty'))
+          .map((l) => `line ${l.n}`)
+          .join(', '),
+  );
+  // Line-aware and comment-skipping, which the first version was not: it matched the comment inside
+  // setup.sh that quotes the broken pattern in order to explain it, and failed the build for
+  // documenting the bug. Scan code lines only, the same way the check above does.
+  const swallowed = setup
+    .split('\n')
+    .map((line, i) => ({ line: line.trim(), n: i + 1 }))
+    .filter((l) => !l.line.startsWith('#'))
+    .filter((l) => /\bread\b/.test(l.line) && /-p\b/.test(l.line) && /\|\|\s*true/.test(l.line));
+  assert(
+    swallowed.length === 0,
+    'no prompt in setup.sh discards its own failure with `|| true`',
+    swallowed.map((l) => `line ${l.n}`).join(', '),
+  );
+
   assert(/pyai/i.test(readme), 'README carries a "runs on PyAI" line with a link');
   assert(/caveat|limitation/i.test(readme), 'README states its limitations honestly');
 }

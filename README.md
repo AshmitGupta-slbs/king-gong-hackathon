@@ -41,6 +41,8 @@ proves the pipeline on a real call before claiming it worked:
 curl -fsSL https://raw.githubusercontent.com/AshmitGupta-slbs/king-gong-hackathon/main/install.sh | bash
 ```
 
+(`bash <(curl -fsSL …/install.sh)` works too, and keeps your terminal on stdin rather than the pipe.)
+
 Then `cd king-gong` and pick a surface — `npm run dev` for the web app on
 http://localhost:3000, or `./kg` for the terminal UI. Full walkthrough in
 [`ONBOARDING.md`](ONBOARDING.md).

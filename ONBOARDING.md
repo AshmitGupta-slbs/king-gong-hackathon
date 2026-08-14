@@ -6,6 +6,13 @@ One command, two prompts, about five minutes. You do not need to know anything a
 curl -fsSL https://raw.githubusercontent.com/AshmitGupta-slbs/king-gong-hackathon/main/install.sh | bash
 ```
 
+If your shell supports it, this form is slightly sturdier — it hands bash a file descriptor instead of
+a pipe, so your keyboard stays on stdin and the prompts cannot be affected at all:
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/AshmitGupta-slbs/king-gong-hackathon/main/install.sh)
+```
+
 That checks your Node, installs a newer one if you need it, clones the repo into `./king-gong`,
 installs dependencies, and then runs `setup.sh`, which asks for your keys and proves the whole pipeline
 on a real call before it tells you it worked.
@@ -107,6 +114,13 @@ do it rather than trusting the version number, and prints three ways to fix it.
 **Notes appear but nothing was analysed by a model.** With no model credential the app falls back to a
 keyword stub. It is labelled everywhere it appears, and `./kg doctor` says so plainly. Add a credential
 and it goes away.
+
+**It never asked me anything, and said `engine: stub`.** That was a real bug and it is fixed. Under
+`curl … | bash`, bash reads the script itself from stdin, so stdin is spent by the time the prompts run;
+every prompt returned instantly at EOF and the empty answer was recorded as though you had pressed
+Enter. Every prompt now reads from `/dev/tty` directly, and a prompt that cannot reach you stops and
+says so instead of choosing for you. If you somehow still see it, use the `bash <(curl …)` form above,
+or clone and run `./setup.sh`.
 
 **`429 sandbox_limit_reached` on your first upload.** The per-network mint budget, above. Get a live
 key.
