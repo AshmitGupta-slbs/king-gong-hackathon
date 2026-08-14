@@ -46,8 +46,13 @@ const POLL_INTERVAL_MS = 1_200;
 const PREFLIGHT_BYTES = 1_000_000;
 const POLL_TIMEOUT_MS = 180_000;
 
-/** seg_000, seg_001, ... Zero-padded so lexical order matches temporal order. */
-const segId = (i: number) => `seg_${String(i).padStart(3, '0')}`;
+/**
+ * seg_000, seg_001, ... Zero-padded so lexical order matches temporal order.
+ * Exported so a chunked caller (pyai-jobs-chunked.ts) can re-number ids across a merged,
+ * multi-job transcript the same way a single job numbers its own — one function, so the two
+ * can never disagree on the format.
+ */
+export const segId = (i: number) => `seg_${String(i).padStart(3, '0')}`;
 
 /**
  * Map provider speaker labels onto our two roles.
